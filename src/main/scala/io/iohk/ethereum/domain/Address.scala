@@ -30,6 +30,6 @@ case class Address(bytes: ByteString) {
   def toArray: Array[Byte] = bytes.toArray
 
   override def toString: String =
-    s"${getClass.getSimpleName}(${Hex.toHexString(toArray)})"
+    s"0x${Hex.toHexString(toArray)}"
 
 }
