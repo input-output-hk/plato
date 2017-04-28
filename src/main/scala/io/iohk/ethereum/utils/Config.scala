@@ -97,6 +97,30 @@ object Config {
     val blockResolveDepth: Int = fastSyncConfig.getInt("block-resolving-depth")
   }
 
+  object FasterFastSync {
+    private val fasterFastSyncConfigOpt = Try(config.getConfig("faster-fast-sync")).toOption
+
+    val initialBlockNumber: Option[BigInt] = fasterFastSyncConfigOpt.flatMap{ config =>
+      Try(BigInt(config.getString("initial-block-number"))).toOption
+    }
+    val initialBlockTotalDifficulty: Option[BigInt] = fasterFastSyncConfigOpt.flatMap{ config =>
+      Try(BigInt(config.getString("initial-block-total-difficulty"))).toOption
+    }
+    val initialBlockHash: Option[ByteString] = fasterFastSyncConfigOpt.flatMap{ config =>
+      Try(ByteString(Hex.decode(config.getString("initial-block-hash")))).toOption
+    }
+    val targetBlockNumber: Option[BigInt] = fasterFastSyncConfigOpt.flatMap{ config =>
+      Try(BigInt(config.getString("target-block-number"))).toOption
+    }
+    val targetBlockStateRoot: Option[ByteString] = fasterFastSyncConfigOpt.flatMap{ config =>
+      Try(ByteString(Hex.decode(config.getString("target-block-state-root")))).toOption
+    }
+
+    val useFasterFastSync: Boolean =
+      initialBlockNumber.isDefined && initialBlockTotalDifficulty.isDefined && initialBlockHash.isDefined &&
+        targetBlockNumber.isDefined && targetBlockStateRoot.isDefined
+  }
+
   object Db {
 
     private val dbConfig = config.getConfig("db")
