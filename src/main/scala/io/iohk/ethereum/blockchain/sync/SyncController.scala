@@ -91,6 +91,7 @@ class SyncController(
   }
 
   def removePeer(peer: ActorRef): Unit = {
+    log.debug("Removing peer {} from sync controller", peer.path.name)
     context.unwatch(peer)
     undoBlacklist(peer)
     handshakedPeers -= peer

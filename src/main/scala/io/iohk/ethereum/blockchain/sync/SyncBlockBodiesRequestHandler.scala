@@ -30,7 +30,7 @@ class SyncBlockBodiesRequestHandler(
   override def handleTimeout(): Unit = {
     val reason = s"time out on block bodies response for known hashes: ${requestedHashes.map(h => Hex.toHexString(h.toArray[Byte]))}"
     syncController ! BlacklistSupport.BlacklistPeer(peer, reason)
-    syncController ! FastSync.EnqueueBlockBodies(requestedHashes)
+    syncController ! FastSync.EnqueueBlockBodies(requestedHashes) // TODO: consider moving this class, it's not only used in FastSync
     cleanupAndStop()
   }
 

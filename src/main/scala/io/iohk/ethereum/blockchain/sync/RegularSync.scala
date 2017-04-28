@@ -53,10 +53,15 @@ trait RegularSync {
       peersToDownloadFrom.keys.foreach(_ ! block)
 
     case PrintStatus =>
-      log.info(s"Peers: ${handshakedPeers.size} (${blacklistedPeers.size} blacklisted).")
+      val waitingMsg = waitingForActor match {
+        case Some(_) => "Waiting for response from child actor"
+        case None => "Not waiting for any response"
+      }
+      val childrenCount = context.children.size
+      log.info(s"Peers: ${handshakedPeers.size} (${blacklistedPeers.size} blacklisted). $waitingMsg. Have $childrenCount children")
 
     case Done =>
-      if (waitingForActor == Option(sender())) {
+      if (waitingForActor.contains(sender())) {
         //actor is done and we did not get response
         scheduleResume()
       }
@@ -65,6 +70,7 @@ trait RegularSync {
   private def askForHeaders() = {
     bestPeer match {
       case Some(peer) =>
+        log.debug("Asking peer {} for headers", peer.path.name)
         val blockNumber = appStateStorage.getBestBlockNumber()
         val request = GetBlockHeaders(Left(blockNumber + 1), blockHeadersPerRequest, skip = 0, reverse = false)
         waitingForActor = Some(context.actorOf(SyncBlockHeadersRequestHandler.props(peer, request, resolveBranches = false)))
@@ -94,15 +100,18 @@ trait RegularSync {
   }
 
   private def processBlockHeaders(peer: ActorRef, headers: Seq[BlockHeader]) = {
+    log.debug("Processing {} block headers received from {}", headers.size, peer.path.name)
     val parentByNumber = blockchain.getBlockHeaderByNumber(headers.head.number - 1)
 
     parentByNumber match {
       case Some(parent) if checkHeaders(headers) =>
         //we have same chain
         if (parent.hash == headers.head.parentHash) {
+          log.debug("Asking peer {} for block bodies", peer.path.name)
           val hashes = headersQueue.take(blockBodiesPerRequest).map(_.hash)
           waitingForActor = Some(context.actorOf(SyncBlockBodiesRequestHandler.props(peer, hashes)))
         } else {
+          log.debug("Asking peer {} for block headers", peer.path.name)
           val request = GetBlockHeaders(Right(headersQueue.head.parentHash), blockResolveDepth, skip = 0, reverse = true)
           waitingForActor = Some(context.actorOf(SyncBlockHeadersRequestHandler.props(peer, request, resolveBranches = true)))
         }
@@ -113,6 +122,9 @@ trait RegularSync {
   }
 
   private def handleBlockBodies(peer: ActorRef, m: Seq[BlockBody]) = {
+    val startTime = System.currentTimeMillis()
+    log.debug("Received {} block bodies from {}", m.size, peer.path.name)
+
     if (m.nonEmpty && headersQueue.nonEmpty) {
       val blocks = headersQueue.zip(m).map{ case (header, body) => Block(header, body) }
 
@@ -123,6 +135,15 @@ trait RegularSync {
 
           if(newBlocks.nonEmpty){
             context.self ! BroadcastBlocks(newBlocks)
+            val txCount = newBlocks.map(_.block.body.transactionList.size).sum
+
+            val timeTaken = System.currentTimeMillis - startTime
+            val avgTimePerBlock = timeTaken / newBlocks.size
+            val avgTimePerTx = timeTaken / txCount
+
+            log.info(s"Processed {} new blocks including {} txs, it took {} millis (avg ${avgTimePerBlock}ms/block, ${avgTimePerTx}ms/tx)", newBlocks.size,
+              txCount, timeTaken)
+
             log.info(s"got new blocks up till block: ${newBlocks.last.block.header.number} " +
               s"with hash ${Hex.toHexString(newBlocks.last.block.header.hash.toArray[Byte])}")
           }
@@ -185,12 +206,13 @@ trait RegularSync {
   }
 
   private def scheduleResume() = {
+    log.debug("Scheduling regular sync resume in {}", checkForNewBlockInterval)
     headersQueue = Nil
     scheduler.scheduleOnce(checkForNewBlockInterval, context.self, ResumeRegularSync)
   }
 
   private def resumeWithDifferentPeer(currentPeer: ActorRef, reason: String = "error in response") = {
-    self ! BlacklistPeer(currentPeer, "because of " + reason)
+    self ! BlacklistPeer(currentPeer, reason)
     headersQueue = Nil
     context.self ! ResumeRegularSync
   }
