@@ -61,11 +61,20 @@ object App {
 
       genesisDataLoader.loadGenesisData()
 
-      if(Config.FasterFastSync.useFasterFastSync) {
-        if(storagesInstance.storages.appStateStorage.getBestBlockNumber() == 0)
-          loadFasterFastSync(storagesInstance)
-        else
+      if(Config.FastSync.doFastSync && Config.FasterFastSync.useFasterFastSync) {
+        if(storagesInstance.storages.appStateStorage.getBestBlockNumber() != 0)
           log.warn("Client configured for faster fast sync but it cannot start as our DataSource isn't empty")
+        else {
+          val initialBlock = Config.FasterFastSync.initialBlockNumber.get
+          val targetBlock = Config.FasterFastSync.targetBlockNumber.get
+          val blocksToDownloadFastSync = targetBlock - initialBlock + 1
+          if(blocksToDownloadFastSync < 256)
+            log.warn(s"Client configured for faster fast sync but it cannot start as downloading $blocksToDownloadFastSync with fast sync isn't enough")
+          else {
+            log.info(s"Starting fast sync from block $initialBlock till $targetBlock")
+            loadFasterFastSync(storagesInstance)
+          }
+        }
       }
 
       server ! ServerActor.StartServer(networkConfig.Server.listenAddress)
