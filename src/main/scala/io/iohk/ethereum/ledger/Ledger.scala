@@ -83,7 +83,7 @@ class LedgerImpl(vm: VM, blockchainConfig: BlockchainConfig) extends Ledger with
     *         if one of them failed
     */
   @tailrec
-  private def executeTransactions(signedTransactions: Seq[SignedTransaction], world: InMemoryWorldStateProxy,
+  private[ledger] final def executeTransactions(signedTransactions: Seq[SignedTransaction], world: InMemoryWorldStateProxy,
                                   blockHeader: BlockHeader, signedTransactionValidator: SignedTransactionValidator,
                                   acumGas: BigInt = 0, acumReceipts: Seq[Receipt] = Nil): Either[TxsExecutionError, BlockResult] =
     signedTransactions match {
@@ -91,14 +91,14 @@ class LedgerImpl(vm: VM, blockchainConfig: BlockchainConfig) extends Ledger with
         Right(BlockResult(worldState = world, gasUsed = acumGas, receipts = acumReceipts))
 
       case Seq(stx, otherStxs@_*) =>
-        val senderAccount = world.getAccount(stx.senderAddress)
+        val (senderAccount, worldForTx) = world.getAccount(stx.senderAddress).map(a => (a, world))
+          .getOrElse ((Account.Empty, world.saveAccount(stx.senderAddress, Account.Empty)))
         val upfrontCost = calculateUpfrontCost(stx.tx)
-        val validatedStx = senderAccount
-          .toRight(Left(TxsExecutionError(s"Account of tx sender ${stx.senderAddress.toString} not found")))
-          .flatMap(account => signedTransactionValidator.validate(stx, account, blockHeader, upfrontCost, acumGas))
+        val validatedStx = signedTransactionValidator.validate(stx, senderAccount, blockHeader, upfrontCost, acumGas)
+
         validatedStx match {
           case Right(_) =>
-            val TxResult(newWorld, gasUsed, logs) = executeTransaction(stx, blockHeader, world)
+            val TxResult(newWorld, gasUsed, logs) = executeTransaction(stx, blockHeader, worldForTx)
 
             val receipt = Receipt(
               postTransactionStateHash = newWorld.stateRootHash,
@@ -127,7 +127,7 @@ class LedgerImpl(vm: VM, blockchainConfig: BlockchainConfig) extends Ledger with
     val resultWithErrorHandling: PR =
       if(result.error.isDefined) {
         //Rollback to the world before transfer was done if an error happened
-        result.copy(world = checkpointWorldState, addressesToDelete = Nil, logs = Nil)
+        result.copy(world = checkpointWorldState, addressesToDelete = Set.empty, logs = Nil)
       } else
         result
 
@@ -254,7 +254,7 @@ class LedgerImpl(vm: VM, blockchainConfig: BlockchainConfig) extends Ledger with
   private[ledger] def prepareProgramContext(stx: SignedTransaction, blockHeader: BlockHeader, worldStateProxy: InMemoryWorldStateProxy, config: EvmConfig): PC =
     stx.tx.receivingAddress match {
       case None =>
-        val address = worldStateProxy.createAddress(stx.senderAddress)
+        val address = worldStateProxy.createAddress(creatorAddr = stx.senderAddress)
         val world1 = worldStateProxy.transfer(stx.senderAddress, address, UInt256(stx.tx.value))
         ProgramContext(stx, address,  Program(stx.tx.payload), blockHeader, world1, config)
 
@@ -314,7 +314,7 @@ class LedgerImpl(vm: VM, blockchainConfig: BlockchainConfig) extends Ledger with
     * @param worldStateProxy
     * @return a worldState equal worldStateProxy except that the accounts from addressesToDelete are deleted
     */
-  private[ledger] def deleteAccounts(addressesToDelete: Seq[Address])(worldStateProxy: InMemoryWorldStateProxy): InMemoryWorldStateProxy =
+  private[ledger] def deleteAccounts(addressesToDelete: Set[Address])(worldStateProxy: InMemoryWorldStateProxy): InMemoryWorldStateProxy =
     addressesToDelete.foldLeft(worldStateProxy){ case (world, address) => world.deleteAccount(address) }
 
 }

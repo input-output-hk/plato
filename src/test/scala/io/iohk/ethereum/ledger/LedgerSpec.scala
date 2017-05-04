@@ -35,7 +35,7 @@ class LedgerSpec extends FlatSpec with PropertyChecks with Matchers {
                    error: Option[ProgramError] = None,
                    returnData: ByteString = bEmpty,
                    logs: Seq[TxLogEntry] = Nil,
-                   addressesToDelete: Seq[Address] = Nil): PR =
+                   addressesToDelete: Set[Address] = Set.empty): PR =
     ProgramResult(
       returnData = returnData,
       gasRemaining = gasLimit - gasUsed,
@@ -164,11 +164,11 @@ class LedgerSpec extends FlatSpec with PropertyChecks with Matchers {
 
   it should "correctly run executeBlockTransactions for a block with one tx (that produces no errors)" in new BlockchainSetup {
 
-    val table = Table[BigInt, Seq[TxLogEntry], Seq[Address], Boolean](
+    val table = Table[BigInt, Seq[TxLogEntry], Set[Address], Boolean](
       ("gasLimit/gasUsed", "logs", "addressesToDelete", "txValidAccordingToValidators"),
-      (defaultGasLimit, Nil, Nil, true),
+      (defaultGasLimit, Nil, Set.empty, true),
       (defaultGasLimit / 2, Nil, defaultAddressesToDelete, true),
-      (2 * defaultGasLimit, defaultLogs, Nil, true),
+      (2 * defaultGasLimit, defaultLogs, Set.empty, true),
       (defaultGasLimit, defaultLogs, defaultAddressesToDelete, true),
       (defaultGasLimit, defaultLogs, defaultAddressesToDelete, false)
     )
@@ -663,10 +663,35 @@ class LedgerSpec extends FlatSpec with PropertyChecks with Matchers {
     }
   }
 
+  it should "create sender account if it does not exists" in new TestSetup {
+
+    val inputData = ByteString("the payload")
+
+    val newAccountKeyPair: AsymmetricCipherKeyPair = generateKeyPair()
+    val newAccountAddress = Address(kec256(newAccountKeyPair.getPublic.asInstanceOf[ECPublicKeyParameters].getQ.getEncoded(false).tail))
+
+    val mockVM = new MockVM((pc: Ledger.PC) => {
+      pc.env.inputData shouldEqual ByteString.empty
+      createResult(pc, defaultGasLimit, defaultGasLimit, 0, None, returnData = ByteString("contract code"))
+    })
+    val ledger = new LedgerImpl(mockVM, blockchainConfig)
+
+    val tx: Transaction = defaultTx.copy(gasPrice = 0, receivingAddress = None, payload = inputData)
+    val stx: SignedTransaction = SignedTransaction.sign(tx, newAccountKeyPair, blockchainConfig.chainId)
+
+    val result: Either[BlockExecutionError.TxsExecutionError, BlockResult] = ledger.executeTransactions(
+      Seq(stx),
+      initialWorld,
+      defaultBlockHeader,
+      (new Mocks.MockValidatorsAlwaysSucceed).signedTransactionValidator)
+
+    result shouldBe a[Right[_, BlockResult]]
+    result.map(br => br.worldState.getAccount(newAccountAddress)) shouldBe Right(Some(Account(nonce = 1)))
+  }
 
   trait TestSetup {
-    val originKeyPair = generateKeyPair()
-    val receiverKeyPair = generateKeyPair()
+    val originKeyPair: AsymmetricCipherKeyPair = generateKeyPair()
+    val receiverKeyPair: AsymmetricCipherKeyPair = generateKeyPair()
     //byte 0 of encoded ECC point indicates that it is uncompressed point, it is part of spongycastle encoding
     val originAddress = Address(kec256(originKeyPair.getPublic.asInstanceOf[ECPublicKeyParameters].getQ.getEncoded(false).tail))
     val receiverAddress = Address(kec256(receiverKeyPair.getPublic.asInstanceOf[ECPublicKeyParameters].getQ.getEncoded(false).tail))
@@ -711,7 +736,7 @@ class LedgerSpec extends FlatSpec with PropertyChecks with Matchers {
 
     val initialOriginNonce = defaultTx.nonce
 
-    val defaultAddressesToDelete = Seq(Address(Hex.decode("01")), Address(Hex.decode("02")), Address(Hex.decode("03")))
+    val defaultAddressesToDelete = Set(Address(Hex.decode("01")), Address(Hex.decode("02")), Address(Hex.decode("03")))
     val defaultLogs = Seq(defaultLog.copy(loggerAddress = defaultAddressesToDelete.head))
     val defaultGasPrice: UInt256 = 10
     val defaultGasLimit: UInt256 = 1000000
