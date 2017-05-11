@@ -15,7 +15,7 @@ import io.iohk.ethereum.domain.{Account, Address}
 import io.iohk.ethereum.vm._
 
 object EvmTestEnv {
-  val ContractsDir = new File("target/contracts")
+  val ContractsDir = new File("node/target/contracts")
 }
 
 // scalastyle:off magic.number
