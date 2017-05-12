@@ -2,7 +2,9 @@
 
 enablePlugins(JavaAppPackaging)
 
-val Name = "etc-client"
+name in ThisBuild := "etc-client"
+version in ThisBuild := "0.1"
+scalaVersion in ThisBuild := "2.12.1"
 
 scalacOptions := Seq(
   "-unchecked",
@@ -51,20 +53,23 @@ val Integration = config("it") extend Test
 val Evm = config("evm") extend Test
 
 val commonSettings = Seq(
-  name := Name,
   version := "0.1",
   scalaVersion := "2.12.1",
   scalastyleSources in Test ++= {(unmanagedSourceDirectories in Integration).value},
   (scalastyleConfig in Test) := baseDirectory.value.getParentFile / "scalastyle-test-config.xml"
 )
 
-lazy val network = project
+lazy val network = Project(
+  id = "network",
+  base = file("network"))
   .configs(Integration)
   .settings(commonSettings: _*)
   .settings(libraryDependencies ++= dep)
   .settings(inConfig(Integration)(Defaults.testSettings): _*)
 
-lazy val node = project
+lazy val node = Project(
+  id = "node",
+  base = file("node"))
   .dependsOn(network)
   .configs(Integration)
   .configs(Evm)
@@ -76,6 +81,16 @@ lazy val node = project
   .settings((sourceDirectory in Evm) := baseDirectory.value / "src" / "evmTest")
   .settings((test in Evm) := (test in Evm).dependsOn(solidityCompile).value)
 
-lazy val root = (project in file(".")).aggregate(network, node)
+lazy val root = Project(
+  id = "etc-client",
+  base = file("."),
+  aggregate = Seq(network, node),
+  settings = Seq(
+    mainClass in Compile := Some("io.iohk.ethereum.App")
+  )
+).dependsOn(network, node)
 
 coverageExcludedPackages := "io.iohk.ethereum.vmrunner.*"
+
+mappings in Universal ++= ((baseDirectory in node).value / "src/universal/conf").listFiles().toSeq
+  .map{ f => f -> ("conf/" + f.name) }
