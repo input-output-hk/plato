@@ -11,8 +11,8 @@ import akka.pattern.ask
 import akka.util.Timeout
 import io.iohk.ethereum.db.storage.AppStateStorage
 import io.iohk.ethereum.domain.Blockchain
-import io.iohk.ethereum.network.EtcMessageHandler.EtcPeerInfo
-import io.iohk.ethereum.network.handshaker.Handshaker
+
+import io.iohk.ethereum.network.handshaker.HandshakeState
 import io.iohk.ethereum.network.p2p.MessageSerializable
 import io.iohk.ethereum.utils.{BlockchainConfig, NodeStatus}
 
@@ -107,7 +107,7 @@ object NetworkImpl {
   //FIXME: Some of this parameters will be later removed (dependent on open PRs)
   def apply(nodeStatusHolder: Agent[NodeStatus], peerConfiguration: PeerConfiguration,
             appStateStorage: AppStateStorage, blockchain: Blockchain, bootstrapNodes: Set[String],
-            forkResolverOpt: Option[ForkResolver], handshaker: Handshaker[EtcPeerInfo])
+            forkResolverOpt: Option[ForkResolver], handshaker: HandshakeState)
            (implicit actorSystem: ActorSystem): NetworkImpl = {
 
     val peerEventBusActor: ActorRef = actorSystem.actorOf(PeerEventBusActor.props, "peer-event-bus")

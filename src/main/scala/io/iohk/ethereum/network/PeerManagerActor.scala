@@ -4,7 +4,7 @@ import java.net.{InetSocketAddress, URI}
 
 import akka.util.Timeout
 import io.iohk.ethereum.db.storage._
-import io.iohk.ethereum.network.PeerActor.Status.Handshaking
+import io.iohk.ethereum.network.PeerActor.Status.HandshakingInProgress
 import io.iohk.ethereum.network.PeerManagerActor.PeerConfiguration
 import io.iohk.ethereum.network.p2p.messages.WireProtocol.Disconnect
 
@@ -17,8 +17,8 @@ import akka.agent.Agent
 import io.iohk.ethereum.domain.Blockchain
 import io.iohk.ethereum.network.EtcMessageHandler.EtcPeerInfo
 import io.iohk.ethereum.network.PeerEventBusActor.{PeerEvent, Publish}
-import io.iohk.ethereum.network.handshaker.Handshaker
-import io.iohk.ethereum.utils.{BlockchainConfig, Config, NodeStatus}
+import io.iohk.ethereum.network.handshaker.{HandshakeState}
+import io.iohk.ethereum.utils.{Config, NodeStatus}
 
 import scala.util.{Failure, Success}
 
@@ -134,7 +134,7 @@ class PeerManagerActor(
   def tryDiscardPeersToFreeUpLimit(): Future[Unit] = {
     getPeers() flatMap { peers =>
       val peersToPotentiallyDisconnect = peers.peers.filter {
-        case (_, Handshaking(numRetries)) if numRetries > 0 => true /* still handshaking and retried at least once */
+        case (_, HandshakingInProgress(numRetries)) if numRetries > 0 => true /* still handshaking and retried at least once */
         case (_, PeerActor.Status.Disconnected) => true /* already disconnected */
         case _ => false
       }
@@ -146,7 +146,7 @@ class PeerManagerActor(
 
         val peersToDisconnect = peersToPotentiallyDisconnect.toSeq.sortBy {
           case (_, PeerActor.Status.Disconnected) => 0
-          case (_, _: Handshaking) => 1
+          case (_, _: HandshakingInProgress) => 1
           case _ => 2
         }.take(numPeersToDisconnect)
 
@@ -167,7 +167,7 @@ object PeerManagerActor {
             bootstrapNodes: Set[String],
             peerEventBus: ActorRef,
             forkResolverOpt: Option[ForkResolver],
-            handshaker: Handshaker[EtcPeerInfo]): Props =
+            handshaker: HandshakeState): Props =
     Props(new PeerManagerActor(peerConfiguration, peerEventBus,
       peerFactory = peerFactory(nodeStatusHolder, peerConfiguration, appStateStorage, blockchain,
         peerEventBus, forkResolverOpt, handshaker), bootstrapNodes = bootstrapNodes))
@@ -178,7 +178,7 @@ object PeerManagerActor {
                   blockchain: Blockchain,
                   peerEventBus: ActorRef,
                   forkResolverOpt: Option[ForkResolver],
-                  handshaker: Handshaker[EtcPeerInfo]): (ActorContext, InetSocketAddress) => ActorRef = {
+                  handshaker: HandshakeState): (ActorContext, InetSocketAddress) => ActorRef = {
     (ctx, addr) =>
       val id = addr.toString.filterNot(_ == '/')
       //FIXME: Message handler builder should be configurable

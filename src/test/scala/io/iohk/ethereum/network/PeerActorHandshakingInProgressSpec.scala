@@ -25,7 +25,7 @@ import org.scalatest.{FlatSpec, Matchers}
 
 import scala.concurrent.duration._
 
-class PeerActorHandshakingSpec extends FlatSpec with Matchers {
+class PeerActorHandshakingInProgressSpec extends FlatSpec with Matchers {
 
   it should "succeed in establishing connection if the handshake is always successful" in new TestSetup {
 

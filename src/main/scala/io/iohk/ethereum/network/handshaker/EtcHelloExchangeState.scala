@@ -1,42 +1,42 @@
 package io.iohk.ethereum.network.handshaker
 
 import akka.util.ByteString
-import io.iohk.ethereum.network.EtcMessageHandler.EtcPeerInfo
-import io.iohk.ethereum.network.handshaker.Handshaker.NextMessage
 import io.iohk.ethereum.network.p2p.Message
 import io.iohk.ethereum.network.p2p.messages.Versions
 import io.iohk.ethereum.network.p2p.messages.WireProtocol.{Capability, Disconnect, Hello}
 import io.iohk.ethereum.utils.{Config, Logger, ServerStatus}
 
 
-case class EtcHelloExchangeState(handshakerConfiguration: EtcHandshakerConfiguration) extends InProgressState[EtcPeerInfo] with Logger {
+case class EtcHelloExchangeState(handshakerConfiguration: EtcHandshakerConfiguration) extends Handshaking with Logger {
 
   import handshakerConfiguration._
 
-  override def nextMessage: NextMessage = {
+  override def nextMessage: (Option[NextMessage], HandshakeState) = {
     log.info("RLPx connection established, sending Hello")
-    NextMessage(
+    (Some(NextMessage(
       messageToSend = createHelloMsg(),
       timeout = peerConfiguration.waitForHelloTimeout
-    )
+    )), this)
   }
 
-  override def applyResponseMessage: PartialFunction[Message, HandshakerState[EtcPeerInfo]] = {
-
-    case hello: Hello =>
-      log.info("Protocol handshake finished with peer ({})", hello)
-      if (hello.capabilities.contains(Capability("eth", Versions.PV63.toByte)))
-        EtcNodeStatusExchangeState(handshakerConfiguration)
-      else {
-        log.warn("Connected peer does not support eth {} protocol. Disconnecting.", Versions.PV63.toByte)
-        DisconnectedState(Disconnect.Reasons.IncompatibleP2pProtocolVersion)
-      }
+  def nextMessage(receivedMessage: Message): (Option[NextMessage], HandshakeState) = {
+    receivedMessage match {
+      case hello: Hello =>
+        log.info("Protocol handshake finished with peer ({})", hello)
+        if (hello.capabilities.contains(Capability("eth", Versions.PV63.toByte)))
+          (None, EtcNodeStatusExchangeState(handshakerConfiguration))
+        else {
+          log.warn("Connected peer does not support eth {} protocol. Disconnecting.", Versions.PV63.toByte)
+          (None, HandshakeFailure(Disconnect.Reasons.IncompatibleP2pProtocolVersion))
+        }
+      case _ => (None, HandshakeFailure(0)) // TODO REAL ERROR CODE REQUIRED
+    }
 
   }
 
-  override def processTimeout: HandshakerState[EtcPeerInfo] = {
+  override def processTimeout: (Option[NextMessage], HandshakeState) = {
     log.warn("Timeout while waiting for Hello")
-    DisconnectedState(Disconnect.Reasons.TimeoutOnReceivingAMessage)
+      (None, HandshakeFailure(Disconnect.Reasons.TimeoutOnReceivingAMessage))
   }
 
   private def createHelloMsg(): Hello = {

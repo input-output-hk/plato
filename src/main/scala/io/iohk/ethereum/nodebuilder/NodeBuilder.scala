@@ -21,7 +21,7 @@ import io.iohk.ethereum.utils.{Config, NodeStatus, ServerStatus}
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import io.iohk.ethereum.network._
-import io.iohk.ethereum.network.handshaker.{EtcHandshaker, EtcHandshakerConfiguration, Handshaker}
+import io.iohk.ethereum.network.handshaker.{EtcHandshaker, EtcHandshakerConfiguration, HandshakeState}
 import io.iohk.ethereum.transactions.PendingTransactionsManager
 import io.iohk.ethereum.validators._
 import io.iohk.ethereum.vm.VM
@@ -84,7 +84,7 @@ trait HandshakerBuilder {
       override val appStateStorage: AppStateStorage = self.storagesInstance.storages.appStateStorage
     }
 
-  lazy val handshaker: Handshaker[EtcPeerInfo] = EtcHandshaker(handshakerConfiguration)
+  lazy val handshaker: HandshakeState = EtcHandshaker(handshakerConfiguration)
 }
 
 trait PeerEventBusBuilder {

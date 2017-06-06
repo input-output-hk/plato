@@ -16,9 +16,7 @@ import io.iohk.ethereum.network.MessageHandler.MessageHandlingResult
 import io.iohk.ethereum.network.PeerActor.Status._
 import io.iohk.ethereum.network.PeerEventBusActor.PeerEvent.{MessageFromPeer, PeerHandshakeSuccessful, PeerInfoUpdated}
 import io.iohk.ethereum.network.PeerEventBusActor.Publish
-import io.iohk.ethereum.network.handshaker.Handshaker
-import io.iohk.ethereum.network.handshaker.Handshaker.HandshakeComplete.{HandshakeFailure, HandshakeSuccess}
-import io.iohk.ethereum.network.handshaker.Handshaker.NextMessage
+import io.iohk.ethereum.network.handshaker._
 import org.spongycastle.crypto.AsymmetricCipherKeyPair
 
 
@@ -36,7 +34,7 @@ class PeerActor(
     val peerConfiguration: PeerConfiguration,
     peerEventBus: ActorRef,
     externalSchedulerOpt: Option[Scheduler] = None,
-    initHandshaker: Handshaker[EtcPeerInfo],
+    initHandshaker: HandshakeState,
     messageHandlerBuilder: (EtcPeerInfo, Peer) => MessageHandler[EtcPeerInfo, EtcPeerInfo])
   extends Actor with ActorLogging with Stash {
 
@@ -95,7 +93,7 @@ class PeerActor(
       case GetStatus => sender() ! StatusResponse(Connecting)
     }
 
-  def processingHandshaking(handshaker: Handshaker[EtcPeerInfo], rlpxConnection: RLPxConnection,
+  def processingHandshaking(handshakeState: HandshakeState, rlpxConnection: RLPxConnection,
                             timeout: Cancellable, numRetries: Int): Receive =
       handleTerminated(rlpxConnection) orElse handleDisconnectMsg orElse
       handlePingMsg(rlpxConnection) orElse stashMessages orElse {
@@ -103,20 +101,47 @@ class PeerActor(
       case RLPxConnectionHandler.MessageReceived(msg) =>
         // Processes the received message, cancels the timeout and processes a new message but only if the handshaker
         // handles the received message
-        handshaker.applyMessage(msg).foreach{ newHandshaker =>
-          timeout.cancel()
-          processHandshakerNextMessage(newHandshaker, rlpxConnection, numRetries)
-        }
-        handshaker.respondToRequest(msg).foreach{
-          case msgToSend => rlpxConnection.sendMessage(msgToSend)
+        handshakeState match {
+          case h : Handshaking => h.nextMessage(msg) match {
+            case (Some(NextMessage(msgToSend, timeOut)), newHandshaker: Handshaking) => {
+              rlpxConnection.sendMessage(msgToSend)
+              val newTimeout = scheduler.scheduleOnce(timeOut, self, ResponseTimeout)
+              processHandshakerNextMessage(newHandshaker, rlpxConnection, numRetries)
+            }
+            case (_, newHandshaker: HandshakeState) => {
+              //Todo check for failure and success
+            }
+          }
+          case HandshakeFailure(code) => //TODO!!
+          case HandshakeSuccess(peerInfo : EtcPeerInfo) => //TODO!!
+          case HandshakeSuccess(x) => //TODO!!
+
         }
 
       case ResponseTimeout =>
-        timeout.cancel()
-        val newHandshaker = handshaker.processTimeout
-        processHandshakerNextMessage(newHandshaker, rlpxConnection, numRetries)
+        //timeout.cancel() <- TODO if it's been triggered, is this necessary? I think no.
+        handshakeState match {
+          case handshaker: Handshaking =>
+            handshaker.processTimeout match {
+              case (Some(NextMessage(msgToSend, _)), newHanlder @ HandshakeSuccess(etcPeerInfo: EtcPeerInfo)) =>
+                rlpxConnection.sendMessage(msgToSend)
+              //startMessageHandler(rlpxConnection, initialStatus, totalDifficulty, forkAccepted, currentMaxBlockNumber)
 
-      case GetStatus => sender() ! StatusResponse(Handshaking(numRetries))
+              case (None, newHanlder @ HandshakeSuccess(etcPeerInfo: EtcPeerInfo)) =>
+              //startMessageHandler(rlpxConnection, initialStatus, totalDifficulty, forkAccepted, currentMaxBlockNumber)
+
+              case (Some(NextMessage(msgToSend, timeOut)), HandshakeFailure(reason)) => {
+                rlpxConnection.sendMessage(msgToSend)
+                disconnectFromPeer(rlpxConnection, reason)
+              }
+              case _ => //TODO
+
+            }
+          case _ => //TODO FIX ME
+        }
+
+
+      case GetStatus => sender() ! StatusResponse(HandshakingInProgress(numRetries))
 
     }
 
@@ -124,25 +149,29 @@ class PeerActor(
     * Asks for the next message to send to the handshaker, or, if there is None,
     * becomes MessageHandler if handshake was successful or disconnects from the peer otherwise
     *
-    * @param handshaker
+    * @param handshakeState
     * @param rlpxConnection
     * @param numRetries, number of connection retries done during RLPxConnection establishment
     */
-  private def processHandshakerNextMessage(handshaker: Handshaker[EtcPeerInfo],
+  private def processHandshakerNextMessage(handshakeState: HandshakeState,
                                            rlpxConnection: RLPxConnection, numRetries: Int): Unit =
-    handshaker.nextMessage match {
-      case Right(NextMessage(msgToSend, timeoutTime)) =>
-        rlpxConnection.sendMessage(msgToSend)
-        val newTimeout = scheduler.scheduleOnce(timeoutTime, self, ResponseTimeout)
-        context become processingHandshaking(handshaker, rlpxConnection, newTimeout, numRetries)
 
-      case Left(HandshakeSuccess(EtcPeerInfo(initialStatus, totalDifficulty, forkAccepted, currentMaxBlockNumber))) =>
+    handshakeState match {
+      case h : Handshaking => h.nextMessage match {
+        case (Some(NextMessage(msgToSend, timeOut)), newHanlder: HandshakingInProgress) => {
+          rlpxConnection.sendMessage(msgToSend)
+          val newTimeout = scheduler.scheduleOnce(timeOut, self, ResponseTimeout)
+          //TODO where does numRetries get decremented?
+          context.become(processingHandshaking(newHanlder, rlpxConnection, newTimeout, numRetries))
+        }
+        case _ => //TODO
+      }
+      case HandshakeFailure(reason) => disconnectFromPeer(rlpxConnection, reason)
+      case HandshakeSuccess(EtcPeerInfo(initialStatus, totalDifficulty, forkAccepted, currentMaxBlockNumber)) =>
         startMessageHandler(rlpxConnection, initialStatus, totalDifficulty, forkAccepted, currentMaxBlockNumber)
-
-      case Left(HandshakeFailure(reason)) =>
-        disconnectFromPeer(rlpxConnection, reason)
-
+      case _ => // TODO
     }
+
 
   private def scheduleConnectRetry(uri: URI, numRetries: Int): Unit = {
     log.info("Scheduling connection retry in {}", peerConfiguration.connectRetryDelay)
@@ -251,7 +280,7 @@ object PeerActor {
             nodeStatusHolder: Agent[NodeStatus],
             peerConfiguration: PeerConfiguration,
             peerEventBus: ActorRef,
-            handshaker: Handshaker[EtcPeerInfo],
+            handshaker: HandshakeState,
             messageHandlerBuilder: (EtcPeerInfo, Peer) => MessageHandler[EtcPeerInfo, EtcPeerInfo]): Props =
     Props(new PeerActor(
       peerAddress,
@@ -291,7 +320,7 @@ object PeerActor {
   object Status {
     case object Idle extends Status
     case object Connecting extends Status
-    case class Handshaking(numRetries: Int) extends Status
+    case class HandshakingInProgress(numRetries: Int) extends Status
     case class Handshaked(initialStatus: msg.Status, forkAccepted: Boolean, totalDifficulty: BigInt) extends Status
     case object Disconnected extends Status
   }

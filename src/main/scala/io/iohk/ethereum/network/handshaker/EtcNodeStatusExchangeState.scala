@@ -1,40 +1,44 @@
 package io.iohk.ethereum.network.handshaker
 
 import io.iohk.ethereum.network.EtcMessageHandler.EtcPeerInfo
-import io.iohk.ethereum.network.handshaker.Handshaker.NextMessage
 import io.iohk.ethereum.network.p2p.Message
 import io.iohk.ethereum.network.p2p.messages.CommonMessages.Status
 import io.iohk.ethereum.network.p2p.messages.Versions
 import io.iohk.ethereum.network.p2p.messages.WireProtocol.Disconnect
 import io.iohk.ethereum.utils.Logger
 
-case class EtcNodeStatusExchangeState(handshakerConfiguration: EtcHandshakerConfiguration) extends InProgressState[EtcPeerInfo] with Logger {
+case class EtcNodeStatusExchangeState(handshakerConfiguration: EtcHandshakerConfiguration) extends Handshaking with Logger {
 
   import handshakerConfiguration._
 
-  def nextMessage: NextMessage =
+  def createNextMessage: NextMessage =
     NextMessage(
       messageToSend = createStatusMsg(),
       timeout = peerConfiguration.waitForStatusTimeout
     )
 
-  def applyResponseMessage: PartialFunction[Message, HandshakerState[EtcPeerInfo]] = {
+  override def nextMessage: (Option[NextMessage], HandshakeState) = (Some(createNextMessage), this)
 
+  override def nextMessage(receivedMessage: Message): (Option[NextMessage], HandshakeState) = {
+
+    receivedMessage match {
     case remoteStatus: Status =>
       log.info("Peer returned status ({})", remoteStatus)
 
       forkResolverOpt match {
         case Some(forkResolver) =>
-          EtcForkBlockExchangeState(handshakerConfiguration, forkResolver, remoteStatus)
+          (None, EtcForkBlockExchangeState(handshakerConfiguration, forkResolver, remoteStatus))
         case None =>
-          ConnectedState(EtcPeerInfo(remoteStatus, remoteStatus.totalDifficulty, true, 0))
+          (None, HandshakeSuccess(EtcPeerInfo(remoteStatus, remoteStatus.totalDifficulty, true, 0)))
+
       }
+    }
 
   }
 
-  def processTimeout: HandshakerState[EtcPeerInfo] = {
+  def processTimeout: (Option[NextMessage], HandshakeState) = {
     log.warn("Timeout while waiting status")
-    DisconnectedState(Disconnect.Reasons.TimeoutOnReceivingAMessage)
+    (None, HandshakeFailure(Disconnect.Reasons.TimeoutOnReceivingAMessage))
   }
 
   private def getBestBlockHeader() = {

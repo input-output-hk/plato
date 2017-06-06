@@ -85,7 +85,7 @@ class NetworkImplSpec extends FlatSpec with Matchers {
     val peer2 = TestProbe()
 
     val defaultPeers = Peers(Map(
-      PeerImpl(new InetSocketAddress("127.0.0.1", 0), peer1.ref, peerEventBus.ref) -> PeerActor.Status.Handshaking(0),
+      PeerImpl(new InetSocketAddress("127.0.0.1", 0), peer1.ref, peerEventBus.ref) -> PeerActor.Status.HandshakingInProgress(0),
       PeerImpl(new InetSocketAddress("127.0.0.1", 1), peer2.ref, peerEventBus.ref) -> PeerActor.Status.Connecting
     ))
 
