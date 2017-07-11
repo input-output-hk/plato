@@ -21,6 +21,8 @@ trait StoragesComponent {
 
     val nodeStorage: NodeStorage //FIXME This storage is similar to MPTNodesStorage but
 
+    val moveNodeStorage: MoveNodeStorage
+
     val evmCodeStorage: EvmCodeStorage
 
     val totalDifficultyStorage: TotalDifficultyStorage

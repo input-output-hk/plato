@@ -3,7 +3,7 @@ package io.iohk.ethereum.db.dataSource
 import java.io.File
 
 import io.iohk.ethereum.utils.Config
-import org.iq80.leveldb.{DB, Options, WriteOptions}
+import org.iq80.leveldb._
 import org.iq80.leveldb.impl.{Iq80DBFactory, WriteBatchImpl}
 
 
@@ -33,11 +33,14 @@ class LevelDBDataSource(
     */
   override def update(namespace: Namespace, toRemove: Seq[Key], toUpsert: Seq[(Key, Value)]): DataSource = {
     val batch = db.createWriteBatch()
+    db.iterator()
     toRemove.foreach { key => batch.delete((namespace ++ key).toArray) }
     toUpsert.foreach { item => batch.put((namespace ++ item._1).toArray, item._2.toArray) }
     db.write(batch, new WriteOptions())
     this
   }
+
+  def iterator(): DBIterator = db.iterator(new ReadOptions().fillCache(false))
 
   /**
     * This function updates the DataSource by deleting all the (key-value) pairs in it.

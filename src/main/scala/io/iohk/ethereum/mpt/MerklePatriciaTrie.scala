@@ -2,11 +2,13 @@ package io.iohk.ethereum.mpt
 
 import akka.util.ByteString
 import io.iohk.ethereum.common.SimpleMap
+import io.iohk.ethereum.crypto
 import io.iohk.ethereum.db.storage.NodeStorage
 import io.iohk.ethereum.mpt.MerklePatriciaTrie.HashFn
 import io.iohk.ethereum.rlp.RLPImplicitConversions._
 import io.iohk.ethereum.rlp.RLPImplicits._
 import io.iohk.ethereum.rlp.{decode => decodeRLP, encode => encodeRLP, _}
+import org.spongycastle.util.encoders.Hex
 
 import scala.annotation.tailrec
 
@@ -21,6 +23,8 @@ object MerklePatriciaTrie {
     toUpdateInStorage: Seq[Node] = Nil)
 
   type HashFn = Array[Byte] => Array[Byte]
+
+  implicit val hashFn: HashFn = crypto.kec256(_: Array[Byte])
 
   private val PairSize: Byte = 2
   private[mpt] val ListSize: Byte = 17
@@ -38,10 +42,13 @@ object MerklePatriciaTrie {
 
   def calculateEmptyRootHash(hashFn: HashFn): Array[Byte] = hashFn(encodeRLP(Array.emptyByteArray))
 
-  private def getNode(nodeId: Array[Byte], source: NodeStorage)(implicit nodeDec: RLPDecoder[Node]): Node = {
+  def getNode(nodeId: Array[Byte], source: NodeStorage)(implicit nodeDec: RLPDecoder[Node]): Node = {
     val nodeEncoded =
       if (nodeId.length < 32) nodeId
-      else source.get(ByteString(nodeId)).getOrElse(throw MPTException("Node not found, trie is inconsistent"))
+      else source.get(ByteString(nodeId)).getOrElse{
+        println(s" Head is ${nodeId.head} ${'n'.toByte} ${'m'.toByte}")
+        throw MPTException(s"Node ${Hex.toHexString(nodeId)} not found, trie is inconsistent")
+      }
     decodeRLP[Node](nodeEncoded)
   }
 
@@ -94,15 +101,6 @@ object MerklePatriciaTrie {
 
     override def fromBytes(bytes: Array[Byte]): Array[Byte] = bytes
   }
-}
-
-class MerklePatriciaTrie[K, V] private (private val rootHash: Option[Array[Byte]],
-  val nodeStorage: NodeStorage,
-  private val hashFn: HashFn)
-  (implicit kSerializer: ByteArrayEncoder[K], vSerializer: ByteArraySerializable[V])
-  extends SimpleMap[K, V, MerklePatriciaTrie[K, V]] {
-
-  import MerklePatriciaTrie._
 
   /**
     * Implicits
@@ -131,6 +129,16 @@ class MerklePatriciaTrie[K, V] private (private val rootHash: Option[Array[Byte]
       case _ => throw new RuntimeException("Invalid Node")
     }
   }
+}
+
+class MerklePatriciaTrie[K, V] private (private val rootHash: Option[Array[Byte]],
+  val nodeStorage: NodeStorage,
+  private val hashFn: HashFn)
+  (implicit kSerializer: ByteArrayEncoder[K], vSerializer: ByteArraySerializable[V])
+  extends SimpleMap[K, V, MerklePatriciaTrie[K, V]] {
+
+  import MerklePatriciaTrie._
+
 
   private lazy val EmptyTrieHash = hashFn(encodeRLP(Array.emptyByteArray))
   lazy val getRootHash: Array[Byte] = rootHash.getOrElse(EmptyTrieHash)
