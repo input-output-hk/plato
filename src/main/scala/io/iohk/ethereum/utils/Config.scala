@@ -200,6 +200,7 @@ trait BlockchainConfig {
 
   val customGenesisFileOpt: Option[String]
 
+  val proDaoFork: Boolean
   val daoForkBlockNumber: BigInt
   val daoForkBlockHash: ByteString
   val accountStartNonce: UInt256
@@ -224,6 +225,7 @@ object BlockchainConfig {
 
       override val customGenesisFileOpt: Option[String] = Try(blockchainConfig.getString("custom-genesis-file")).toOption
 
+      override val proDaoFork: Boolean = blockchainConfig.getBoolean("pro-dao-fork")
       override val daoForkBlockNumber: BigInt = BigInt(blockchainConfig.getString("dao-fork-block-number"))
       override val daoForkBlockHash: ByteString = ByteString(Hex.decode(blockchainConfig.getString("dao-fork-block-hash")))
       override val accountStartNonce: UInt256 = UInt256(BigInt(blockchainConfig.getString("account-start-nonce")))
