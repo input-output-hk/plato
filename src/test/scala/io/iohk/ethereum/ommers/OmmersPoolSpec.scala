@@ -2,6 +2,7 @@ package io.iohk.ethereum.ommers
 
 import akka.actor.ActorSystem
 import akka.testkit.TestProbe
+import akka.util.ByteString
 import io.iohk.ethereum.Fixtures.Blocks.Block3125369
 import io.iohk.ethereum.Timeouts
 import io.iohk.ethereum.domain.{Address, Blockchain}
@@ -59,6 +60,7 @@ class OmmersPoolSpec extends FlatSpec with Matchers with MockFactory {
       override val coinbase: Address = Address(2)
       override val ommerPoolQueryTimeout: FiniteDuration = Timeouts.normalTimeout
       override val blockCacheSize: Int = 4
+      override val headerExtraData: ByteString = ByteString.empty
     }
 
     val testProbe = TestProbe()

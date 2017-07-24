@@ -1304,6 +1304,7 @@ class JsonRpcControllerSpec extends FlatSpec with Matchers with PropertyChecks w
       override val blockCacheSize: Int = 30
       override val ommersPoolSize: Int = 30
       override val ommerPoolQueryTimeout: FiniteDuration = Timeouts.normalTimeout
+      override val headerExtraData: ByteString = ByteString.empty
     }
 
     val txPoolConfig = new TxPoolConfig {

@@ -170,10 +170,13 @@ object TxPoolConfig {
 }
 
 trait MiningConfig {
+  //duplicated in BlockHeaderValidator
+  val MaxExtraDataSize: Int = 32
   val ommersPoolSize: Int
   val blockCacheSize: Int
   val coinbase: Address
   val ommerPoolQueryTimeout: FiniteDuration
+  val headerExtraData: ByteString
 }
 
 object MiningConfig {
@@ -185,6 +188,7 @@ object MiningConfig {
       val blockCacheSize: Int = miningConfig.getInt("block-cashe-size")
       val ommersPoolSize: Int = miningConfig.getInt("ommers-pool-size")
       val ommerPoolQueryTimeout: FiniteDuration = miningConfig.getDuration("ommer-pool-query-timeout").toMillis.millis
+      override val headerExtraData: ByteString = ByteString(miningConfig.getString("header-extra-data").getBytes).take(MaxExtraDataSize)
     }
   }
 }
