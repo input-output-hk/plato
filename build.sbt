@@ -64,6 +64,13 @@ scalacOptions := Seq(
   "-Xfatal-warnings"
 )
 
+fork := true
+
+javaOptions := Seq(
+  "-Xms512m",
+  "-Xmx2048m"
+)
+
 parallelExecution in Test := false
 
 testOptions in Test += Tests.Argument("-oD")
