@@ -6,7 +6,7 @@ import io.iohk.ethereum.ledger.BlockExecutionError.{StateBeforeFailure, TxsExecu
 import io.iohk.ethereum.ledger.Ledger.BlockPreparationResult
 import io.iohk.ethereum.network.p2p.messages.CommonMessages.Status
 import io.iohk.ethereum.network.handshaker.{ConnectedState, DisconnectedState, Handshaker, HandshakerState}
-import io.iohk.ethereum.ledger.{BlockExecutionError, BlockPreparationError, InMemoryWorldStateProxy, Ledger}
+import io.iohk.ethereum.ledger._
 import io.iohk.ethereum.network.EtcPeerManagerActor.PeerInfo
 import io.iohk.ethereum.network.p2p.messages.PV62.BlockBody
 import io.iohk.ethereum.validators.BlockHeaderError.HeaderNumberError
@@ -16,6 +16,9 @@ import io.iohk.ethereum.validators._
 import io.iohk.ethereum.vm._
 
 object Mocks {
+
+  type PC = ProgramContext[InMemoryWorldStateProxy, InMemoryWorldStateProxyStorage]
+  type PR = ProgramResult[InMemoryWorldStateProxy, InMemoryWorldStateProxyStorage]
 
   class MockLedger(blockchain: BlockchainImpl, shouldExecuteCorrectly: (Block, BlockchainImpl, Validators) => Boolean) extends Ledger{
     override def executeBlock(block: Block, validators: Validators)
@@ -28,16 +31,16 @@ object Mocks {
           "StubLedger was set to fail for this case"))
     }
 
-    override def prepareBlock(block: Block, validators: Validators): BlockPreparationResult = {
+    override def prepareBlock(block: Block, validators: Validators): BlockPreparationResult[InMemoryWorldStateProxy, InMemoryWorldStateProxyStorage] = {
       ???
     }
 
-    override def simulateTransaction(stx: SignedTransaction, blockHeader: BlockHeader): Ledger.TxResult = {
+    override def simulateTransaction(stx: SignedTransaction, blockHeader: BlockHeader): Ledger.SimulateTxResult = {
       ???
     }
   }
 
-  private val defaultProgramResult: Ledger.PC => Ledger.PR = context => ProgramResult(
+  private val defaultProgramResult: PC => PR = context => ProgramResult(
     returnData = ByteString.empty,
     gasRemaining = 1000000 - 25000,
     world = context.world,
@@ -48,9 +51,9 @@ object Mocks {
     error = None
   )
 
-  class MockVM(runFn: Ledger.PC => Ledger.PR = defaultProgramResult) extends VM {
+  class MockVM(runFn: PC => PR = defaultProgramResult) extends VM {
     override def run[W <: WorldStateProxy[W, S], S <: Storage[S]](context: ProgramContext[W, S]): ProgramResult[W, S] =
-      runFn(context.asInstanceOf[Ledger.PC]).asInstanceOf[ProgramResult[W, S]]
+      runFn(context.asInstanceOf[PC]).asInstanceOf[ProgramResult[W, S]]
   }
 
   class MockValidatorsFailingOnBlockBodies extends MockValidatorsAlwaysSucceed {

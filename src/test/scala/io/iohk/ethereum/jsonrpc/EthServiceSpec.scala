@@ -24,7 +24,7 @@ import scala.concurrent.Await
 import io.iohk.ethereum.jsonrpc.EthService.ProtocolVersionRequest
 import io.iohk.ethereum.jsonrpc.FilterManager.TxLog
 import io.iohk.ethereum.keystore.KeyStore
-import io.iohk.ethereum.ledger.Ledger.TxResult
+import io.iohk.ethereum.ledger.Ledger.{SimulateTxResult, TxResult}
 import io.iohk.ethereum.ledger.{InMemoryWorldStateProxy, Ledger}
 import io.iohk.ethereum.mining.{BlockGenerator, PendingBlock}
 import io.iohk.ethereum.mpt.{ByteArrayEncoder, ByteArraySerializable, HashByteArraySerializable, MerklePatriciaTrie}
@@ -409,7 +409,7 @@ class EthServiceSpec extends FlatSpec with Matchers with ScalaFutures with MockF
     blockchain.save(blockToRequest)
     (appStateStorage.getBestBlockNumber _).expects().returning(blockToRequest.header.number)
 
-    val txResult = TxResult(BlockchainImpl(storagesInstance.storages).getWorldStateProxy(-1, UInt256.Zero, None), 123, Nil, ByteString("return_value"))
+    val txResult = SimulateTxResult(123, Nil, ByteString("return_value"))
     (ledger.simulateTransaction _).expects(*, *).returning(txResult)
 
     val tx = CallTx(
@@ -425,7 +425,7 @@ class EthServiceSpec extends FlatSpec with Matchers with ScalaFutures with MockF
     blockchain.save(blockToRequest)
     (appStateStorage.getBestBlockNumber _).expects().returning(blockToRequest.header.number)
 
-    val txResult = TxResult(BlockchainImpl(storagesInstance.storages).getWorldStateProxy(-1, UInt256.Zero, None), 123, Nil, ByteString("return_value"))
+    val txResult = SimulateTxResult(123, Nil, ByteString("return_value"))
     (ledger.simulateTransaction _).expects(*, *).returning(txResult)
 
     val tx = CallTx(

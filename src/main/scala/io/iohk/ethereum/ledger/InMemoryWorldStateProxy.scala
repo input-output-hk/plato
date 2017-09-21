@@ -202,5 +202,10 @@ class InMemoryWorldStateProxy private(
     )
 
   override def getBlockHash(number: UInt256): Option[UInt256] = getBlockByNumber(number).map(UInt256(_))
+
+  override def persist(): InMemoryWorldStateProxy = {
+    InMemoryWorldStateProxy.persistState(this)
+    this
+  }
 }
 

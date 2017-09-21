@@ -16,9 +16,9 @@ import io.iohk.ethereum.rlp.UInt256RLPImplicits._
   */
 trait WorldStateProxy[WS <: WorldStateProxy[WS, S], S <: Storage[S]] { self: WS =>
 
-  protected def getAccount(address: Address): Option[Account]
-  protected def saveAccount(address: Address, account: Account): WS
-  protected def deleteAccount(address: Address): WS
+  def getAccount(address: Address): Option[Account]
+  def saveAccount(address: Address, account: Account): WS
+  def deleteAccount(address: Address): WS
   protected def getEmptyAccount: Account
 
   /**
@@ -27,7 +27,7 @@ trait WorldStateProxy[WS <: WorldStateProxy[WS, S], S <: Storage[S]] { self: WS 
     * handle account existence in such cases. If it does fail, it means there's something terribly wrong with our code
     * and throwing an exception is an appropriate response.
     */
-  protected def getGuaranteedAccount(address: Address): Account =
+  def getGuaranteedAccount(address: Address): Account =
     getAccount(address).get
 
   def getCode(address: Address): ByteString
@@ -101,4 +101,8 @@ trait WorldStateProxy[WS <: WorldStateProxy[WS, S], S <: Storage[S]] { self: WS 
     val updatedWorld = saveAccount(creatorAddr, creatorAccount.increaseNonce)
     updatedWorld.createAddress(creatorAddr) -> updatedWorld
   }
+
+  def persist(): WS
+
+  def stateRootHash: ByteString
 }

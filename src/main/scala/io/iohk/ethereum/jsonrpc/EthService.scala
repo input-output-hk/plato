@@ -696,7 +696,7 @@ class EthService(
     }
   }
 
-  private def doCall(req: CallRequest): Either[JsonRpcError, Ledger.TxResult] = {
+  private def doCall(req: CallRequest): Either[JsonRpcError, Ledger.SimulateTxResult] = {
     val fromAddress = req.tx.from
       .map(Address.apply) // `from` param, if specified
       .getOrElse(
