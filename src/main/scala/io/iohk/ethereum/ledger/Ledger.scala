@@ -172,7 +172,7 @@ class LedgerImpl(vm: VM, val blockchain: Blockchain, blockchainConfig: Blockchai
         world1
 
     val worldForTx = updateSenderAccountBeforeExecution(stx, world2)
-    val context: PC = prepareProgramContext(stx, blockHeader, worldForTx, config)
+    val context: PC = prepareProgramContext[W, S](stx, blockHeader, worldForTx, config)
 
     val result = runVM(stx, context, config)
 
@@ -190,10 +190,10 @@ class LedgerImpl(vm: VM, val blockchain: Blockchain, blockchainConfig: Blockchai
     val config = EvmConfig.forBlock(blockHeader.number, blockchainConfig)
 
     val checkpointWorldState = updateSenderAccountBeforeExecution[W2, S2](stx, world)
-    val context = prepareProgramContext(stx, blockHeader, checkpointWorldState, config)
+    val context = prepareProgramContext[W2, S2](stx, blockHeader, checkpointWorldState, config)
     val result = runVM(stx, context, config)
 
-    val resultWithErrorHandling: PR =
+    val resultWithErrorHandling: ProgramResult[W2, S2] =
       if(result.error.isDefined) {
         //Rollback to the world before transfer was done if an error happened
         result.copy(world = checkpointWorldState, addressesToDelete = Set.empty, logs = Nil)
@@ -203,10 +203,10 @@ class LedgerImpl(vm: VM, val blockchain: Blockchain, blockchainConfig: Blockchai
     val totalGasToRefund = calcTotalGasToRefund(stx, resultWithErrorHandling)
     val executionGasToPayToMiner = gasLimit - totalGasToRefund
 
-    val refundGasFn = pay(stx.senderAddress, (totalGasToRefund * gasPrice).toUInt256) _
-    val payMinerForGasFn = pay(Address(blockHeader.beneficiary), (executionGasToPayToMiner * gasPrice).toUInt256) _
-    val deleteAccountsFn: W => W = deleteAccounts[W, S](resultWithErrorHandling.addressesToDelete)
-    val persistStateFn: W => W = world => world.persist()
+    val refundGasFn = pay[W2, S2](stx.senderAddress, (totalGasToRefund * gasPrice).toUInt256) _
+    val payMinerForGasFn = pay[W2, S2](Address(blockHeader.beneficiary), (executionGasToPayToMiner * gasPrice).toUInt256) _
+    val deleteAccountsFn: W2 => W2 = deleteAccounts[W2, S2](resultWithErrorHandling.addressesToDelete)
+    val persistStateFn: W2 => W2 = world => world.persist()
 
     val world2 = (refundGasFn andThen payMinerForGasFn andThen deleteAccountsFn andThen persistStateFn)(resultWithErrorHandling.world)
 
@@ -316,8 +316,9 @@ class LedgerImpl(vm: VM, val blockchain: Blockchain, blockchainConfig: Blockchai
     worldStateProxy.saveAccount(senderAddress, account.increaseBalance(-calculateUpfrontGas(stx.tx)).increaseNonce)
   }
 
-  private def prepareProgramContext(stx: SignedTransaction, blockHeader: BlockHeader, worldStateProxy: W,
-                                            config: EvmConfig): PC = {
+  private def prepareProgramContext[W2 <: WorldStateProxy[W2, S2], S2 <: Storage[S2]]
+    (stx: SignedTransaction, blockHeader: BlockHeader, worldStateProxy: W2,
+                                            config: EvmConfig): ProgramContext[W2, S2] = {
     stx.tx.receivingAddress match {
       case None =>
         val address = worldStateProxy.createAddress(creatorAddr = stx.senderAddress)
@@ -329,15 +330,17 @@ class LedgerImpl(vm: VM, val blockchain: Blockchain, blockchainConfig: Blockchai
     }
   }
 
-  private def runVM(stx: SignedTransaction, context: PC, config: EvmConfig): PR = {
-    val result: PR = vm.run(context)
+  private def runVM[W2 <: WorldStateProxy[W2, S2], S2 <: Storage[S2]]
+    (stx: SignedTransaction, context: ProgramContext[W2, S2], config: EvmConfig): ProgramResult[W2, S2] = {
+    val result: ProgramResult[W2, S2] = vm.run(context)
     if (stx.tx.isContractInit && result.error.isEmpty)
       saveNewContract(context.env.ownerAddr, result, config)
     else
       result
   }
 
-  private def saveNewContract(address: Address, result: PR, config: EvmConfig): PR = {
+  private def saveNewContract[W2 <: WorldStateProxy[W2, S2], S2 <: Storage[S2]]
+    (address: Address, result: ProgramResult[W2, S2], config: EvmConfig): ProgramResult[W2, S2] = {
     val codeDepositCost = config.calcCodeDepositCost(result.returnData)
     if (result.gasRemaining < codeDepositCost) {
       if (config.exceptionalFailedCodeDeposit)
@@ -355,7 +358,7 @@ class LedgerImpl(vm: VM, val blockchain: Blockchain, blockchainConfig: Blockchai
     * Calculate total gas to be refunded
     * See YP, eq (72)
     */
-  private def calcTotalGasToRefund(stx: SignedTransaction, result: PR): BigInt = {
+  private def calcTotalGasToRefund[W2 <: WorldStateProxy[W2, S2], S2 <: Storage[S2]](stx: SignedTransaction, result: ProgramResult[W2, S2]): BigInt = {
     if (result.error.isDefined)
       0
     else {
@@ -364,7 +367,7 @@ class LedgerImpl(vm: VM, val blockchain: Blockchain, blockchainConfig: Blockchai
     }
   }
 
-  private def pay(address: Address, value: UInt256)(world: W): W = {
+  private def pay[W2 <: WorldStateProxy[W2, S2], S2 <: Storage[S2]](address: Address, value: UInt256)(world: W2): W2 = {
     val account = world.getAccount(address).getOrElse(Account.empty(blockchainConfig.accountStartNonce)).increaseBalance(value)
     world.saveAccount(address, account)
   }
