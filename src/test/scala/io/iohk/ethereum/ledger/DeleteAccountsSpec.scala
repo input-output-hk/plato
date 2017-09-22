@@ -8,6 +8,9 @@ import org.scalamock.scalatest.MockFactory
 import org.scalatest.{FlatSpec, Matchers}
 
 class DeleteAccountsSpec extends FlatSpec with Matchers with MockFactory {
+  
+  type W = InMemoryWorldStateProxy
+  type S = InMemoryWorldStateProxyStorage
 
   val blockchainConfig = BlockchainConfig(Config.config)
 
@@ -16,19 +19,19 @@ class DeleteAccountsSpec extends FlatSpec with Matchers with MockFactory {
   val ledger = new LedgerImpl(new Mocks.MockVM(), blockchain, blockchainConfig)
 
   it should "delete no accounts when none of them should be deleted" in new TestSetup {
-    val newWorld = InMemoryWorldStateProxy.persistState(ledger.deleteAccounts(Set.empty)(worldState))
+    val newWorld = InMemoryWorldStateProxy.persistState(ledger.deleteAccounts[W, S](Set.empty)(worldState))
     accountAddresses.foreach{ a => assert(newWorld.getAccount(a).isDefined) }
     newWorld.stateRootHash shouldBe worldState.stateRootHash
   }
 
   it should "delete the accounts listed for deletion" in new TestSetup {
-    val newWorld = ledger.deleteAccounts(accountAddresses.tail)(worldState)
+    val newWorld = ledger.deleteAccounts[W, S](accountAddresses.tail)(worldState)
     accountAddresses.tail.foreach{ a => assert(newWorld.getAccount(a).isEmpty) }
     assert(newWorld.getAccount(accountAddresses.head).isDefined)
   }
 
   it should "delete all the accounts if they are all listed for deletion" in new TestSetup {
-    val newWorld = InMemoryWorldStateProxy.persistState(ledger.deleteAccounts(accountAddresses)(worldState))
+    val newWorld = InMemoryWorldStateProxy.persistState(ledger.deleteAccounts[W, S](accountAddresses)(worldState))
     accountAddresses.foreach{ a => assert(newWorld.getAccount(a).isEmpty) }
     newWorld.stateRootHash shouldBe Account.EmptyStorageRootHash
   }
@@ -38,7 +41,7 @@ class DeleteAccountsSpec extends FlatSpec with Matchers with MockFactory {
       validAccountAddress,
       worldState.getStorage(validAccountAddress).store(1, 123))
 
-    val updatedWorldState = ledger.deleteAccounts(accountAddresses)(worldStateWithStorage)
+    val updatedWorldState = ledger.deleteAccounts[W, S](accountAddresses)(worldStateWithStorage)
 
     val newWorld = InMemoryWorldStateProxy.persistState(updatedWorldState)
     newWorld.getAccount(validAccountAddress) shouldBe 'empty

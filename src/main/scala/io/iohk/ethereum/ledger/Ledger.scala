@@ -181,13 +181,15 @@ class LedgerImpl(vm: VM, val blockchain: Blockchain, blockchainConfig: Blockchai
     SimulateTxResult(gasLimit - totalGasToRefund, result.logs, result.returnData)
   }
 
-  private[ledger] def executeTransaction(stx: SignedTransaction, blockHeader: BlockHeader, world: WorldStateProxy[W, S]): TxResult[W, S] = {
+  private[ledger] def executeTransaction[W2 <: WorldStateProxy[W2, S2], S2 <: Storage[S2]]
+    (stx: SignedTransaction, blockHeader: BlockHeader, world: WorldStateProxy[W2, S2]): TxResult[W2, S2] = {
+
     log.debug(s"Transaction ${stx.hashAsHexString} execution start")
     val gasPrice = UInt256(stx.tx.gasPrice)
     val gasLimit = stx.tx.gasLimit
     val config = EvmConfig.forBlock(blockHeader.number, blockchainConfig)
 
-    val checkpointWorldState = updateSenderAccountBeforeExecution(stx, world)
+    val checkpointWorldState = updateSenderAccountBeforeExecution[W2, S2](stx, world)
     val context = prepareProgramContext(stx, blockHeader, checkpointWorldState, config)
     val result = runVM(stx, context, config)
 
@@ -203,7 +205,7 @@ class LedgerImpl(vm: VM, val blockchain: Blockchain, blockchainConfig: Blockchai
 
     val refundGasFn = pay(stx.senderAddress, (totalGasToRefund * gasPrice).toUInt256) _
     val payMinerForGasFn = pay(Address(blockHeader.beneficiary), (executionGasToPayToMiner * gasPrice).toUInt256) _
-    val deleteAccountsFn = deleteAccounts(resultWithErrorHandling.addressesToDelete) _
+    val deleteAccountsFn: W => W = deleteAccounts[W, S](resultWithErrorHandling.addressesToDelete)
     val persistStateFn: W => W = world => world.persist()
 
     val world2 = (refundGasFn andThen payMinerForGasFn andThen deleteAccountsFn andThen persistStateFn)(resultWithErrorHandling.world)
@@ -261,9 +263,10 @@ class LedgerImpl(vm: VM, val blockchain: Blockchain, blockchainConfig: Blockchai
     * @param worldStateProxy
     * @return
     */
-  private[ledger] def payBlockReward(block: Block, worldStateProxy: WorldStateProxy[W, S]): W = {
+  private[ledger] def payBlockReward[W2 <: WorldStateProxy[W2, S2], S2 <: Storage[S2]]
+    (block: Block, worldStateProxy: WorldStateProxy[W2, S2]): W2 = {
 
-    def getAccountToPay(address: Address, ws: WorldStateProxy[W, S]): Account = ws.getAccount(address)
+    def getAccountToPay(address: Address, ws: WorldStateProxy[W2, S2]): Account = ws.getAccount(address)
       .getOrElse(Account.empty(blockchainConfig.accountStartNonce))
 
     val minerAddress = Address(block.header.beneficiary)
@@ -295,7 +298,7 @@ class LedgerImpl(vm: VM, val blockchain: Blockchain, blockchainConfig: Blockchai
     * @param tx Target transaction
     * @return Upfront cost
     */
-  private[ledger] def calculateUpfrontCost(tx: Transaction): UInt256 =
+  private def calculateUpfrontCost(tx: Transaction): UInt256 =
     UInt256(calculateUpfrontGas(tx) + tx.value)
 
   /**
@@ -306,7 +309,8 @@ class LedgerImpl(vm: VM, val blockchain: Blockchain, blockchainConfig: Blockchai
     * @param worldStateProxy
     * @return
     */
-  private def updateSenderAccountBeforeExecution(stx: SignedTransaction, worldStateProxy: WorldStateProxy[W, S]): W = {
+  private def updateSenderAccountBeforeExecution[W2 <: WorldStateProxy[W2, S2], S2 <: Storage[S2]]
+    (stx: SignedTransaction, worldStateProxy: WorldStateProxy[W2, S2]): W2 = {
     val senderAddress = stx.senderAddress
     val account = worldStateProxy.getGuaranteedAccount(senderAddress)
     worldStateProxy.saveAccount(senderAddress, account.increaseBalance(-calculateUpfrontGas(stx.tx)).increaseNonce)
@@ -378,8 +382,9 @@ class LedgerImpl(vm: VM, val blockchain: Blockchain, blockchainConfig: Blockchai
     * @param worldStateProxy
     * @return a worldState equal worldStateProxy except that the accounts from addressesToDelete are deleted
     */
-  private[ledger] def deleteAccounts(addressesToDelete: Set[Address])(worldStateProxy: W): W =
-    addressesToDelete.foldLeft(worldStateProxy){ case (world, address) => world.deleteAccount(address) }
+  private[ledger] def deleteAccounts[W2 <: WorldStateProxy[W2, S2], S2 <: Storage[S2]]
+    (addressesToDelete: Set[Address])(worldStateProxy: W2): W2 =
+      addressesToDelete.foldLeft(worldStateProxy){ case (world, address) => world.deleteAccount(address) }
 
 }
 

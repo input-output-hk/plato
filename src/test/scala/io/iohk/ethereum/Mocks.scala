@@ -1,6 +1,7 @@
 package io.iohk.ethereum
 
 import akka.util.ByteString
+import io.iohk.ethereum.Mocks.MockLedger.{PC, PR}
 import io.iohk.ethereum.domain._
 import io.iohk.ethereum.ledger.BlockExecutionError.{StateBeforeFailure, TxsExecutionError}
 import io.iohk.ethereum.ledger.Ledger.BlockPreparationResult
@@ -17,8 +18,10 @@ import io.iohk.ethereum.vm._
 
 object Mocks {
 
-  type PC = ProgramContext[InMemoryWorldStateProxy, InMemoryWorldStateProxyStorage]
-  type PR = ProgramResult[InMemoryWorldStateProxy, InMemoryWorldStateProxyStorage]
+  object MockLedger {
+    type PC = ProgramContext[InMemoryWorldStateProxy, InMemoryWorldStateProxyStorage]
+    type PR = ProgramResult[InMemoryWorldStateProxy, InMemoryWorldStateProxyStorage]
+  }
 
   class MockLedger(blockchain: BlockchainImpl, shouldExecuteCorrectly: (Block, BlockchainImpl, Validators) => Boolean) extends Ledger{
     override def executeBlock(block: Block, validators: Validators)

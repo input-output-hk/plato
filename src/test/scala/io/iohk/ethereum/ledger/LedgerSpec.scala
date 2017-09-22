@@ -14,7 +14,8 @@ import io.iohk.ethereum.ledger.BlockExecutionError.{ValidationAfterExecError, Va
 import io.iohk.ethereum.{Mocks, rlp}
 import io.iohk.ethereum.rlp.RLPList
 import io.iohk.ethereum.utils.{BlockchainConfig, Config}
-import io.iohk.ethereum.ledger.Ledger.{BlockResult, PC, PR}
+import io.iohk.ethereum.ledger.Ledger.BlockResult
+import io.iohk.ethereum.Mocks.MockLedger.{PC, PR}
 import io.iohk.ethereum.network.p2p.messages.PV62.BlockBody
 import io.iohk.ethereum.nodebuilder.SecureRandomBuilder
 import io.iohk.ethereum.vm.{_}
@@ -31,6 +32,9 @@ import org.spongycastle.util.encoders.Hex
 
 // scalastyle:off file.size.limit
 class LedgerSpec extends FlatSpec with PropertyChecks with Matchers {
+
+  type W = InMemoryWorldStateProxy
+  type S = InMemoryWorldStateProxyStorage
 
   val blockchainConfig = BlockchainConfig(Config.config)
 
@@ -72,7 +76,7 @@ class LedgerSpec extends FlatSpec with PropertyChecks with Matchers {
             recWorld.deleteAccount(address)
         }
     }
-    InMemoryWorldStateProxy.persistState(newWorld).stateRootHash
+    newWorld.persist().stateRootHash
   }
 
   "Ledger" should "correctly calculate the total gas refund to be returned to the sender and paying for gas to the miner" in new TestSetup {
@@ -165,7 +169,7 @@ class LedgerSpec extends FlatSpec with PropertyChecks with Matchers {
     val BlockResult(resultingWorldState, resultingGasUsed, resultingReceipts) = txsExecResult.right.get
     resultingGasUsed shouldBe 0
     resultingReceipts shouldBe Nil
-    InMemoryWorldStateProxy.persistState(resultingWorldState).stateRootHash shouldBe validBlockHeader.stateRoot
+    resultingWorldState.persist().stateRootHash shouldBe validBlockHeader.stateRoot
   }
 
   it should "correctly run executeBlockTransactions for a block with one tx (that produces no errors)" in new BlockchainSetup {
@@ -217,7 +221,7 @@ class LedgerSpec extends FlatSpec with PropertyChecks with Matchers {
           receiverAddress -> UpdateBalance(UInt256(stx.tx.value))       //Increase tx.value to recevierAddress
         ) ++ addressesToDelete.map(address => address -> DeleteAccount) //Delete all accounts to be deleted
         val expectedStateRoot = applyChanges(validBlockParentHeader.stateRoot, blockchainStorages, changes)
-        expectedStateRoot shouldBe InMemoryWorldStateProxy.persistState(resultingWorldState).stateRootHash
+        expectedStateRoot shouldBe resultingWorldState.persist().stateRootHash
 
         //Check valid gasUsed
         resultingGasUsed shouldBe stx.tx.gasLimit
@@ -265,7 +269,7 @@ class LedgerSpec extends FlatSpec with PropertyChecks with Matchers {
       minerAddress -> UpdateBalance(minerPaymentForTxs)     //Miner reward for tx execution
     )
     val expectedStateRoot = applyChanges(validBlockParentHeader.stateRoot, blockchainStorages, changes)
-    expectedStateRoot shouldBe InMemoryWorldStateProxy.persistState(resultingWorldState).stateRootHash
+    expectedStateRoot shouldBe resultingWorldState.persist().stateRootHash
 
     //Check valid gasUsed
     resultingGasUsed shouldBe validStxSignedByOrigin.tx.gasLimit
@@ -502,7 +506,7 @@ class LedgerSpec extends FlatSpec with PropertyChecks with Matchers {
       logsReceipt2 shouldBe Nil
 
       //Check world
-      InMemoryWorldStateProxy.persistState(resultingWorldState).stateRootHash shouldBe expectedStateRootTx2
+      resultingWorldState.persist().stateRootHash shouldBe expectedStateRootTx2
 
       val blockReward = ledger.blockRewardCalculator.calcBlockMinerReward(block.header.number, 0)
       val changes = Seq(
@@ -621,7 +625,7 @@ class LedgerSpec extends FlatSpec with PropertyChecks with Matchers {
       val initialWorld = emptyWorld
         .saveAccount(originAddress, Account(nonce = UInt256(defaultTx.nonce), balance = UInt256.MaxValue))
 
-      val mockVM = new MockVM((pc: Ledger.PC) => {
+      val mockVM = new MockVM((pc: PC) => {
         pc.env.inputData shouldEqual inputData
         createResult(pc, defaultGasLimit, defaultGasLimit, 0, None, returnData = ByteString("contract code"))
       })
@@ -660,7 +664,7 @@ class LedgerSpec extends FlatSpec with PropertyChecks with Matchers {
     )
 
     forAll(table) { (initialWorld, contractAccountBalance) =>
-      val mockVM = new MockVM((pc: Ledger.PC) => {
+      val mockVM = new MockVM((pc: PC) => {
         pc.world.getGuaranteedAccount(contractAddress).balance shouldEqual contractAccountBalance
         createResult(pc, defaultGasLimit, defaultGasLimit, 0, None, returnData = ByteString("contract code"))
       })
@@ -677,7 +681,7 @@ class LedgerSpec extends FlatSpec with PropertyChecks with Matchers {
     val newAccountKeyPair: AsymmetricCipherKeyPair = generateKeyPair(secureRandom)
     val newAccountAddress = Address(kec256(newAccountKeyPair.getPublic.asInstanceOf[ECPublicKeyParameters].getQ.getEncoded(false).tail))
 
-    val mockVM = new MockVM((pc: Ledger.PC) => {
+    val mockVM = new MockVM((pc: PC) => {
       pc.env.inputData shouldEqual ByteString.empty
       createResult(pc, defaultGasLimit, defaultGasLimit, 0, None, returnData = ByteString("contract code"))
     })
@@ -686,13 +690,13 @@ class LedgerSpec extends FlatSpec with PropertyChecks with Matchers {
     val tx: Transaction = defaultTx.copy(gasPrice = 0, receivingAddress = None, payload = inputData)
     val stx: SignedTransaction = SignedTransaction.sign(tx, newAccountKeyPair, Some(blockchainConfig.chainId))
 
-    val result: Either[BlockExecutionError.TxsExecutionError, BlockResult] = ledger.executeTransactions(
+    val result: Either[BlockExecutionError.TxsExecutionError, BlockResult[W, S]] = ledger.executeTransactions(
       Seq(stx),
       initialWorld,
       defaultBlockHeader,
       (new Mocks.MockValidatorsAlwaysSucceed).signedTransactionValidator)
 
-    result shouldBe a[Right[_, BlockResult]]
+    result shouldBe a[Right[_, BlockResult[W, S]]]
     result.map(br => br.worldState.getAccount(newAccountAddress)) shouldBe Right(Some(Account(nonce = 1)))
   }
 
@@ -700,7 +704,7 @@ class LedgerSpec extends FlatSpec with PropertyChecks with Matchers {
     val newAccountKeyPair: AsymmetricCipherKeyPair = generateKeyPair(secureRandom)
     val newAccountAddress = Address(kec256(newAccountKeyPair.getPublic.asInstanceOf[ECPublicKeyParameters].getQ.getEncoded(false).tail))
 
-    val mockVM = new MockVM((pc: Ledger.PC) => {
+    val mockVM = new MockVM((pc: PC) => {
       createResult(pc, defaultGasLimit, defaultGasLimit, 0, None, returnData = ByteString.empty)
     })
 
@@ -715,7 +719,7 @@ class LedgerSpec extends FlatSpec with PropertyChecks with Matchers {
     val stx3: SignedTransaction = SignedTransaction.sign(tx3, newAccountKeyPair, Some(blockchainConfig.chainId))
     val stx4: SignedTransaction = SignedTransaction.sign(tx4, newAccountKeyPair, Some(blockchainConfig.chainId))
 
-    val result: (BlockResult, Seq[SignedTransaction]) = ledger.executePreparedTransactions(
+    val result: (BlockResult[W, S], Seq[SignedTransaction]) = ledger.executePreparedTransactions(
       Seq(stx1, stx2, stx3, stx4),
       initialWorld,
       defaultBlockHeader,
@@ -734,7 +738,7 @@ class LedgerSpec extends FlatSpec with PropertyChecks with Matchers {
     val newAccountKeyPair: AsymmetricCipherKeyPair = generateKeyPair(secureRandom)
     val newAccountAddress = Address(kec256(newAccountKeyPair.getPublic.asInstanceOf[ECPublicKeyParameters].getQ.getEncoded(false).tail))
 
-    val mockVM = new MockVM((pc: Ledger.PC) => {
+    val mockVM = new MockVM((pc: PC) => {
       createResult(pc, defaultGasLimit, defaultGasLimit, 0, None, returnData = ByteString.empty)
     })
 
@@ -745,7 +749,7 @@ class LedgerSpec extends FlatSpec with PropertyChecks with Matchers {
     val stx1: SignedTransaction = SignedTransaction.sign(tx1, newAccountKeyPair, Some(blockchainConfig.chainId))
     val stx2: SignedTransaction = SignedTransaction.sign(tx2, newAccountKeyPair, Some(blockchainConfig.chainId))
 
-    val result: (BlockResult, Seq[SignedTransaction]) = ledger.executePreparedTransactions(
+    val result: (BlockResult[W, S], Seq[SignedTransaction]) = ledger.executePreparedTransactions(
       Seq(stx1, stx2),
       initialWorld,
       defaultBlockHeader,
@@ -809,16 +813,14 @@ class LedgerSpec extends FlatSpec with PropertyChecks with Matchers {
 
     val emptyWorld = BlockchainImpl(storagesInstance.storages).getWorldStateProxy(-1, UInt256.Zero, None)
 
-    val worldWithMinerAndOriginAccounts = InMemoryWorldStateProxy.persistState(emptyWorld
+    val worldWithMinerAndOriginAccounts = emptyWorld
       .saveAccount(originAddress, Account(nonce = UInt256(initialOriginNonce), balance = initialOriginBalance))
       .saveAccount(receiverAddress, Account(nonce = UInt256(initialOriginNonce), balance = initialOriginBalance))
-      .saveAccount(minerAddress, Account(balance = initialMinerBalance)))
+      .saveAccount(minerAddress, Account(balance = initialMinerBalance)).persist()
 
-    val initialWorld = InMemoryWorldStateProxy.persistState(
-      defaultAddressesToDelete.foldLeft(worldWithMinerAndOriginAccounts){
-        (recWorld, address) => recWorld.saveAccount(address, Account.empty())
-      }
-    )
+    val initialWorld = defaultAddressesToDelete.foldLeft(worldWithMinerAndOriginAccounts){
+      (recWorld, address) => recWorld.saveAccount(address, Account.empty())
+    }.persist()
   }
 
   trait BlockchainSetup extends TestSetup {
