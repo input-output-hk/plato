@@ -108,7 +108,7 @@ class LedgerSpec extends FlatSpec with PropertyChecks with Matchers {
       ))
       val ledger = new LedgerImpl(mockVM, blockchain, blockchainConfig)
 
-      val execResult = ledger.executeTransaction(stx, header, worldWithMinerAndOriginAccounts)
+      val execResult = ledger.executeTransaction[W, S](stx, header, worldWithMinerAndOriginAccounts)
       val postTxWorld = execResult.worldState
 
       execResult.gasUsed shouldEqual gasUsed
@@ -127,7 +127,7 @@ class LedgerSpec extends FlatSpec with PropertyChecks with Matchers {
 
     val ledger = new LedgerImpl(new MockVM(), blockchain, blockchainConfig)
 
-    val postTxWorld = ledger.executeTransaction(stx, header, worldWithMinerAndOriginAccounts).worldState
+    val postTxWorld = ledger.executeTransaction[W, S](stx, header, worldWithMinerAndOriginAccounts).worldState
 
     postTxWorld.getGuaranteedAccount(originAddress).nonce shouldBe (initialOriginNonce + 1)
   }
@@ -145,7 +145,7 @@ class LedgerSpec extends FlatSpec with PropertyChecks with Matchers {
 
     val ledger = new LedgerImpl(new MockVM(), blockchain, blockchainConfig)
 
-    val postTxWorld = ledger.executeTransaction(stx, header, worldWithMinerAndOriginAccounts).worldState
+    val postTxWorld = ledger.executeTransaction[W, S](stx, header, worldWithMinerAndOriginAccounts).worldState
 
     postTxWorld.getGuaranteedAccount(originAddress).nonce shouldBe (initialOriginNonce + 1)
   }
@@ -537,7 +537,7 @@ class LedgerSpec extends FlatSpec with PropertyChecks with Matchers {
       error = None, returnData = ByteString("contract code")
     )), blockchain, blockchainConfig)
 
-    val txResult = ledger.executeTransaction(stx, header, worldWithMinerAndOriginAccounts)
+    val txResult = ledger.executeTransaction[W, S](stx, header, worldWithMinerAndOriginAccounts)
     val postTxWorld = txResult.worldState
 
     val newContractAddress = {
@@ -565,7 +565,7 @@ class LedgerSpec extends FlatSpec with PropertyChecks with Matchers {
       returnData = ByteString("contract code")
     )), blockchain, blockchainConfig)
 
-    val txResult = ledger.executeTransaction(stx, header, worldWithMinerAndOriginAccounts)
+    val txResult = ledger.executeTransaction[W, S](stx, header, worldWithMinerAndOriginAccounts)
     val postTxWorld = txResult.worldState
 
     val newContractAddress = {
@@ -604,7 +604,7 @@ class LedgerSpec extends FlatSpec with PropertyChecks with Matchers {
       val mockVM = new MockVM(createResult(_, defaultGasLimit, defaultGasLimit, 0, maybeError, bEmpty, defaultsLogs))
       val ledger = new LedgerImpl(mockVM, blockchain, blockchainConfig)
 
-      val txResult = ledger.executeTransaction(stx, defaultBlockHeader, initialWorld)
+      val txResult = ledger.executeTransaction[W, S](stx, defaultBlockHeader, initialWorld)
 
       txResult.logs.size shouldBe logsSize
     }
@@ -634,7 +634,7 @@ class LedgerSpec extends FlatSpec with PropertyChecks with Matchers {
       val tx = defaultTx.copy(receivingAddress = maybeReceivingAddress, payload = txPayload)
       val stx = SignedTransaction.sign(tx, originKeyPair, Some(blockchainConfig.chainId))
 
-      ledger.executeTransaction(stx, defaultBlockHeader, initialWorld)
+      ledger.executeTransaction[W, S](stx, defaultBlockHeader, initialWorld)
     }
   }
 
@@ -670,7 +670,7 @@ class LedgerSpec extends FlatSpec with PropertyChecks with Matchers {
       })
       val ledger = new LedgerImpl(mockVM, blockchain, blockchainConfig)
 
-      ledger.executeTransaction(stx, defaultBlockHeader, initialWorld)
+      ledger.executeTransaction[W, S](stx, defaultBlockHeader, initialWorld)
     }
   }
 
@@ -690,7 +690,7 @@ class LedgerSpec extends FlatSpec with PropertyChecks with Matchers {
     val tx: Transaction = defaultTx.copy(gasPrice = 0, receivingAddress = None, payload = inputData)
     val stx: SignedTransaction = SignedTransaction.sign(tx, newAccountKeyPair, Some(blockchainConfig.chainId))
 
-    val result: Either[BlockExecutionError.TxsExecutionError, BlockResult[W, S]] = ledger.executeTransactions(
+    val result: Either[BlockExecutionError.TxsExecutionError, BlockResult[W, S]] = ledger.executeTransaction[W, S]s(
       Seq(stx),
       initialWorld,
       defaultBlockHeader,
