@@ -2,9 +2,13 @@ package io.iohk.ethereum.db.storage
 
 import akka.util.ByteString
 import io.iohk.ethereum.db.storage.NodeStorage.{NodeEncoded, NodeHash}
-import io.iohk.ethereum.db.storage.pruning.{PruningNodesKeyValueStorage, PruneResult, RangePrune}
+import io.iohk.ethereum.db.storage.pruning.{PruneResult, PruningNodesKeyValueStorage, RangePrune}
 import io.iohk.ethereum.mpt.NodesKeyValueStorage
 import encoding._
+import org.spongycastle.util.encoders.Hex
+
+import scala.concurrent.Future
+import scala.concurrent.ExecutionContext.Implicits.global
 
 /**
   * This class helps to deal with two problems regarding MptNodes storage:
@@ -31,6 +35,11 @@ class ReferenceCountNodeStorage(nodeStorage: NodeStorage, pruningOffset: BigInt,
   override def get(key: ByteString): Option[NodeEncoded] = nodeStorage.get(key).map(storedNodeFromBytes).map(_.nodeEncoded.toArray)
 
   override def update(toRemove: Seq[NodeHash], toUpsert: Seq[(NodeHash, NodeEncoded)]): NodesKeyValueStorage = {
+
+//    println("Trying to remove: " + toRemove.map( n => Hex.toHexString(n.toArray)))
+    Future {
+      println("Updating " + toUpsert.map{ case (n, _) => Hex.toHexString(n.toArray)} + s" in block $blockNumber")
+    }
 
     require(blockNumber.isDefined)
 

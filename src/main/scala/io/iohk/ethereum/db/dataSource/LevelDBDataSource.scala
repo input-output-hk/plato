@@ -4,6 +4,7 @@ import java.io.File
 
 import org.iq80.leveldb.{DB, Options, WriteOptions}
 import org.iq80.leveldb.impl.Iq80DBFactory
+//import org.spongycastle.util.encoders.Hex
 
 
 class LevelDBDataSource(
@@ -35,6 +36,7 @@ class LevelDBDataSource(
     toRemove.foreach { key => batch.delete((namespace ++ key).toArray) }
     toUpsert.foreach { item => batch.put((namespace ++ item._1).toArray, item._2.toArray) }
     db.write(batch, new WriteOptions())
+//    toUpsert.foreach { case (key, _) => if(get(namespace, key).isEmpty) throw new Exception(s"Fetched ${Hex.toHexString(key.toArray)}") }
     this
   }
 

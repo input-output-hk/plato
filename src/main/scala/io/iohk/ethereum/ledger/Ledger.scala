@@ -86,12 +86,12 @@ class LedgerImpl(vm: VM, blockchain: BlockchainImpl, blockchainConfig: Blockchai
       case _ => initialWorld
     }
 
-    log.debug(s"About to execute ${block.body.transactionList.size} txs from block ${block.header.number} (with hash: ${block.header.hashAsHexString})")
+//    log.debug(s"About to execute ${block.body.transactionList.size} txs from block ${block.header.number} (with hash: ${block.header.hashAsHexString})")
     val blockTxsExecResult = executeTransactions(block.body.transactionList, inputWorld, block.header, signedTransactionValidator)
-    blockTxsExecResult match {
-      case Right(_) => log.debug(s"All txs from block ${block.header.hashAsHexString} were executed successfully")
-      case Left(error) => log.debug(s"Not all txs from block ${block.header.hashAsHexString} were executed correctly, due to ${error.reason}")
-    }
+//    blockTxsExecResult match {
+//      case Right(_) => log.debug(s"All txs from block ${block.header.hashAsHexString} were executed successfully")
+//      case Left(error) => log.debug(s"Not all txs from block ${block.header.hashAsHexString} were executed correctly, due to ${error.reason}")
+//    }
     blockTxsExecResult
   }
 
@@ -152,7 +152,7 @@ class LedgerImpl(vm: VM, blockchain: BlockchainImpl, blockchainConfig: Blockchai
             logs = logs
           )
 
-          log.debug(s"Receipt generated for tx ${stx.hashAsHexString}, $receipt")
+//          log.debug(s"Receipt generated for tx ${stx.hashAsHexString}, $receipt")
 
           executeTransactions(otherStxs, newWorld, blockHeader, signedTransactionValidator, receipt.cumulativeGasUsed, acumReceipts :+ receipt)
         case Left(error) => Left(TxsExecutionError(stx, StateBeforeFailure(world, acumGas, acumReceipts), error.toString))
@@ -183,7 +183,7 @@ class LedgerImpl(vm: VM, blockchain: BlockchainImpl, blockchainConfig: Blockchai
   }
 
   private[ledger] def executeTransaction(stx: SignedTransaction, blockHeader: BlockHeader, world: InMemoryWorldStateProxy): TxResult = {
-    log.debug(s"Transaction ${stx.hashAsHexString} execution start")
+//    log.debug(s"Transaction ${stx.hashAsHexString} execution start")
     val gasPrice = UInt256(stx.tx.gasPrice)
     val gasLimit = stx.tx.gasLimit
     val config = EvmConfig.forBlock(blockHeader.number, blockchainConfig)
@@ -213,11 +213,11 @@ class LedgerImpl(vm: VM, blockchain: BlockchainImpl, blockchainConfig: Blockchai
 
     val world2 = (deleteAccountsFn andThen deleteTouchedAccountsFn andThen persistStateFn)(worldAfterPayments)
 
-    log.debug(
-      s"""Transaction ${stx.hashAsHexString} execution end. Summary:
-         | - Error: ${result.error}.
-         | - Total Gas to Refund: $totalGasToRefund
-         | - Execution gas paid to miner: $executionGasToPayToMiner""".stripMargin)
+//    log.debug(
+//      s"""Transaction ${stx.hashAsHexString} execution end. Summary:
+//         | - Error: ${result.error}.
+//         | - Total Gas to Refund: $totalGasToRefund
+//         | - Execution gas paid to miner: $executionGasToPayToMiner""".stripMargin)
 
     TxResult(world2, executionGasToPayToMiner, resultWithErrorHandling.logs, result.returnData)
   }
@@ -275,13 +275,13 @@ class LedgerImpl(vm: VM, blockchain: BlockchainImpl, blockchainConfig: Blockchai
     val minerAccount = getAccountToPay(minerAddress, worldStateProxy)
     val minerReward = blockRewardCalculator.calcBlockMinerReward(block.header.number, block.body.uncleNodesList.size)
     val afterMinerReward = worldStateProxy.saveAccount(minerAddress, minerAccount.increaseBalance(UInt256(minerReward)))
-    log.debug(s"Paying block ${block.header.number} reward of $minerReward to miner with account address $minerAddress")
+//    log.debug(s"Paying block ${block.header.number} reward of $minerReward to miner with account address $minerAddress")
 
     block.body.uncleNodesList.foldLeft(afterMinerReward) { (ws, ommer) =>
       val ommerAddress = Address(ommer.beneficiary)
       val account = getAccountToPay(ommerAddress, ws)
       val ommerReward = blockRewardCalculator.calcOmmerMinerReward(block.header.number, ommer.number)
-      log.debug(s"Paying block ${block.header.number} reward of $ommerReward to ommer with account address $ommerAddress")
+//      log.debug(s"Paying block ${block.header.number} reward of $ommerReward to ommer with account address $ommerAddress")
       ws.saveAccount(ommerAddress, account.increaseBalance(UInt256(ommerReward)))
     }
   }
