@@ -44,7 +44,7 @@ class RegularSync(
   private var resolvingBranches: Boolean = false
   private var resumeRegularSyncTimeout: Option[Cancellable] = None
 
-  scheduler.schedule(printStatusInterval, printStatusInterval, self, PrintStatus)
+  scheduler.schedule(printStatusInterval - printStatusInterval, printStatusInterval, self, PrintStatus)
 
   peerEventBus ! Subscribe(MessageClassifier(Set(NewBlock.code), PeerSelector.AllPeers))
 

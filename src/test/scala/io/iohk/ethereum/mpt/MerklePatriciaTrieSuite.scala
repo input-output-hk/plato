@@ -51,6 +51,11 @@ class MerklePatriciaTrieSuite extends FunSuite
     }
   }
 
+  test("PatriciaTrie duplicated insert") {
+    val trie = MerklePatriciaTrie[Int, Int](EmptyEphemNodeStorage)
+    trie.put(1, 1).put(1, 1)
+  }
+
   test("PatriciaTrie delete") {
     forAll(Gen.nonEmptyListOf(Arbitrary.arbitrary[Int])) { keyList: List[Int] =>
       val keyValueList = keyList.distinct.zipWithIndex
