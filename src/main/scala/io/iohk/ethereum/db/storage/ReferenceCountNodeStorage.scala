@@ -39,7 +39,7 @@ class ReferenceCountNodeStorage(nodeStorage: NodeStorage, pruningOffset: BigInt,
   override def update(toRemove: Seq[NodeHash], toUpsert: Seq[(NodeHash, NodeEncoded)]): NodesKeyValueStorage = {
 
     println("Removing: " + toRemove.map( n => Hex.toHexString(n.toArray)) + s" in block $blockNumber")
-    println("Updating " + toUpsert.map{ case (n, _) => Hex.toHexString(n.toArray)} + s" in block $blockNumber")
+    println("  and updating " + toUpsert.map{ case (n, _) => Hex.toHexString(n.toArray)} + s" in block $blockNumber")
 
     require(blockNumber.isDefined)
 
@@ -129,6 +129,7 @@ object ReferenceCountNodeStorage {
           case (Some(candidate), candidateKey) if storedNodeFromBytes(candidate).references == 0 => candidateKey }
       }.map(nodeKeysToDelete => {
         // Update nodestorage removing all nodes that are no longer being used
+        println("Pruning: " + nodeKeysToDelete.map( n => Hex.toHexString(n.toArray)) + s" in block $blockNumber")
         nodeStorage.update(key +: nodeKeysToDelete, Nil)
         nodeKeysToDelete.size
       }).getOrElse(0)
