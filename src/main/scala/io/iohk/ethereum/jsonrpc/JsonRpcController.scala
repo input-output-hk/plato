@@ -91,10 +91,6 @@ class JsonRpcController(
       handle[ProtocolVersionRequest, ProtocolVersionResponse](ethService.protocolVersion, req)
     case req @ JsonRpcRequest(_, "eth_syncing", _, _) =>
       handle[SyncingRequest, SyncingResponse](ethService.syncing, req)
-    case req @ JsonRpcRequest(_, "eth_submitHashrate", _, _) =>
-      handle[SubmitHashRateRequest, SubmitHashRateResponse](ethService.submitHashRate, req)
-    case req @ JsonRpcRequest(_, "eth_hashrate", _, _) =>
-      handle[GetHashRateRequest, GetHashRateResponse](ethService.getHashRate, req)
     case req @ JsonRpcRequest(_, "eth_gasPrice", _, _) =>
       handle[GetGasPriceRequest, GetGasPriceResponse](ethService.getGetGasPrice, req)
     case req@JsonRpcRequest(_, "eth_getTransactionByBlockNumberAndIndex", _, _) =>
@@ -102,10 +98,6 @@ class JsonRpcController(
         GetTransactionByBlockNumberAndIndexResponse](ethService.getTransactionByBlockNumberAndIndexRequest, req)
     case req @ JsonRpcRequest(_, "eth_mining", _, _) =>
       handle[GetMiningRequest, GetMiningResponse](ethService.getMining, req)
-    case req @ JsonRpcRequest(_, "eth_getWork", _, _) =>
-      handle[GetWorkRequest, GetWorkResponse](ethService.getWork, req)
-    case req @ JsonRpcRequest(_, "eth_submitWork", _, _) =>
-      handle[SubmitWorkRequest, SubmitWorkResponse](ethService.submitWork, req)
     case req @ JsonRpcRequest(_, "eth_blockNumber", _, _) =>
       handle[BestBlockNumberRequest, BestBlockNumberResponse](ethService.bestBlockNumber, req)
     case req @ JsonRpcRequest(_, "eth_coinbase", _, _) =>

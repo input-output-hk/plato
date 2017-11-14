@@ -11,7 +11,6 @@ import io.iohk.ethereum.domain.{BlockHeader, SignedTransaction, UInt256, _}
 import akka.actor.ActorRef
 import io.iohk.ethereum.db.storage.AppStateStorage
 import akka.util.ByteString
-import io.iohk.ethereum.blockchain.sync.RegularSync
 import io.iohk.ethereum.crypto._
 import io.iohk.ethereum.db.storage.TransactionMappingStorage.TransactionLocation
 import io.iohk.ethereum.jsonrpc.FilterManager.{FilterChanges, FilterLogs, LogFilterLogs, TxLog}
@@ -59,9 +58,6 @@ object EthService {
   case class UncleByBlockNumberAndIndexRequest(block: BlockParam, uncleIndex: BigInt)
   case class UncleByBlockNumberAndIndexResponse(uncleBlockResponse: Option[BlockResponse])
 
-  case class SubmitHashRateRequest(hashRate: BigInt, id: ByteString)
-  case class SubmitHashRateResponse(success: Boolean)
-
   case class GetMiningRequest()
   case class GetMiningResponse(isMining: Boolean)
 
@@ -77,17 +73,8 @@ object EthService {
   case class GetTransactionByBlockNumberAndIndexRequest(block: BlockParam, transactionIndex: BigInt)
   case class GetTransactionByBlockNumberAndIndexResponse(transactionResponse: Option[TransactionResponse])
 
-  case class GetHashRateRequest()
-  case class GetHashRateResponse(hashRate: BigInt)
-
   case class GetGasPriceRequest()
   case class GetGasPriceResponse(price: BigInt)
-
-  case class GetWorkRequest()
-  case class GetWorkResponse(powHeaderHash: ByteString, dagSeed: ByteString, target: ByteString)
-
-  case class SubmitWorkRequest(nonce: ByteString, powHeaderHash: ByteString, mixHash: ByteString)
-  case class SubmitWorkResponse(success: Boolean)
 
   case class SyncingRequest()
   case class SyncingStatus(startingBlock: BigInt, currentBlock: BigInt, highestBlock: BigInt)
@@ -185,7 +172,6 @@ class EthService(
 
   import EthService._
 
-  val hashRate: AtomicReference[Map[ByteString, (BigInt, Date)]] = new AtomicReference[Map[ByteString, (BigInt, Date)]](Map())
   val lastActive = new AtomicReference[Option[Date]](None)
 
   def protocolVersion(req: ProtocolVersionRequest): ServiceResponse[ProtocolVersionResponse] =
@@ -371,18 +357,6 @@ class EthService(
     Right(UncleByBlockNumberAndIndexResponse(uncleBlockResponseOpt))
   }
 
-  def submitHashRate(req: SubmitHashRateRequest): ServiceResponse[SubmitHashRateResponse] = {
-    reportActive()
-    hashRate.updateAndGet(new UnaryOperator[Map[ByteString, (BigInt, Date)]] {
-      override def apply(t: Map[ByteString, (BigInt, Date)]): Map[ByteString, (BigInt, Date)] = {
-        val now = new Date
-        removeObsoleteHashrates(now, t + (req.id -> (req.hashRate, now)))
-      }
-    })
-
-    Future.successful(Right(SubmitHashRateResponse(true)))
-  }
-
   def getGetGasPrice(req: GetGasPriceRequest): ServiceResponse[GetGasPriceResponse] = {
     val blockDifference = 30
     val bestBlock = appStateStorage.getBestBlockNumber()
@@ -419,45 +393,6 @@ class EthService(
     })
   }
 
-  def getHashRate(req: GetHashRateRequest): ServiceResponse[GetHashRateResponse] = {
-    val hashRates: Map[ByteString, (BigInt, Date)] = hashRate.updateAndGet(new UnaryOperator[Map[ByteString, (BigInt, Date)]] {
-      override def apply(t: Map[ByteString, (BigInt, Date)]): Map[ByteString, (BigInt, Date)] = {
-        removeObsoleteHashrates(new Date, t)
-      }
-    })
-
-    //sum all reported hashRates
-    Future.successful(Right(GetHashRateResponse(hashRates.mapValues { case (hr, _) => hr }.values.sum)))
-  }
-
-  private def removeObsoleteHashrates(now: Date, rates: Map[ByteString, (BigInt, Date)]):Map[ByteString, (BigInt, Date)]={
-    rates.filter { case (_, (_, reported)) =>
-      Duration.between(reported.toInstant, now.toInstant).toMillis < miningConfig.activeTimeout.toMillis
-    }
-  }
-
-  def getWork(req: GetWorkRequest): ServiceResponse[GetWorkResponse] = {
-    reportActive()
-    import io.iohk.ethereum.consensus.Ethash.{seed, epoch}
-
-    val bestBlock = blockchain.getBestBlock()
-
-    getOmmersFromPool(bestBlock.header.number + 1).zip(getTransactionsFromPool).map {
-      case (ommers, pendingTxs) =>
-        blockGenerator.generateBlockForMining(bestBlock, pendingTxs.pendingTransactions.map(_.stx), ommers.headers, miningConfig.coinbase) match {
-          case Right(pb) =>
-            Right(GetWorkResponse(
-              powHeaderHash = ByteString(kec256(BlockHeader.getEncodedWithoutNonce(pb.block.header))),
-              dagSeed = seed(epoch(pb.block.header.number.toLong)),
-              target = ByteString((BigInt(2).pow(256) / pb.block.header.difficulty).toByteArray)
-            ))
-          case Left(err) =>
-            log.error(s"unable to prepare block because of $err")
-            Left(JsonRpcErrors.InternalError)
-        }
-      }
-  }
-
   private def getOmmersFromPool(blockNumber: BigInt) = {
     implicit val timeout = Timeout(miningConfig.ommerPoolQueryTimeout)
 
@@ -480,20 +415,6 @@ class EthService(
 
   def getCoinbase(req: GetCoinbaseRequest): ServiceResponse[GetCoinbaseResponse] =
     Future.successful(Right(GetCoinbaseResponse(miningConfig.coinbase)))
-
-  def submitWork(req: SubmitWorkRequest): ServiceResponse[SubmitWorkResponse] = {
-    reportActive()
-    Future {
-      blockGenerator.getPrepared(req.powHeaderHash) match {
-        case Some(pendingBlock) if appStateStorage.getBestBlockNumber() <= pendingBlock.block.header.number =>
-          import pendingBlock._
-          syncingController ! RegularSync.MinedBlock(block.copy(header = block.header.copy(nonce = req.nonce, mixHash = req.mixHash)))
-          Right(SubmitWorkResponse(true))
-        case _ =>
-          Right(SubmitWorkResponse(false))
-      }
-    }
-  }
 
   /**
     * Implements the eth_syncing method that returns syncing information if the node is syncing.

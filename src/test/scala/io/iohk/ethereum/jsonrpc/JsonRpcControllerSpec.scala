@@ -523,135 +523,6 @@ class JsonRpcControllerSpec extends FlatSpec with Matchers with PropertyChecks w
     response.result shouldBe Some(JString(s"0x${Hex.toHexString(txHash.toArray)}"))
   }
 
-  it should "eth_getWork" in new TestSetup {
-    val seed = s"""0x${"00" * 32}"""
-    val target = "0x1999999999999999999999999999999999999999999999999999999999999999"
-    val headerPowHash = s"0x${Hex.toHexString(kec256(BlockHeader.getEncodedWithoutNonce(blockHeader)))}"
-
-    blockchain.save(parentBlock, Nil, parentBlock.header.difficulty, true)
-    (blockGenerator.generateBlockForMining _).expects(parentBlock, *, *, *)
-      .returns(Right(PendingBlock(Block(blockHeader, BlockBody(Nil, Nil)), Nil)))
-
-    val request: JsonRpcRequest = JsonRpcRequest(
-      "2.0",
-      "eth_getWork",
-      None,
-      Some(JInt(1))
-    )
-
-    val result: Future[JsonRpcResponse] = jsonRpcController.handleRequest(request)
-
-    pendingTransactionsManager.expectMsg(PendingTransactionsManager.GetPendingTransactions)
-    pendingTransactionsManager.reply(PendingTransactionsManager.PendingTransactionsResponse(Nil))
-
-    ommersPool.expectMsg(OmmersPool.GetOmmers(2))
-    ommersPool.reply(Ommers(Nil))
-
-    val response = result.futureValue
-    response.jsonrpc shouldBe "2.0"
-    response.id shouldBe JInt(1)
-    response.error shouldBe None
-    response.result shouldBe Some(JArray(List(
-      JString(headerPowHash),
-      JString(seed),
-      JString(target)
-    )))
-  }
-
-  it should "eth_getWork when fail to get ommers and transactions" in new TestSetup {
-    val seed = s"""0x${"00" * 32}"""
-    val target = "0x1999999999999999999999999999999999999999999999999999999999999999"
-    val headerPowHash = s"0x${Hex.toHexString(kec256(BlockHeader.getEncodedWithoutNonce(blockHeader)))}"
-
-    blockchain.save(parentBlock, Nil, parentBlock.header.difficulty, true)
-    (blockGenerator.generateBlockForMining _).expects(parentBlock, *, *, *)
-      .returns(Right(PendingBlock(Block(blockHeader, BlockBody(Nil, Nil)), Nil)))
-
-    val request: JsonRpcRequest = JsonRpcRequest(
-      "2.0",
-      "eth_getWork",
-      None,
-      Some(JInt(1))
-    )
-
-    val result: Future[JsonRpcResponse] = jsonRpcController.handleRequest(request)
-
-    pendingTransactionsManager.expectMsg(PendingTransactionsManager.GetPendingTransactions)
-    ommersPool.expectMsg(OmmersPool.GetOmmers(2))
-    //on time out it should respond with empty list
-
-    val response = result.futureValue(timeout(Timeouts.longTimeout))
-    response.jsonrpc shouldBe "2.0"
-    response.id shouldBe JInt(1)
-    response.error shouldBe None
-    response.result shouldBe Some(JArray(List(
-      JString(headerPowHash),
-      JString(seed),
-      JString(target)
-    )))
-  }
-
-  it should "eth_submitWork" in new TestSetup {
-    val nonce = s"0x0000000000000001"
-    val mixHash =s"""0x${"01" * 32}"""
-    val headerPowHash = "02" * 32
-
-    (blockGenerator.getPrepared _)
-      .expects(ByteString(Hex.decode(headerPowHash)))
-      .returns(Some(PendingBlock(Block(blockHeader, BlockBody(Nil, Nil)), Nil)))
-    (appStateStorage.getBestBlockNumber _).expects().returns(1)
-
-    val request: JsonRpcRequest = JsonRpcRequest(
-      "2.0",
-      "eth_submitWork",
-      Some(JArray(List(
-        JString(nonce),
-        JString(s"0x$headerPowHash"),
-        JString(mixHash)
-      ))),
-      Some(JInt(1))
-    )
-
-    val response = jsonRpcController.handleRequest(request).futureValue
-    response.jsonrpc shouldBe "2.0"
-    response.id shouldBe JInt(1)
-    response.error shouldBe None
-    response.result shouldBe Some(JBool(true))
-  }
-
-  it should "eth_submitHashrate" in new TestSetup {
-    val request: JsonRpcRequest = JsonRpcRequest(
-      "2.0",
-      "eth_submitHashrate",
-      Some(JArray(List(
-        JString(s"0x${"0" * 61}500"),
-        JString(s"0x59daa26581d0acd1fce254fb7e85952f4c09d0915afd33d3886cd914bc7d283c")
-      ))),
-      Some(JInt(1))
-    )
-
-    val response = jsonRpcController.handleRequest(request).futureValue
-    response.jsonrpc shouldBe "2.0"
-    response.id shouldBe JInt(1)
-    response.error shouldBe None
-    response.result shouldBe Some(JBool(true))
-  }
-
-  it should "eth_hashrate" in new TestSetup {
-    val request: JsonRpcRequest = JsonRpcRequest(
-      "2.0",
-      "eth_hashrate",
-      None,
-      Some(JInt(1))
-    )
-
-    val response = jsonRpcController.handleRequest(request).futureValue
-    response.jsonrpc shouldBe "2.0"
-    response.id shouldBe JInt(1)
-    response.error shouldBe None
-    response.result shouldBe Some(JString("0x0"))
-  }
-
   it should "eth_gasPrice" in new TestSetup {
     (appStateStorage.getBestBlockNumber _).expects().returning(42)
     blockchain.save(Block(Fixtures.Blocks.Block3125369.header.copy(number = 42), Fixtures.Blocks.Block3125369.body))
@@ -1455,7 +1326,8 @@ class JsonRpcControllerSpec extends FlatSpec with Matchers with PropertyChecks w
       unixTimestamp = 0,
       extraData = ByteString("unused"),
       mixHash = ByteString("unused"),
-      nonce = ByteString("unused"))
+      nonce = ByteString("unused"),
+      slotNumber = 2)
 
     val parentBlock = Block(blockHeader.copy(number = 1), BlockBody(Nil, Nil))
 
