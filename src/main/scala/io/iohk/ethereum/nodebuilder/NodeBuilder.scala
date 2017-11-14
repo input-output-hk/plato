@@ -33,6 +33,7 @@ import io.iohk.ethereum.transactions.PendingTransactionsManager
 import io.iohk.ethereum.validators._
 import io.iohk.ethereum.vm.VM
 import io.iohk.ethereum.ommers.OmmersPool
+import io.iohk.ethereum.pos.ElectionManagerImpl
 import io.iohk.ethereum.utils.Config.SyncConfig
 
 // scalastyle:off number.of.types
@@ -75,6 +76,15 @@ trait StorageBuilder {
 
 trait DiscoveryConfigBuilder {
   lazy val discoveryConfig = DiscoveryConfig(Config.config)
+}
+
+trait OuroborosConfigBuilder {
+  lazy val ouroborosConfig = OuroborosConfig(Config.config)
+}
+
+trait ElectionManagerImplBuilder {
+  self: OuroborosConfigBuilder =>
+  lazy val electionManagerImpl = ElectionManagerImpl(ouroborosConfig.knownStakeholders)
 }
 
 trait KnownNodesManagerBuilder {
@@ -478,3 +488,4 @@ trait Node extends NodeKeyBuilder
   with KnownNodesManagerBuilder
   with SyncConfigBuilder
   with MinerBuilder
+  with OuroborosConfigBuilder
