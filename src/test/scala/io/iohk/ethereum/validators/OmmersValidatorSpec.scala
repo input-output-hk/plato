@@ -73,45 +73,6 @@ class OmmersValidatorSpec extends FlatSpec with Matchers with PropertyChecks wit
   }
 
   trait BlockUtils extends EphemBlockchainTestSetup {
-    //Ommers from block 0xe9fb121a7ee5cb03b33adbf59e95321a2453f09db98068e1f31f0da79860c50c (of number 97)
-    val ommer1 = BlockHeader(
-      parentHash = ByteString(Hex.decode("fd07e36cfaf327801e5696134b36678f6a89fb1e8f017f2411a29d0ae810ab8b")),
-      ommersHash = ByteString(Hex.decode("7766c4251396a6833ccbe4be86fbda3a200dccbe6a15d80ae3de5378b1540e04")),
-      beneficiary = ByteString(Hex.decode("1b7047b4338acf65be94c1a3e8c5c9338ad7d67c")),
-      stateRoot = ByteString(Hex.decode("52ce0ff43d7df2cf39f8cb8832f94d2280ebe856d84d8feb7b2281d3c5cfb990")),
-      transactionsRoot = ByteString(Hex.decode("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")),
-      receiptsRoot = ByteString(Hex.decode("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")),
-      logsBloom = ByteString(Hex.decode("00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000")),
-      difficulty = BigInt("17864037202"),
-      number = 94,
-      gasLimit = 5000,
-      gasUsed = 0,
-      unixTimestamp = 1438270431,
-      extraData = ByteString(Hex.decode("426974636f696e2069732054484520426c6f636b636861696e2e")),
-      mixHash = ByteString(Hex.decode("c6d695926546d3d679199303a6d1fc983fe3f09f44396619a24c4271830a7b95")),
-      nonce = ByteString(Hex.decode("62bc3dca012c1b27")),
-      slotNumber = 94
-    )
-    val ommer2 = BlockHeader(
-      parentHash = ommer1.hash,
-      ommersHash = ByteString(Hex.decode("7766c4251396a6833ccbe4be86fbda3a200dccbe6a15d80ae3de5378b1540e04")),
-      beneficiary = ByteString(Hex.decode("28921e4e2c9d84f4c0f0c0ceb991f45751a0fe93")),
-      stateRoot = ByteString(Hex.decode("e766f9c51536e9038849e5eb0a143c3b3409b5385098359837cbf3324ad22328")),
-      transactionsRoot = ByteString(Hex.decode("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")),
-      receiptsRoot = ByteString(Hex.decode("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")),
-      logsBloom = ByteString(Hex.decode("00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000")),
-      difficulty = BigInt("17864037202"),
-      number = 94,
-      gasLimit = 5000,
-      gasUsed = 0,
-      unixTimestamp = 1438270431,
-      extraData = ByteString(Hex.decode("476574682f76312e302e302f6c696e75782f676f312e342e32")),
-      mixHash = ByteString(Hex.decode("8c1ed8037984be0fe9065f8f8663c3baeeb6436868ac6915dd3c2cd5fd46fa96")),
-      nonce = ByteString(Hex.decode("40b0b2c0b6d14706")),
-      slotNumber = 94
-    )
-    val ommers: Seq[BlockHeader] = Seq[BlockHeader](ommer1, ommer2)
-    val ommersBlockNumber = 97
 
     val block89 = Block(
       BlockHeader(
@@ -219,7 +180,7 @@ class OmmersValidatorSpec extends FlatSpec with Matchers with PropertyChecks wit
     ),
       BlockBody(Seq.empty, Seq[BlockHeader](
           BlockHeader(
-            parentHash = ByteString(Hex.decode("69d2798993659c0d864d6f2824440b091368c147efc6c33410ef181036fc2bf1")),
+            parentHash = block90.header.hash,
             ommersHash = ByteString(Hex.decode("1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347")),
             beneficiary = ByteString(Hex.decode("bb7b8287f3f0a933474a79eae42cbca977791171")),
             stateRoot = ByteString(Hex.decode("e0ae53ea50eb6fb40b764b748ccd6d4f6184a6f3c474899c74df102310c37d6a")),
@@ -259,7 +220,7 @@ class OmmersValidatorSpec extends FlatSpec with Matchers with PropertyChecks wit
       ),
       BlockBody(Seq.empty, Seq[BlockHeader](
         BlockHeader(
-          parentHash = ByteString(Hex.decode("6da5970538eba5db93162e219182fca7e093cfe4fbd8dd0b82789adb25dcbb42")),
+          parentHash = block89.header.hash,
           ommersHash = ByteString(Hex.decode("1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347")),
           beneficiary = ByteString(Hex.decode("bb7b8287f3f0a933474a79eae42cbca977791171")),
           stateRoot = ByteString(Hex.decode("57a99a5a9d93104df18d3cdba5d1c84e1e5c22527c0c375e59e38944311bfe14")),
@@ -321,6 +282,45 @@ class OmmersValidatorSpec extends FlatSpec with Matchers with PropertyChecks wit
       BlockBody(Seq.empty, Seq.empty)
     )
 
+    //Ommers from block 0xe9fb121a7ee5cb03b33adbf59e95321a2453f09db98068e1f31f0da79860c50c (of number 97)
+    val ommer1 = BlockHeader(
+      parentHash = block93.header.hash,
+      ommersHash = ByteString(Hex.decode("7766c4251396a6833ccbe4be86fbda3a200dccbe6a15d80ae3de5378b1540e04")),
+      beneficiary = ByteString(Hex.decode("1b7047b4338acf65be94c1a3e8c5c9338ad7d67c")),
+      stateRoot = ByteString(Hex.decode("52ce0ff43d7df2cf39f8cb8832f94d2280ebe856d84d8feb7b2281d3c5cfb990")),
+      transactionsRoot = ByteString(Hex.decode("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")),
+      receiptsRoot = ByteString(Hex.decode("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")),
+      logsBloom = ByteString(Hex.decode("00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000")),
+      difficulty = BigInt("17864037202"),
+      number = 94,
+      gasLimit = 5000,
+      gasUsed = 0,
+      unixTimestamp = 1438270431,
+      extraData = ByteString(Hex.decode("426974636f696e2069732054484520426c6f636b636861696e2e")),
+      mixHash = ByteString(Hex.decode("c6d695926546d3d679199303a6d1fc983fe3f09f44396619a24c4271830a7b95")),
+      nonce = ByteString(Hex.decode("62bc3dca012c1b27")),
+      slotNumber = 94
+    )
+    val ommer2 = BlockHeader(
+      parentHash = block93.header.hash,
+      ommersHash = ByteString(Hex.decode("7766c4251396a6833ccbe4be86fbda3a200dccbe6a15d80ae3de5378b1540e04")),
+      beneficiary = ByteString(Hex.decode("28921e4e2c9d84f4c0f0c0ceb991f45751a0fe93")),
+      stateRoot = ByteString(Hex.decode("e766f9c51536e9038849e5eb0a143c3b3409b5385098359837cbf3324ad22328")),
+      transactionsRoot = ByteString(Hex.decode("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")),
+      receiptsRoot = ByteString(Hex.decode("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")),
+      logsBloom = ByteString(Hex.decode("00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000")),
+      difficulty = BigInt("17864037202"),
+      number = 94,
+      gasLimit = 5000,
+      gasUsed = 0,
+      unixTimestamp = 1438270431,
+      extraData = ByteString(Hex.decode("476574682f76312e302e302f6c696e75782f676f312e342e32")),
+      mixHash = ByteString(Hex.decode("8c1ed8037984be0fe9065f8f8663c3baeeb6436868ac6915dd3c2cd5fd46fa96")),
+      nonce = ByteString(Hex.decode("40b0b2c0b6d14706")),
+      slotNumber = 94
+    )
+    val ommersBlockNumber = 97
+    val ommers: Seq[BlockHeader] = Seq[BlockHeader](ommer1, ommer2)
     val ommersBlockParentHash = block96.header.hash
 
     blockchain.save(block89)
