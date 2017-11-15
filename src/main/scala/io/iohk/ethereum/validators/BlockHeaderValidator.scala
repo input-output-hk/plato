@@ -2,7 +2,6 @@ package io.iohk.ethereum.validators
 
 import akka.util.ByteString
 import io.iohk.ethereum.consensus.Ethash
-import io.iohk.ethereum.crypto
 import io.iohk.ethereum.domain.{BlockHeader, Blockchain, DifficultyCalculator}
 import io.iohk.ethereum.utils.{BlockchainConfig, DaoForkConfig}
 
@@ -55,7 +54,6 @@ class BlockHeaderValidatorImpl(blockchainConfig: BlockchainConfig) extends Block
       _ <- validateGasUsed(blockHeader)
       _ <- validateGasLimit(blockHeader, parentHeader)
       _ <- validateNumber(blockHeader, parentHeader)
-      _ <- validatePoW(blockHeader)
     } yield BlockHeaderValid
   }
 
@@ -169,45 +167,6 @@ class BlockHeaderValidatorImpl(blockchainConfig: BlockchainConfig) extends Block
   private def validateNumber(blockHeader: BlockHeader, parentHeader: BlockHeader): Either[BlockHeaderError, BlockHeaderValid] =
     if(blockHeader.number == parentHeader.number + 1) Right(BlockHeaderValid)
     else Left(HeaderNumberError)
-
-  /**
-    * Validates [[io.iohk.ethereum.domain.BlockHeader.nonce]] and [[io.iohk.ethereum.domain.BlockHeader.mixHash]] are correct
-    * based on validations stated in section 4.4.4 of http://paper.gavwood.com/
-    *
-    * @param blockHeader BlockHeader to validate.
-    * @return BlockHeader if valid, an [[HeaderPoWError]] otherwise
-    */
-  private def validatePoW(blockHeader: BlockHeader): Either[BlockHeaderError, BlockHeaderValid] = {
-    import Ethash._
-    import scala.collection.JavaConverters._
-
-    def getPowCacheData(epoch: Long): PowCacheData = {
-      if (epoch == 0) BlockHeaderValidatorImpl.epoch0PowCache else
-      Option(powCaches.get(epoch)) match {
-        case Some(pcd) => pcd
-        case None =>
-          val data = new PowCacheData(
-            cache = Ethash.makeCache(epoch),
-            dagSize = Ethash.dagSize(epoch))
-
-          val keys = powCaches.keySet().asScala
-          val keysToRemove = keys.toSeq.sorted.take(keys.size - MaxPowCaches + 1)
-          keysToRemove.foreach(powCaches.remove)
-
-          powCaches.put(epoch, data)
-
-          data
-      }
-    }
-
-    val powCacheData = getPowCacheData(epoch(blockHeader.number.toLong))
-
-    val proofOfWork = hashimotoLight(crypto.kec256(BlockHeader.getEncodedWithoutNonce(blockHeader)),
-      blockHeader.nonce.toArray[Byte], powCacheData.dagSize, powCacheData.cache)
-
-    if (proofOfWork.mixHash == blockHeader.mixHash && checkDifficulty(blockHeader.difficulty.toLong, proofOfWork)) Right(BlockHeaderValid)
-    else Left(HeaderPoWError)
-  }
 }
 
 sealed trait BlockHeaderError
@@ -221,7 +180,6 @@ object BlockHeaderError {
   case object HeaderGasUsedError extends BlockHeaderError
   case object HeaderGasLimitError extends BlockHeaderError
   case object HeaderNumberError extends BlockHeaderError
-  case object HeaderPoWError extends BlockHeaderError
 }
 
 sealed trait BlockHeaderValid

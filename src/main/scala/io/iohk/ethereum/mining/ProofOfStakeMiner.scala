@@ -3,8 +3,10 @@ package io.iohk.ethereum.mining
 import akka.actor.{Actor, ActorLogging, ActorRef, Props}
 import akka.util.Timeout
 import io.iohk.ethereum.blockchain.sync.RegularSync
-import io.iohk.ethereum.domain.{Block, Blockchain}
+import io.iohk.ethereum.domain.{Address, Block, Blockchain}
+import io.iohk.ethereum.keystore.KeyStore
 import io.iohk.ethereum.ommers.OmmersPool
+import io.iohk.ethereum.pos.ElectionManager
 import io.iohk.ethereum.transactions.PendingTransactionsManager
 import io.iohk.ethereum.transactions.PendingTransactionsManager.PendingTransactionsResponse
 import io.iohk.ethereum.utils.MiningConfig
@@ -19,7 +21,9 @@ class ProofOfStakeMiner(
              ommersPool: ActorRef,
              pendingTransactionsManager: ActorRef,
              syncController: ActorRef,
-             miningConfig: MiningConfig)
+             miningConfig: MiningConfig,
+             keyStore: KeyStore,
+             electionManager: ElectionManager)
   extends Actor with ActorLogging {
 
   import ProofOfStakeMiner._
@@ -30,19 +34,31 @@ class ProofOfStakeMiner(
   }
 
   def processMining(slotNumber: BigInt): Unit = {
-    val parentBlock = blockchain.getBestBlock()
-    // TODO: For each stakeholder check if is leader, if it is the case generate a new block!
-    getBlockForMining(parentBlock, slotNumber) onComplete {
-      case Success(PendingBlock(block, _)) =>
-        syncController ! RegularSync.MinedBlock(block)
-      case Failure(ex) =>
-        log.error(ex, "Unable to get block for mining")
+    keyStore.listAccounts() match {
+      case Right(accounts) =>
+        val mayBeLeader: Option[Address] = accounts.collectFirst {
+          case account if electionManager.verifyIsLeader(account, slotNumber, blockchain) => account
+        }
+        mayBeLeader match {
+          case Some(leader) =>
+            val parentBlock = blockchain.getBestBlock()
+            getBlockForMining(parentBlock, slotNumber, leader) onComplete {
+              case Success(PendingBlock(block, _)) =>
+                syncController ! RegularSync.MinedBlock(block)
+              case Failure(ex) =>
+                log.error(ex, "Unable to get block for mining")
+            }
+          case _ =>
+            log.info("No leader selected")
+        }
+      case Left(keyStoreError) =>
+        log.error("Error: Unable to access to node accounts", keyStoreError.toString)
     }
   }
 
-  private def getBlockForMining(parentBlock: Block, slotNumber: BigInt): Future[PendingBlock] = {
+  private def getBlockForMining(parentBlock: Block, slotNumber: BigInt, blockLeader: Address): Future[PendingBlock] = {
     getOmmersFromPool(parentBlock.header.number + 1).zip(getTransactionsFromPool).flatMap { case (ommers, pendingTxs) =>
-      blockGenerator.generateBlockForMining(parentBlock, pendingTxs.pendingTransactions.map(_.stx), ommers.headers, miningConfig.coinbase, slotNumber) match {
+      blockGenerator.generateBlockForMining(parentBlock, pendingTxs.pendingTransactions.map(_.stx), ommers.headers, blockLeader, slotNumber) match {
         case Right(pb) => Future.successful(pb)
         case Left(err) => Future.failed(new RuntimeException(s"Error while generating block for mining: $err"))
       }
@@ -76,8 +92,18 @@ object ProofOfStakeMiner {
             ommersPool: ActorRef,
             pendingTransactionsManager: ActorRef,
             syncController: ActorRef,
-            miningConfig: MiningConfig): Props =
-    Props(new Miner(blockchain, blockGenerator, ommersPool, pendingTransactionsManager, syncController, miningConfig))
-
+            miningConfig: MiningConfig,
+            keyStore: KeyStore,
+            electionManager: ElectionManager): Props =
+    Props(new ProofOfStakeMiner(
+      blockchain,
+      blockGenerator,
+      ommersPool,
+      pendingTransactionsManager,
+      syncController,
+      miningConfig,
+      keyStore,
+      electionManager)
+    )
   case class StartMining(slotNumber: BigInt)
 }

@@ -127,18 +127,6 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
     }
   }
 
-  it should "return a failure if created based on invalid nonce/mixHash" in {
-    val invalidNonce = ByteString(Hex.decode("0b80f001ae0c017f"))
-    val invalidMixHash = ByteString(Hex.decode("1f947f00807f7f7f2f7f00ff82ff00de015980607f129c77afedff4680c10171"))
-    val blockHeaderWithInvalidNonce = validBlockHeader.copy(nonce = invalidNonce)
-    val blockHeaderWithInvalidMixHash = validBlockHeader.copy(mixHash = invalidMixHash)
-    val blockHeaderWithInvalidNonceAndMixHash = validBlockHeader.copy(nonce = invalidNonce, mixHash = invalidMixHash)
-
-    blockHeaderValidator.validate(blockHeaderWithInvalidNonce, validBlockParent) shouldBe Left(HeaderPoWError)
-    blockHeaderValidator.validate(blockHeaderWithInvalidMixHash, validBlockParent) shouldBe Left(HeaderPoWError)
-    blockHeaderValidator.validate(blockHeaderWithInvalidNonceAndMixHash, validBlockParent) shouldBe Left(HeaderPoWError)
-  }
-
   it should "validate correctly a block whose parent is in storage" in new EphemBlockchainTestSetup {
     blockchain.save(validBlockParent)
     blockHeaderValidator.validate(validBlockHeader, blockchain) match {
@@ -303,7 +291,7 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
   )
 
   val ProDaoBlock1920009Header = BlockHeader(
-    parentHash = ByteString(Hex.decode("41254723e12eb736ddef151371e4c3d614233e6cad95f2d9017de2ab8b469a18")),
+    parentHash = ProDaoBlock1920008Header.hash,
     ommersHash = ByteString(Hex.decode("808d06176049aecfd504197dde49f46c3dd75f1af055e417d100228162eefdd8")),
     beneficiary = ByteString(Hex.decode("ea674fdde714fd979de3edf0f56aa9716b898ec8")),
     stateRoot = ByteString(Hex.decode("49eb333152713b78d920440ef065ed7f681611e0c2e6933d657d6f4a7f1936ee")),
@@ -322,7 +310,7 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
   )
 
   val ProDaoBlock1920010Header = BlockHeader(
-    parentHash = ByteString(Hex.decode("69d04aec94ad69d7d190d3b51d24cd42dded0c4767598a1d30480363509acbef")),
+    parentHash = ProDaoBlock1920009Header.hash,
     ommersHash = ByteString(Hex.decode("1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347")),
     beneficiary = ByteString(Hex.decode("4bb96091ee9d802ed039c4d1a5f6216f90f81b01")),
     stateRoot = ByteString(Hex.decode("6ee63abee7416d3a671bcbefa01aa5d4ea427e246d548e15c5f3d9a108e738fd")),

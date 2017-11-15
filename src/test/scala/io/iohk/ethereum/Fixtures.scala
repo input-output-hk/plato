@@ -112,7 +112,7 @@ object Fixtures {
         ByteString(Hex.decode("067bd4b1a9d37ff932473212856262d59f999935a4a357faf71b1d7e276b762b"))
       )
 
-      val size = 1000L
+      val size = 1004L
     }
 
     object Genesis extends FixtureBlock {
@@ -141,7 +141,7 @@ object Fixtures {
         )
       )
       override val transactionHashes: Seq[ByteString] = Seq()
-      override val size: Long = 540
+      override val size: Long = 541
     }
 
     object DaoForkBlock extends FixtureBlock {
@@ -230,7 +230,7 @@ object Fixtures {
         ByteString(Hex.decode("4677a93807b73a0875d3a292eacb450d0af0d6f0eec6f283f8ad927ec539a17b")),
         ByteString(Hex.decode("2a5177e6d6cea40594c7d4b0115dcd087443be3ec2fa81db3c21946a5e51cea9"))
       )
-      override val size: Long = 978L
+      override val size: Long = 982L
     }
 
     object ProDaoForkBlock extends FixtureBlock {
