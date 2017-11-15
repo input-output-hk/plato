@@ -4,7 +4,7 @@ import io.iohk.ethereum.domain.{Address, Blockchain}
 
 trait ElectionManager {
 
-  def verifyIsLeader(publicKey: Address, slotNumber: BigInt, blockchain: Blockchain): Boolean
+  def verifyIsLeader(stakeholderAddress: Address, slotNumber: BigInt, blockchain: Blockchain): Boolean
 
 }
 
@@ -17,8 +17,8 @@ trait ElectionManager {
 
 case class ElectionManagerImpl(knownStakeholders: Seq[Address]) extends ElectionManager {
 
-  def verifyIsLeader(publicKey: Address, slotNumber: BigInt, blockchain: Blockchain): Boolean = knownStakeholders.length match {
-    case length if length > 0 => publicKey == knownStakeholders(((slotNumber - 1) % length).toInt)
+  def verifyIsLeader(stakeholderAddress: Address, slotNumber: BigInt, blockchain: Blockchain): Boolean = knownStakeholders.length match {
+    case length if length > 0 => stakeholderAddress == knownStakeholders(((slotNumber - 1) % length).toInt)
     case _ => false
   }
 

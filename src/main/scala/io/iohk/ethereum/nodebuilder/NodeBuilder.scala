@@ -82,9 +82,9 @@ trait OuroborosConfigBuilder {
   lazy val ouroborosConfig = OuroborosConfig(Config.config)
 }
 
-trait ElectionManagerImplBuilder {
+trait ElectionManagerBuilder {
   self: OuroborosConfigBuilder =>
-  lazy val electionManagerImpl = ElectionManagerImpl(ouroborosConfig.knownStakeholders)
+  lazy val electionManager = ElectionManagerImpl(ouroborosConfig.knownStakeholders)
 }
 
 trait KnownNodesManagerBuilder {
@@ -489,3 +489,4 @@ trait Node extends NodeKeyBuilder
   with SyncConfigBuilder
   with MinerBuilder
   with OuroborosConfigBuilder
+  with ElectionManagerBuilder
