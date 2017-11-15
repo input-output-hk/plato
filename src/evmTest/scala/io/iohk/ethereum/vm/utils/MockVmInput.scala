@@ -30,6 +30,6 @@ object MockVmInput {
 
 
   def blockHeader: BlockHeader =
-    BlockHeader(BEmpty, BEmpty, BEmpty, BEmpty, BEmpty, BEmpty, BEmpty, 0, 0, 0, 0, 0, BEmpty, BEmpty, BEmpty)
+    BlockHeader(BEmpty, BEmpty, BEmpty, BEmpty, BEmpty, BEmpty, BEmpty, 0, 0, 0, 0, 0, BEmpty, BEmpty, BEmpty, 0)
 
 }

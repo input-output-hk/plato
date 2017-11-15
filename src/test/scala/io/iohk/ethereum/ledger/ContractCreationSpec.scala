@@ -175,7 +175,8 @@ class ContractCreationSpec extends FlatSpec with PropertyChecks with Matchers {
       unixTimestamp = 0,
       extraData = bEmpty,
       mixHash = bEmpty,
-      nonce = bEmpty
+      nonce = bEmpty,
+      slotNumber = blockchainConfig.homesteadBlockNumber + 1
     )
 
     // code returns a single STOP instruction

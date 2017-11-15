@@ -20,6 +20,7 @@ object MinerSpec {
   val MinerSpecTag = Tag("MinerSpec")
 }
 
+// TODO: Remove this test when PoW miner disappear
 // scalastyle:off magic.number
 class MinerSpec extends FlatSpec with Matchers {
 
@@ -30,7 +31,7 @@ class MinerSpec extends FlatSpec with Matchers {
     val bfm = blockForMining(parent.header)
 
     (blockchain.getBestBlock _).expects().returns(parent).anyNumberOfTimes()
-    (blockGenerator.generateBlockForMining _).expects(parent, Nil, Nil, miningConfig.coinbase).returning(Right(PendingBlock(bfm, Nil))).anyNumberOfTimes()
+    (blockGenerator.generateBlockForMining _).expects(parent, Nil, Nil, miningConfig.coinbase, BigInt(-1)).returning(Right(PendingBlock(bfm, Nil))).anyNumberOfTimes()
 
     ommersPool.setAutoPilot(new TestActor.AutoPilot {
       def run(sender: ActorRef, msg: Any): TestActor.AutoPilot = {
@@ -74,7 +75,8 @@ class MinerSpec extends FlatSpec with Matchers {
         unixTimestamp = 0,
         extraData = ByteString(Hex.decode("00")),
         mixHash = ByteString(Hex.decode("00" * 32)),
-        nonce = ByteString(Hex.decode("0000000000000042"))
+        nonce = ByteString(Hex.decode("0000000000000042")),
+        slotNumber = 0
       ),
       BlockBody(Seq(), Seq()))
 
@@ -125,7 +127,8 @@ class MinerSpec extends FlatSpec with Matchers {
         unixTimestamp = blockForMiningTimestamp,
         extraData = miningConfig.headerExtraData,
         mixHash = ByteString.empty,
-        nonce = ByteString.empty
+        nonce = ByteString.empty,
+        slotNumber = BigInt(1)
       ), BlockBody(Seq(txToMine), Nil))
     }
 

@@ -392,7 +392,7 @@ class RegularSyncSpec extends TestKit(ActorSystem("RegularSync_system")) with Wo
       extraData = bEmpty,
       mixHash = bEmpty,
       nonce = bEmpty,
-      slotNumber = -1
+      slotNumber = 1
     )
 
     val defaultTx = Transaction(

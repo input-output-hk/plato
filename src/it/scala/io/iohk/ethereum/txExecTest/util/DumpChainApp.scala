@@ -101,7 +101,7 @@ object DumpChainApp extends App with NodeKeyBuilder with SecureRandomBuilder wit
   class BlockchainMock(genesisHash: ByteString) extends Blockchain {
 
     class FakeHeader() extends BlockHeader(ByteString.empty, ByteString.empty, ByteString.empty, ByteString.empty,
-      ByteString.empty, ByteString.empty, ByteString.empty, 0, 0, 0, 0, 0, ByteString.empty, ByteString.empty, ByteString.empty) {
+      ByteString.empty, ByteString.empty, ByteString.empty, 0, 0, 0, 0, 0, ByteString.empty, ByteString.empty, ByteString.empty, 0) {
       override lazy val hash: ByteString = genesisHash
     }
 
