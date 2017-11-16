@@ -690,21 +690,6 @@ class JsonRpcControllerSpec extends FlatSpec with Matchers with PropertyChecks w
     response.result shouldBe Some(JString("0x11"))
   }
 
-  it should "eth_coinbase " in new TestSetup {
-    val request: JsonRpcRequest = JsonRpcRequest(
-      "2.0",
-      "eth_coinbase",
-      None,
-      Some(JInt(1))
-    )
-
-    val response = jsonRpcController.handleRequest(request).futureValue
-    response.jsonrpc shouldBe "2.0"
-    response.id shouldBe JInt(1)
-    response.error shouldBe None
-    response.result shouldBe Some(JString("0x" + "42" * 20))
-  }
-
   it should "eth_getTransactionByBlockNumberAndIndex by tag" in new TestSetup {
     val blockToRequest = Block(Fixtures.Blocks.Block3125369.header, Fixtures.Blocks.Block3125369.body)
     val txIndex = 1
@@ -1280,14 +1265,11 @@ class JsonRpcControllerSpec extends FlatSpec with Matchers with PropertyChecks w
     val filterManager = TestProbe()
 
     val miningConfig = new MiningConfig {
-      override val coinbase: Address = Address(Hex.decode("42" * 20))
       override val blockCacheSize: Int = 30
       override val ommersPoolSize: Int = 30
       override val activeTimeout: FiniteDuration = Timeouts.normalTimeout
       override val ommerPoolQueryTimeout: FiniteDuration = Timeouts.normalTimeout
       override val headerExtraData: ByteString = ByteString.empty
-      override val miningEnabled: Boolean = false
-      override val ethashDir: String = "~/.ethash"
       override val mineRounds: Int = 100000
     }
 

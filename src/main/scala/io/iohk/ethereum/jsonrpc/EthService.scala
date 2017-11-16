@@ -1,6 +1,5 @@
 package io.iohk.ethereum.jsonrpc
 
-import java.time.Duration
 import java.util.function.UnaryOperator
 import java.util.Date
 import java.util.concurrent.atomic.AtomicReference
@@ -58,9 +57,6 @@ object EthService {
   case class UncleByBlockNumberAndIndexRequest(block: BlockParam, uncleIndex: BigInt)
   case class UncleByBlockNumberAndIndexResponse(uncleBlockResponse: Option[BlockResponse])
 
-  case class GetMiningRequest()
-  case class GetMiningResponse(isMining: Boolean)
-
   case class GetTransactionByHashRequest(txHash: ByteString)
   case class GetTransactionByHashResponse(txResponse: Option[TransactionResponse])
 
@@ -111,9 +107,6 @@ object EthService {
 
   case class GetUncleCountByBlockHashRequest(blockHash: ByteString)
   case class GetUncleCountByBlockHashResponse(result: BigInt)
-
-  case class GetCoinbaseRequest()
-  case class GetCoinbaseResponse(address: Address)
 
   case class GetBlockTransactionCountByNumberRequest(block: BlockParam)
   case class GetBlockTransactionCountByNumberResponse(result: BigInt)
@@ -375,15 +368,6 @@ class EthService(
     }
   }
 
-  def getMining(req: GetMiningRequest): ServiceResponse[GetMiningResponse] = {
-    val isMining = lastActive.updateAndGet(new UnaryOperator[Option[Date]] {
-      override def apply(e: Option[Date]): Option[Date] = {
-        e.filter { time => Duration.between(time.toInstant, (new Date).toInstant).toMillis < miningConfig.activeTimeout.toMillis }
-      }
-    }).isDefined
-    Future.successful(Right(GetMiningResponse(isMining)))
-  }
-
   private def reportActive() = {
     val now = new Date()
     lastActive.updateAndGet(new UnaryOperator[Option[Date]] {
@@ -412,9 +396,6 @@ class EthService(
         PendingTransactionsResponse(Nil)
       }
   }
-
-  def getCoinbase(req: GetCoinbaseRequest): ServiceResponse[GetCoinbaseResponse] =
-    Future.successful(Right(GetCoinbaseResponse(miningConfig.coinbase)))
 
   /**
     * Implements the eth_syncing method that returns syncing information if the node is syncing.

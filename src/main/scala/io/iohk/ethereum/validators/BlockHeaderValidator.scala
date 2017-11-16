@@ -1,7 +1,6 @@
 package io.iohk.ethereum.validators
 
 import akka.util.ByteString
-import io.iohk.ethereum.consensus.Ethash
 import io.iohk.ethereum.domain.{BlockHeader, Blockchain, DifficultyCalculator}
 import io.iohk.ethereum.utils.{BlockchainConfig, DaoForkConfig}
 
@@ -17,26 +16,12 @@ object BlockHeaderValidatorImpl {
   val GasLimitBoundDivisor: Int = 1024
   val MinGasLimit: BigInt = 5000 //Although the paper states this value is 125000, on the different clients 5000 is used
   val MaxGasLimit = Long.MaxValue // max gasLimit is equal 2^63-1 according to EIP106
-  val MaxPowCaches: Int = 2 // maximum number of epochs for which PoW cache is stored in memory
-
-  class PowCacheData(val cache: Array[Int], val dagSize: Long)
-
-  // FIXME [EC-331]: this is used to speed up ETS Blockchain tests. All blocks in those tests have low numbers (1, 2, 3 ...)
-  // so keeping the cache for epoch 0 avoids recalculating it for each individual test. The difference in test runtime
-  // can be dramatic - full suite: 26 hours vs 21 minutes on same machine
-  // It might be desirable to find a better solution for this - one that doesn't keep this cache unnecessarily
-  lazy val epoch0PowCache = new PowCacheData(
-    cache = Ethash.makeCache(0),
-    dagSize = Ethash.dagSize(0))
 }
 
 class BlockHeaderValidatorImpl(blockchainConfig: BlockchainConfig) extends BlockHeaderValidator {
 
   import BlockHeaderValidatorImpl._
   import BlockHeaderError._
-
-  // we need concurrent map since validators can be used from multiple places
-  val powCaches: java.util.Map[Long, PowCacheData] = new java.util.concurrent.ConcurrentHashMap[Long, PowCacheData]()
 
   val difficulty = new DifficultyCalculator(blockchainConfig)
 

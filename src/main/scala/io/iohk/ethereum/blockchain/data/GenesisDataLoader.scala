@@ -138,7 +138,7 @@ class GenesisDataLoader(
       extraData = genesisData.extraData,
       mixHash = genesisData.mixHash.getOrElse(zeros(hashLength)),
       nonce = genesisData.nonce,
-      slotNumber = 0 /* TODO: Check if this have sense */)
+      slotNumber = 0)
 
   private def zeros(length: Int) =
     ByteString(Hex.decode(List.fill(length)("0").mkString))
