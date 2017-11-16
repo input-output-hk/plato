@@ -245,7 +245,6 @@ trait MiningConfig {
   val activeTimeout: FiniteDuration
   val ommerPoolQueryTimeout: FiniteDuration
   val headerExtraData: ByteString
-  val miningEnabled: Boolean
   val mineRounds: Int
 }
 
@@ -262,7 +261,6 @@ object MiningConfig {
         ByteString(miningConfig
           .getString("header-extra-data").getBytes)
           .take(BlockHeaderValidatorImpl.MaxExtraDataSize)
-      override val miningEnabled = miningConfig.getBoolean("mining-enabled")
       override val mineRounds = miningConfig.getInt("mine-rounds")
     }
   }

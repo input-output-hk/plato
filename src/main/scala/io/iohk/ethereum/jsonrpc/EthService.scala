@@ -1,6 +1,5 @@
 package io.iohk.ethereum.jsonrpc
 
-import java.time.Duration
 import java.util.function.UnaryOperator
 import java.util.Date
 import java.util.concurrent.atomic.AtomicReference
@@ -57,9 +56,6 @@ object EthService {
 
   case class UncleByBlockNumberAndIndexRequest(block: BlockParam, uncleIndex: BigInt)
   case class UncleByBlockNumberAndIndexResponse(uncleBlockResponse: Option[BlockResponse])
-
-  case class GetMiningRequest()
-  case class GetMiningResponse(isMining: Boolean)
 
   case class GetTransactionByHashRequest(txHash: ByteString)
   case class GetTransactionByHashResponse(txResponse: Option[TransactionResponse])
@@ -370,15 +366,6 @@ class EthService(
         Right(GetGasPriceResponse(0))
       }
     }
-  }
-
-  def getMining(req: GetMiningRequest): ServiceResponse[GetMiningResponse] = {
-    val isMining = lastActive.updateAndGet(new UnaryOperator[Option[Date]] {
-      override def apply(e: Option[Date]): Option[Date] = {
-        e.filter { time => Duration.between(time.toInstant, (new Date).toInstant).toMillis < miningConfig.activeTimeout.toMillis }
-      }
-    }).isDefined
-    Future.successful(Right(GetMiningResponse(isMining)))
   }
 
   private def reportActive() = {

@@ -450,19 +450,6 @@ class EthServiceSpec extends FlatSpec with Matchers with ScalaFutures with MockF
     response.futureValue shouldEqual Right(GetCodeResponse(ByteString("code code code")))
   }
 
-  // TODO: Check if this test could be fixed it
-  /*it should "return if node is mining after time out" in new TestSetup {
-    (blockGenerator.generateBlockForMining _).expects(parentBlock, *, *, *).returning(Right(PendingBlock(block, Nil)))
-    blockchain.save(parentBlock)
-    ethService.getWork(GetWorkRequest())
-
-    Thread.sleep(miningConfig.activeTimeout.toMillis)
-
-    val response = ethService.getMining(GetMiningRequest())
-
-    response.futureValue shouldEqual Right(GetMiningResponse(false))
-  }*/
-
   it should "return 0 gas price if there are no transactions" in new TestSetup {
     (appStateStorage.getBestBlockNumber _).expects().returning(42)
 
@@ -712,7 +699,6 @@ class EthServiceSpec extends FlatSpec with Matchers with ScalaFutures with MockF
       override val activeTimeout: FiniteDuration = Timeouts.shortTimeout
       override val ommerPoolQueryTimeout: FiniteDuration = Timeouts.normalTimeout
       override val headerExtraData: ByteString = ByteString.empty
-      override val miningEnabled: Boolean = false
       override val mineRounds: Int = 100000
     }
 

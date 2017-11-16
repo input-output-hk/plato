@@ -6,7 +6,6 @@ import org.scalatest.prop.PropertyChecks
 import org.spongycastle.util.encoders.Hex
 
 class BlockHeaderSpec extends FunSuite with PropertyChecks  {
-  // FIXME: Change hashes with the version with slotNumber
   test("Encoding of block header without nonce") {
     //Expected values obtained using EthereumJ
     val obtainedEncodedWithoutNonce = Hex.toHexString(BlockHeader.getEncodedWithoutNonce(validBlockHeader))
