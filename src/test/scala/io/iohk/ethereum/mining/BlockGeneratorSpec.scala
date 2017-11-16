@@ -296,10 +296,8 @@ class BlockGeneratorSpec extends FlatSpec with Matchers with PropertyChecks with
     val miningConfig = new MiningConfig {
       override val blockCacheSize: Int = 30
       override val ommersPoolSize: Int = 30
-      override val activeTimeout: FiniteDuration = Timeouts.normalTimeout
       override val ommerPoolQueryTimeout: FiniteDuration = Timeouts.normalTimeout
       override val headerExtraData: ByteString = ByteString("mined with etc scala")
-      override val mineRounds: Int = 100000
     }
 
     lazy val blockTimestampProvider = new FakeBlockTimestampProvider

@@ -1,9 +1,5 @@
 package io.iohk.ethereum.jsonrpc
 
-import java.util.function.UnaryOperator
-import java.util.Date
-import java.util.concurrent.atomic.AtomicReference
-
 import akka.pattern.ask
 import akka.util.Timeout
 import io.iohk.ethereum.domain.{BlockHeader, SignedTransaction, UInt256, _}
@@ -164,8 +160,6 @@ class EthService(
   extends Logger {
 
   import EthService._
-
-  val lastActive = new AtomicReference[Option[Date]](None)
 
   def protocolVersion(req: ProtocolVersionRequest): ServiceResponse[ProtocolVersionResponse] =
     Future.successful(Right(ProtocolVersionResponse(f"0x$protocolVersion%x")))
@@ -366,15 +360,6 @@ class EthService(
         Right(GetGasPriceResponse(0))
       }
     }
-  }
-
-  private def reportActive() = {
-    val now = new Date()
-    lastActive.updateAndGet(new UnaryOperator[Option[Date]] {
-      override def apply(e: Option[Date]): Option[Date] = {
-        Some(now)
-      }
-    })
   }
 
   private def getOmmersFromPool(blockNumber: BigInt) = {
