@@ -10,6 +10,7 @@ import io.iohk.ethereum.consensus.Ethash.ProofOfWork
 import io.iohk.ethereum.crypto
 import io.iohk.ethereum.domain.{Block, BlockHeader, Blockchain}
 import io.iohk.ethereum.ommers.OmmersPool
+import io.iohk.ethereum.timing.SlotNumber
 import io.iohk.ethereum.transactions.PendingTransactionsManager
 import io.iohk.ethereum.transactions.PendingTransactionsManager.PendingTransactionsResponse
 import io.iohk.ethereum.utils.{ByteUtils, MiningConfig}
@@ -195,6 +196,7 @@ object Miner {
     Props(new Miner(blockchain, blockGenerator, ommersPool, pendingTransactionsManager, syncController, miningConfig))
 
   case object StartMining
+  case class StartMining(slotNumber: SlotNumber)
   case object StopMining
 
   private case object ProcessMining
