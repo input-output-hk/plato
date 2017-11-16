@@ -162,7 +162,7 @@ class EtcHandshakerSpec extends FlatSpec with Matchers  {
         override val blockExtraData: Option[ByteString] = None
         override val range: Int = 10
         override val drainList: Seq[Address] = Nil
-        override val forkBlockHash: ByteString = ByteString(Hex.decode("94365e3a8c0b35089c1d1195081fe7489b528a84b22199c916180db8b28ade7f"))
+        override val forkBlockHash: ByteString = ByteString(Hex.decode("4afa298dfbb357f502445e3e91367b4bb4faecd1ac0b2a6c09550d18c5f9e429"))
         override val forkBlockNumber: BigInt = 1920000
         override val refundContract: Option[Address] = None
       })

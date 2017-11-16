@@ -74,7 +74,8 @@ object Generators extends ObjectGenerators {
     unixTimestamp = 1486752441,
     extraData = ByteString(Hex.decode("d783010507846765746887676f312e372e33856c696e7578")),
     mixHash = ByteString(Hex.decode("6bc729364c9b682cfa923ba9480367ebdfa2a9bca2a652fe975e8d5958f696dd")),
-    nonce = ByteString(Hex.decode("797a8f3a494f937b")))
+    nonce = ByteString(Hex.decode("797a8f3a494f937b")),
+    slotNumber = 20)
 
   // scalastyle:off
   def getProgramStateGen(

@@ -21,7 +21,8 @@ case class BlockHeader(
     unixTimestamp: Long,
     extraData: ByteString,
     mixHash: ByteString,
-    nonce: ByteString) {
+    nonce: ByteString,
+    slotNumber: BigInt) {
 
   override def toString: String = {
     s"""BlockHeader {
@@ -40,6 +41,7 @@ case class BlockHeader(
        |extraData: ${Hex.toHexString(extraData.toArray[Byte])}
        |mixHash: ${Hex.toHexString(mixHash.toArray[Byte])}
        |nonce: ${Hex.toHexString(nonce.toArray[Byte])}
+       |slotNumber: $slotNumber
        |}""".stripMargin
   }
 

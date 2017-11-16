@@ -2,6 +2,7 @@ package io.iohk.ethereum
 
 import akka.util.ByteString
 import io.iohk.ethereum.domain._
+import io.iohk.ethereum.keystore.{KeyStore, Wallet}
 import io.iohk.ethereum.ledger.BlockExecutionError.{StateBeforeFailure, TxsExecutionError}
 import io.iohk.ethereum.ledger.Ledger.BlockPreparationResult
 import io.iohk.ethereum.ledger._
@@ -9,6 +10,7 @@ import io.iohk.ethereum.network.EtcPeerManagerActor.PeerInfo
 import io.iohk.ethereum.network.handshaker.{ConnectedState, DisconnectedState, Handshaker, HandshakerState}
 import io.iohk.ethereum.network.p2p.messages.CommonMessages.Status
 import io.iohk.ethereum.network.p2p.messages.PV62.BlockBody
+import io.iohk.ethereum.pos.ElectionManager
 import io.iohk.ethereum.validators.BlockHeaderError.HeaderNumberError
 import io.iohk.ethereum.validators.BlockValidator.{BlockTransactionsHashError, BlockValid}
 import io.iohk.ethereum.validators.OmmersValidator.OmmersError.OmmersNotValidError
@@ -130,6 +132,20 @@ object Mocks {
     override val handshakerState: HandshakerState[PeerInfo] = DisconnectedState(reason)
 
     override def copy(handshakerState: HandshakerState[PeerInfo]): Handshaker[PeerInfo] = this
+  }
+
+  case class MockElectionManager(isValid: Address => Boolean) extends ElectionManager {
+    override def verifyIsLeader(stakeholder: Address, slotNumber: BigInt, blockchain: Blockchain): Boolean = isValid(stakeholder)
+  }
+
+  case class MockKeyStore(stakeholders: Either[KeyStore.KeyStoreError, List[Address]]) extends KeyStore {
+    override def listAccounts(): Either[KeyStore.KeyStoreError, List[Address]] = stakeholders
+
+    override def importPrivateKey(key: ByteString, passphrase: String): Either[KeyStore.KeyStoreError, Address] = ???
+    override def deleteWallet(address: Address): Either[KeyStore.KeyStoreError, Boolean] = ???
+    override def newAccount(passphrase: String): Either[KeyStore.KeyStoreError, Address] = ???
+    override def changePassphrase(address: Address, oldPassphrase: String, newPassphrase: String): Either[KeyStore.KeyStoreError, Unit] = ???
+    override def unlockAccount(address: Address, passphrase: String): Either[KeyStore.KeyStoreError, Wallet] = ???
   }
 
 }

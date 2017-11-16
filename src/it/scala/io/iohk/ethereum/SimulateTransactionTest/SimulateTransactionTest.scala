@@ -1,6 +1,7 @@
 package io.iohk.ethereum.ledger
 
 import akka.util.ByteString
+import io.iohk.ethereum.Fixtures
 import io.iohk.ethereum.blockchain.sync.EphemBlockchainTestSetup
 import io.iohk.ethereum.crypto.ECDSASignature
 import io.iohk.ethereum.domain._
@@ -9,7 +10,6 @@ import org.scalatest._
 import io.iohk.ethereum.utils.{BlockchainConfig, DaoForkConfig, Logger, MonetaryPolicyConfig}
 import io.iohk.ethereum.vm.VM
 import org.spongycastle.util.encoders.Hex
-import io.iohk.ethereum.domain.Block.BlockDec
 
 class  SimulateTransactionTest extends FlatSpec with Matchers with Logger {
 
@@ -140,7 +140,7 @@ trait ScenarioSetup
   val minGasLimitRequiredForFailingTransaction: BigInt = 122397
 
   val blockGasLimit = 1000000
-  val block = someGenesisBlock.toBlock
+  val block = Fixtures.Blocks.Genesis.block
   val genesisBlock = block.copy(header = block.header.copy(stateRoot = worldWithAccount.stateRootHash, gasLimit = blockGasLimit))
 
   blockchain.save(genesisBlock)

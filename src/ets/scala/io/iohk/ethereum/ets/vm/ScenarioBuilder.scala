@@ -40,7 +40,8 @@ object ScenarioBuilder {
       env.currentTimestamp,
       bEmpty,
       bEmpty,
-      bEmpty
+      bEmpty,
+      0
     )
 
   def prepareExecEnv(exec: Exec, header: BlockHeader): ExecEnv =

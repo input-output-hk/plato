@@ -18,7 +18,7 @@ import io.iohk.ethereum.network.{PeerManagerActor, ServerActor}
 import io.iohk.ethereum.jsonrpc._
 import io.iohk.ethereum.jsonrpc.server.JsonRpcServer
 import io.iohk.ethereum.keystore.{KeyStore, KeyStoreImpl}
-import io.iohk.ethereum.mining.{BlockGenerator, Miner}
+import io.iohk.ethereum.mining.{BlockGenerator, ProofOfStakeMiner}
 import io.iohk.ethereum.network.PeerManagerActor.PeerConfiguration
 import io.iohk.ethereum.network.EtcPeerManagerActor.PeerInfo
 import io.iohk.ethereum.utils._
@@ -429,22 +429,26 @@ trait SecureRandomBuilder {
     Config.secureRandomAlgo.map(SecureRandom.getInstance).getOrElse(new SecureRandom())
 }
 
-trait MinerBuilder {
+trait ProofOfStakeMinerBuilder {
   self: ActorSystemBuilder
     with BlockchainBuilder
     with OmmersPoolBuilder
     with PendingTransactionsManagerBuilder
     with BlockGeneratorBuilder
     with SyncControllerBuilder
+    with ElectionManagerBuilder
+    with KeyStoreBuilder
     with MiningConfigBuilder =>
 
-  lazy val miner: ActorRef = actorSystem.actorOf(Miner.props(
+  lazy val miner: ActorRef = actorSystem.actorOf(ProofOfStakeMiner.props(
     blockchain,
     blockGenerator,
     ommersPool,
     pendingTransactionsManager,
     syncController,
-    miningConfig))
+    miningConfig,
+    keyStore,
+    electionManager))
 }
 
 trait Node extends NodeKeyBuilder
@@ -487,6 +491,6 @@ trait Node extends NodeKeyBuilder
   with DiscoveryListenerBuilder
   with KnownNodesManagerBuilder
   with SyncConfigBuilder
-  with MinerBuilder
   with OuroborosConfigBuilder
   with ElectionManagerBuilder
+  with ProofOfStakeMinerBuilder

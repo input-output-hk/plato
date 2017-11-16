@@ -179,7 +179,8 @@ class BlockQueueSpec extends FlatSpec with Matchers with MockFactory {
       unixTimestamp = 0,
       extraData = bEmpty,
       mixHash = bEmpty,
-      nonce = bEmpty
+      nonce = bEmpty,
+      slotNumber = 1
     )
 
     def getBlock(
