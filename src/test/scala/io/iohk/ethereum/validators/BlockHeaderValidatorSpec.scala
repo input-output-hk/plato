@@ -4,35 +4,31 @@ import akka.util.ByteString
 import io.iohk.ethereum.{Fixtures, ObjectGenerators}
 import io.iohk.ethereum.blockchain.sync.EphemBlockchainTestSetup
 import io.iohk.ethereum.domain.{UInt256, _}
+import io.iohk.ethereum.pos.ElectionManagerImpl
 import io.iohk.ethereum.utils.{BlockchainConfig, DaoForkConfig, MonetaryPolicyConfig}
 import io.iohk.ethereum.validators.BlockHeaderError._
 import org.scalatest.prop.PropertyChecks
 import org.scalatest.{FlatSpec, Matchers}
 import org.spongycastle.util.encoders.Hex
 import io.iohk.ethereum.validators.BlockHeaderValidatorImpl._
+import org.scalamock.scalatest.MockFactory
 
-class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyChecks with ObjectGenerators {
+class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyChecks with ObjectGenerators with MockFactory {
 
+  "BlockHeaderValidator" should "validate correctly formed BlockHeaders" in new TestSetup {
+    (electionManagerMock.verifyIsLeader _).expects(*, *).returning(true).anyNumberOfTimes()
+    (slotCalculatorMock.getSlotStartingTime _).expects(*).returning(System.currentTimeMillis() - 1000).anyNumberOfTimes()
 
-  val ExtraDataSizeLimit = 20
-
-  //BlockHeader member's lengths obtained from Yellow paper
-  val NonceLength = 8 //64bit
-  val MixHashLength = 32 //256bit
-
-  val blockchainConfig = createBlockchainConfig()
-
-  val blockHeaderValidator = new BlockHeaderValidatorImpl(blockchainConfig)
-  val difficultyCalculator = new DifficultyCalculator(blockchainConfig)
-
-  "BlockHeaderValidator" should "validate correctly formed BlockHeaders" in {
     blockHeaderValidator.validate(validBlockHeader, validBlockParent) match {
       case Right(_) => succeed
       case _ => fail
     }
   }
 
-  it should "return a failure if created based on invalid extra data" in {
+  it should "return a failure if created based on invalid extra data" in new TestSetup {
+    (electionManagerMock.verifyIsLeader _).expects(*,*).returning(true).anyNumberOfTimes()
+    (slotCalculatorMock.getSlotStartingTime _).expects(*).returning(System.currentTimeMillis() - 1000).anyNumberOfTimes()
+
     forAll(randomSizeByteStringGen(
       MaxExtraDataSize + 1,
       MaxExtraDataSize + ExtraDataSizeLimit)
@@ -42,8 +38,11 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
     }
   }
 
-  it should "validate DAO block (extra data)" in {
+  it should "validate DAO block (extra data)" in new TestSetup {
     import Fixtures.Blocks._
+    (electionManagerMock.verifyIsLeader _).expects(*,*).returning(true).anyNumberOfTimes()
+    (slotCalculatorMock.getSlotStartingTime _).expects(*).returning(System.currentTimeMillis() - 1000).anyNumberOfTimes()
+
     val cases = Table(
       ("Block", "Parent Block", "Supports Dao Fork", "Valid"),
       (DaoForkBlock.header, DaoParentBlock.header, false, true),
@@ -58,7 +57,7 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
     )
 
     forAll(cases) { (block, parentBlock, supportsDaoFork, valid ) =>
-      val blockHeaderValidator = new BlockHeaderValidatorImpl(createBlockchainConfig(supportsDaoFork))
+      val blockHeaderValidator = new BlockHeaderValidatorImpl(createBlockchainConfig(supportsDaoFork), electionManagerMock, slotCalculatorMock)
       blockHeaderValidator.validate(block, parentBlock) match {
         case Right(_) => assert(valid)
         case Left(DaoHeaderExtraDataError) => assert(!valid)
@@ -67,7 +66,10 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
     }
   }
 
-  it should "return a failure if created based on invalid timestamp" in {
+  it should "return a failure if created based on invalid timestamp" in new TestSetup {
+    (electionManagerMock.verifyIsLeader _).expects(*,*).returning(true).anyNumberOfTimes()
+    (slotCalculatorMock.getSlotStartingTime _).expects(*).returning(System.currentTimeMillis() - 1000).anyNumberOfTimes()
+
     forAll(longGen) { timestamp =>
       val blockHeader = validBlockHeader.copy(unixTimestamp = timestamp)
       val validateResult = blockHeaderValidator.validate(blockHeader, validBlockParent)
@@ -78,7 +80,10 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
     }
   }
 
-  it should "return a failure if created based on invalid difficulty" in {
+  it should "return a failure if created based on invalid difficulty" in new TestSetup {
+    (electionManagerMock.verifyIsLeader _).expects(*,*).returning(true).anyNumberOfTimes()
+    (slotCalculatorMock.getSlotStartingTime _).expects(*).returning(System.currentTimeMillis() - 1000).anyNumberOfTimes()
+
     forAll(bigIntGen) { difficulty =>
       val blockHeader = validBlockHeader.copy(difficulty = difficulty)
       val validateResult = blockHeaderValidator.validate(blockHeader, validBlockParent)
@@ -87,7 +92,10 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
     }
   }
 
-  it should "return a failure if created based on invalid gas used" in {
+  it should "return a failure if created based on invalid gas used" in new TestSetup {
+    (electionManagerMock.verifyIsLeader _).expects(*,*).returning(true).anyNumberOfTimes()
+    (slotCalculatorMock.getSlotStartingTime _).expects(*).returning(System.currentTimeMillis() - 1000).anyNumberOfTimes()
+
     forAll(bigIntGen) { gasUsed =>
       val blockHeader = validBlockHeader.copy(gasUsed = gasUsed)
       val validateResult = blockHeaderValidator.validate(blockHeader, validBlockParent)
@@ -96,7 +104,10 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
     }
   }
 
-  it should "return a failure if created based on invalid gas limit" in {
+  it should "return a failure if created based on invalid gas limit" in new TestSetup {
+    (electionManagerMock.verifyIsLeader _).expects(*,*).returning(true).anyNumberOfTimes()
+    (slotCalculatorMock.getSlotStartingTime _).expects(*).returning(System.currentTimeMillis() - 1000).anyNumberOfTimes()
+
     val LowerGasLimit = MinGasLimit.max(
       validBlockParent.gasLimit - validBlockParent.gasLimit / GasLimitBoundDivisor + 1)
     val UpperGasLimit = validBlockParent.gasLimit + validBlockParent.gasLimit / GasLimitBoundDivisor - 1
@@ -110,13 +121,19 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
     }
   }
 
-  it should "return a failure if created with gas limit above threshold and block number >= eip106 block number" in {
+  it should "return a failure if created with gas limit above threshold and block number >= eip106 block number" in new TestSetup {
+    (electionManagerMock.verifyIsLeader _).expects(*,*).returning(true).anyNumberOfTimes()
+    (slotCalculatorMock.getSlotStartingTime _).expects(*).returning(System.currentTimeMillis() - 1000).anyNumberOfTimes()
+
     val validParent = validBlockParent.copy(gasLimit = Long.MaxValue)
     val invalidBlockHeader = validBlockHeader.copy(gasLimit = BigInt(Long.MaxValue) + 1)
     blockHeaderValidator.validate(invalidBlockHeader, validParent) shouldBe Left(HeaderGasLimitError)
   }
 
-  it should "return a failure if created based on invalid number" in {
+  it should "return a failure if created based on invalid number" in new TestSetup {
+    (electionManagerMock.verifyIsLeader _).expects(*,*).returning(true).anyNumberOfTimes()
+    (slotCalculatorMock.getSlotStartingTime _).expects(*).returning(System.currentTimeMillis() - 1000).anyNumberOfTimes()
+
     forAll(longGen) { number =>
       val blockHeader = validBlockHeader.copy(number = number)
       val validateResult = blockHeaderValidator.validate(blockHeader, validBlockParent)
@@ -126,7 +143,10 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
     }
   }
 
-  it should "validate correctly a block whose parent is in storage" in new EphemBlockchainTestSetup {
+  it should "validate correctly a block whose parent is in storage" in new TestSetup {
+    (electionManagerMock.verifyIsLeader _).expects(*,*).returning(true).anyNumberOfTimes()
+    (slotCalculatorMock.getSlotStartingTime _).expects(*).returning(System.currentTimeMillis() - 1000).anyNumberOfTimes()
+
     blockchain.save(validBlockParent)
     blockHeaderValidator.validate(validBlockHeader, blockchain) match {
       case Right(_)  => succeed
@@ -134,11 +154,52 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
     }
   }
 
-  it should "return a failure if the parent's header is not in storage" in new EphemBlockchainTestSetup {
+  it should "return a failure if the parent's header is not in storage" in new TestSetup {
+    (electionManagerMock.verifyIsLeader _).expects(*,*).returning(true).anyNumberOfTimes()
+    (slotCalculatorMock.getSlotStartingTime _).expects(*).returning(System.currentTimeMillis() - 1000).anyNumberOfTimes()
+
     blockHeaderValidator.validate(validBlockHeader, blockchain) match {
       case Left(HeaderParentNotFoundError) => succeed
       case _ => fail
     }
+  }
+
+  it should "return a failure if the slot number is lower than it's parent's" in new TestSetup {
+    (electionManagerMock.verifyIsLeader _).expects(*,*).returning(true).anyNumberOfTimes()
+    (slotCalculatorMock.getSlotStartingTime _).expects(*).returning(System.currentTimeMillis() - 1000).anyNumberOfTimes()
+
+    val invalidBlockHeader = validBlockHeader.copy(slotNumber = validBlockParent.slotNumber - 1)
+    blockHeaderValidator.validate(invalidBlockHeader, validBlockParent) shouldBe Left(HeaderSlotNumberError)
+  }
+
+  it should "return a failure if the block is from a future slot" in new TestSetup {
+    (electionManagerMock.verifyIsLeader _).expects(*,*).returning(true).anyNumberOfTimes()
+    (slotCalculatorMock.getSlotStartingTime _).expects(*).returning(System.currentTimeMillis() + 1000).anyNumberOfTimes()
+
+    blockHeaderValidator.validate(validBlockHeader, validBlockParent) shouldBe Left(HeaderSlotNumberError)
+  }
+
+  it should "return a failure if the block beneficiary wasn't the slot leader" in new TestSetup {
+    (electionManagerMock.verifyIsLeader _).expects(*,*).returning(false).anyNumberOfTimes()
+    (slotCalculatorMock.getSlotStartingTime _).expects(*).returning(System.currentTimeMillis() - 1000).anyNumberOfTimes()
+
+    val invalidBlockHeader = validBlockHeader.copy(slotNumber = validBlockParent.slotNumber - 1)
+    blockHeaderValidator.validate(invalidBlockHeader, validBlockParent) shouldBe Left(HeaderBeneficiaryError)
+  }
+
+  trait TestSetup extends EphemBlockchainTestSetup {
+    val ExtraDataSizeLimit = 20
+
+    //BlockHeader member's lengths obtained from Yellow paper
+    val NonceLength = 8 //64bit
+    val MixHashLength = 32 //256bit
+
+    val blockchainConfig = createBlockchainConfig()
+    val electionManagerMock = mock[ElectionManagerImpl]
+    val slotCalculatorMock = mock[SlotTimestampConverter]
+
+    val blockHeaderValidator = new BlockHeaderValidatorImpl(blockchainConfig, electionManagerMock, slotCalculatorMock)
+    val difficultyCalculator = new DifficultyCalculator(blockchainConfig)
   }
 
   val pausedDifficultyBombBlock = BlockHeader(

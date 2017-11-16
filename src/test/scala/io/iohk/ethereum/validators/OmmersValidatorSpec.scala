@@ -3,21 +3,29 @@ package io.iohk.ethereum.validators
 import akka.util.ByteString
 import io.iohk.ethereum.ObjectGenerators
 import io.iohk.ethereum.blockchain.sync.EphemBlockchainTestSetup
-import io.iohk.ethereum.domain.{Block, BlockHeader}
+import io.iohk.ethereum.domain.{Block, BlockHeader, SlotTimestampConverter}
 import io.iohk.ethereum.network.p2p.messages.PV62.BlockBody
+import io.iohk.ethereum.pos.ElectionManagerImpl
 import io.iohk.ethereum.utils.Config
 import io.iohk.ethereum.utils.BlockchainConfig
 import io.iohk.ethereum.validators.OmmersValidator.OmmersError._
+import org.scalamock.scalatest.MockFactory
 import org.scalatest.prop.PropertyChecks
 import org.scalatest.{FlatSpec, Matchers}
 import org.spongycastle.util.encoders.Hex
 
-class OmmersValidatorSpec extends FlatSpec with Matchers with PropertyChecks with ObjectGenerators {
+class OmmersValidatorSpec extends FlatSpec with Matchers with PropertyChecks with ObjectGenerators with MockFactory{
+
+  val electionManagerMock = mock[ElectionManagerImpl]
+  val slotCalculatorMock = mock[SlotTimestampConverter]
 
   val blockchainConfig = BlockchainConfig(Config.config)
-  val ommersValidator = new OmmersValidatorImpl(blockchainConfig, new BlockHeaderValidatorImpl(blockchainConfig))
+  val ommersValidator = new OmmersValidatorImpl(blockchainConfig, new BlockHeaderValidatorImpl(blockchainConfig, electionManagerMock, slotCalculatorMock))
 
   it should "validate correctly a valid list of ommers" in new BlockUtils {
+    (electionManagerMock.verifyIsLeader _).expects(*,*).returning(true).anyNumberOfTimes()
+    (slotCalculatorMock.getSlotStartingTime _).expects(*).returning(System.currentTimeMillis() - 1000).anyNumberOfTimes()
+
     ommersValidator.validate(ommersBlockParentHash, ommersBlockNumber, ommers, blockchain) match {
       case Right(_) => succeed
       case Left(err) => fail(s"Unexpected validation error: $err")
@@ -25,6 +33,9 @@ class OmmersValidatorSpec extends FlatSpec with Matchers with PropertyChecks wit
   }
 
   it should "report a failure if the list of ommers is too big" in new BlockUtils {
+    (electionManagerMock.verifyIsLeader _).expects(*,*).returning(true).anyNumberOfTimes()
+    (slotCalculatorMock.getSlotStartingTime _).expects(*).returning(System.currentTimeMillis() - 1000).anyNumberOfTimes()
+
     ommersValidator.validate(ommersBlockParentHash, ommersBlockNumber, Seq(ommer1, ommer2, ommer2), blockchain) match {
       case Left(OmmersLengthError) => succeed
       case Left(err) => fail(s"Unexpected validation error: $err")
@@ -33,6 +44,9 @@ class OmmersValidatorSpec extends FlatSpec with Matchers with PropertyChecks wit
   }
 
   it should "report a failure if there is an invalid header in the list of ommers" in new BlockUtils {
+    (electionManagerMock.verifyIsLeader _).expects(*,*).returning(true).anyNumberOfTimes()
+    (slotCalculatorMock.getSlotStartingTime _).expects(*).returning(System.currentTimeMillis() - 1000).anyNumberOfTimes()
+
     val invalidOmmer1: BlockHeader = ommer1.copy(number = ommer1.number + 1)
     ommersValidator.validate(ommersBlockParentHash, ommersBlockNumber, Seq(invalidOmmer1, ommer2), blockchain) match {
       case Left(OmmersNotValidError) => succeed
@@ -42,6 +56,9 @@ class OmmersValidatorSpec extends FlatSpec with Matchers with PropertyChecks wit
   }
 
   it should "report a failure if there is an ommer that was previously used" in new BlockUtils {
+    (electionManagerMock.verifyIsLeader _).expects(*,*).returning(true).anyNumberOfTimes()
+    (slotCalculatorMock.getSlotStartingTime _).expects(*).returning(System.currentTimeMillis() - 1000).anyNumberOfTimes()
+
     ommersValidator.validate(ommersBlockParentHash, ommersBlockNumber, Seq(block93.body.uncleNodesList.head, ommer2), blockchain) match {
       case Left(OmmersUsedBeforeError) => succeed
       case Left(err) => fail(s"Unexpected validation error: $err")
@@ -50,6 +67,9 @@ class OmmersValidatorSpec extends FlatSpec with Matchers with PropertyChecks wit
   }
 
   it should "report a failure if there is an ommer which is of the last ancestors" in new BlockUtils {
+    (electionManagerMock.verifyIsLeader _).expects(*,*).returning(true).anyNumberOfTimes()
+    (slotCalculatorMock.getSlotStartingTime _).expects(*).returning(System.currentTimeMillis() - 1000).anyNumberOfTimes()
+
     ommersValidator.validate(ommersBlockParentHash, ommersBlockNumber, Seq(ommer1, block92.header), blockchain) match {
       case Left(OmmersAncestorsError) => succeed
       case Left(err) => fail(s"Unexpected validation error: $err")
@@ -58,6 +78,9 @@ class OmmersValidatorSpec extends FlatSpec with Matchers with PropertyChecks wit
   }
 
   it should "report a failure if there is an ommer too old" in new BlockUtils {
+    (electionManagerMock.verifyIsLeader _).expects(*,*).returning(true).anyNumberOfTimes()
+    (slotCalculatorMock.getSlotStartingTime _).expects(*).returning(System.currentTimeMillis() - 1000).anyNumberOfTimes()
+
     ommersValidator.validate(ommersBlockParentHash, ommersBlockNumber, Seq(ommer1, block90.header), blockchain) match {
       case Left(OmmersAncestorsError) => succeed
       case _ => fail
@@ -65,6 +88,9 @@ class OmmersValidatorSpec extends FlatSpec with Matchers with PropertyChecks wit
   }
 
   it should "report a failure if there is a duplicated ommer in the ommer list" in new BlockUtils {
+    (electionManagerMock.verifyIsLeader _).expects(*,*).returning(true).anyNumberOfTimes()
+    (slotCalculatorMock.getSlotStartingTime _).expects(*).returning(System.currentTimeMillis() - 1000).anyNumberOfTimes()
+
     ommersValidator.validate(ommersBlockParentHash, ommersBlockNumber, Seq(ommer1, ommer1), blockchain) match {
       case Left(OmmersDuplicatedError) => succeed
       case Left(err) => fail(s"Unexpected validation error: $err")

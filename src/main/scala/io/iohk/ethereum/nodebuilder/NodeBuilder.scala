@@ -7,10 +7,10 @@ import akka.agent.Agent
 import io.iohk.ethereum.blockchain.data.GenesisDataLoader
 import io.iohk.ethereum.blockchain.sync.{BlockchainHostActor, SyncController}
 import io.iohk.ethereum.db.components.Storages.PruningModeComponent
-import io.iohk.ethereum.db.components.{SharedLevelDBDataSources, Storages}
+import io.iohk.ethereum.db.components.{DataSourcesComponent, SharedLevelDBDataSources, Storages, StoragesComponent}
 import io.iohk.ethereum.db.storage.AppStateStorage
 import io.iohk.ethereum.db.storage.pruning.PruningMode
-import io.iohk.ethereum.domain.{Blockchain, BlockchainImpl}
+import io.iohk.ethereum.domain.{Blockchain, BlockchainImpl, SlotTimestampConverter}
 import io.iohk.ethereum.jsonrpc.server.JsonRpcServer.JsonRpcServerConfig
 import io.iohk.ethereum.jsonrpc.NetService.NetServiceConfig
 import io.iohk.ethereum.ledger.{Ledger, LedgerImpl}
@@ -71,7 +71,8 @@ trait PruningConfigBuilder extends PruningModeComponent {
 }
 
 trait StorageBuilder {
-  lazy val storagesInstance =  new SharedLevelDBDataSources with PruningConfigBuilder with Storages.DefaultStorages
+  lazy val storagesInstance: StoragesComponent with DataSourcesComponent =
+    new SharedLevelDBDataSources with PruningConfigBuilder with Storages.DefaultStorages
 }
 
 trait DiscoveryConfigBuilder {
@@ -351,11 +352,13 @@ trait OmmersPoolBuilder {
 }
 
 trait ValidatorsBuilder {
-  self: BlockchainConfigBuilder =>
+  self: BlockchainConfigBuilder
+    with ElectionManagerBuilder
+    with SlotCalculatorBuilder =>
 
   lazy val validators = new Validators {
     val blockValidator: BlockValidator = BlockValidator
-    val blockHeaderValidator: BlockHeaderValidator = new BlockHeaderValidatorImpl(blockchainConfig)
+    val blockHeaderValidator: BlockHeaderValidator = new BlockHeaderValidatorImpl(blockchainConfig, electionManager, slotCalculator)
     val ommersValidator: OmmersValidator = new OmmersValidatorImpl(blockchainConfig, blockHeaderValidator)
     val signedTransactionValidator: SignedTransactionValidator = new SignedTransactionValidatorImpl(blockchainConfig)
   }
@@ -451,6 +454,15 @@ trait ProofOfStakeMinerBuilder {
     electionManager))
 }
 
+trait SlotCalculatorBuilder {
+  self: OuroborosConfigBuilder
+    with BlockchainBuilder =>
+
+  lazy val genesisTimestamp: Long = blockchain.genesisHeader.unixTimestamp
+
+  lazy val slotCalculator: SlotTimestampConverter = SlotTimestampConverter(ouroborosConfig, genesisTimestamp)
+}
+
 trait Node extends NodeKeyBuilder
   with ActorSystemBuilder
   with StorageBuilder
@@ -494,3 +506,4 @@ trait Node extends NodeKeyBuilder
   with OuroborosConfigBuilder
   with ElectionManagerBuilder
   with ProofOfStakeMinerBuilder
+  with SlotCalculatorBuilder

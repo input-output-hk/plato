@@ -403,6 +403,7 @@ object PruningConfig {
 
 trait OuroborosConfig {
   val knownStakeholders: Seq[Address]
+  val slotDuration: Duration
 }
 
 object OuroborosConfig {
@@ -411,6 +412,7 @@ object OuroborosConfig {
     new OuroborosConfig {
       override val knownStakeholders = Try(ouroborosConfig.getStringList("known-stakeholders").asScala.toList)
           .toOption.getOrElse(List.empty).map(Address(_))
+      override val slotDuration: Duration = ouroborosConfig.getDuration("slot-duration").toMillis.millis
     }
   }
 }

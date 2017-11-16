@@ -2,10 +2,11 @@ package io.iohk.ethereum.ledger
 
 import akka.util.ByteString
 import io.iohk.ethereum.Fixtures
+import io.iohk.ethereum.Mocks.MockValidatorsAlwaysSucceed
 import io.iohk.ethereum.blockchain.sync.EphemBlockchainTestSetup
 import io.iohk.ethereum.crypto.ECDSASignature
 import io.iohk.ethereum.domain._
-import io.iohk.ethereum.nodebuilder.{BlockchainConfigBuilder, SyncConfigBuilder, ValidatorsBuilder}
+import io.iohk.ethereum.nodebuilder._
 import org.scalatest._
 import io.iohk.ethereum.utils.{BlockchainConfig, DaoForkConfig, Logger, MonetaryPolicyConfig}
 import io.iohk.ethereum.vm.VM
@@ -67,7 +68,6 @@ class  SimulateTransactionTest extends FlatSpec with Matchers with Logger {
 
 trait ScenarioSetup
   extends EphemBlockchainTestSetup
-  with ValidatorsBuilder
   with SyncConfigBuilder
   with BlockchainConfigBuilder {
 
@@ -92,7 +92,7 @@ trait ScenarioSetup
 
   val emptyWorld = blockchain.getWorldStateProxy(-1, UInt256.Zero, None)
 
-  val ledger = new LedgerImpl(VM, blockchain, blockchainConfig, syncConfig, validators)
+  val ledger = new LedgerImpl(VM, blockchain, blockchainConfig, syncConfig, MockValidatorsAlwaysSucceed)
 
   val existingAddress = Address(10)
   val existingAccount = Account(nonce = UInt256.Zero, balance = UInt256(10))
@@ -133,9 +133,6 @@ trait ScenarioSetup
         .saveAccount(existingAddress, existingAccount)
         .saveCode(existingAddress, failingCode)
     )
-
-  val someGenesisBlock =
-    Hex.decode("f901fcf901f7a00000000000000000000000000000000000000000000000000000000000000000a01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347948888f1f195afa192cfee860698584c030f4c9db1a07dba07d6b448a186e9612e5f737d1c909dce473e53199901a302c00646d523c1a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421b90100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008302000080832fefd8808454c98c8142a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421880102030405060708c0c0")
 
   val minGasLimitRequiredForFailingTransaction: BigInt = 122397
 
