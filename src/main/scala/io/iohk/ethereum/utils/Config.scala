@@ -242,12 +242,10 @@ object TxPoolConfig {
 trait MiningConfig {
   val ommersPoolSize: Int
   val blockCacheSize: Int
-  val coinbase: Address
   val activeTimeout: FiniteDuration
   val ommerPoolQueryTimeout: FiniteDuration
   val headerExtraData: ByteString
   val miningEnabled: Boolean
-  val ethashDir: String
   val mineRounds: Int
 }
 
@@ -256,7 +254,6 @@ object MiningConfig {
     val miningConfig = etcClientConfig.getConfig("mining")
 
     new MiningConfig {
-      val coinbase: Address = Address(miningConfig.getString("coinbase"))
       val blockCacheSize: Int = miningConfig.getInt("block-cashe-size")
       val ommersPoolSize: Int = miningConfig.getInt("ommers-pool-size")
       val activeTimeout: FiniteDuration = miningConfig.getDuration("active-timeout").toMillis.millis
@@ -266,7 +263,6 @@ object MiningConfig {
           .getString("header-extra-data").getBytes)
           .take(BlockHeaderValidatorImpl.MaxExtraDataSize)
       override val miningEnabled = miningConfig.getBoolean("mining-enabled")
-      override val ethashDir = miningConfig.getString("ethash-dir")
       override val mineRounds = miningConfig.getInt("mine-rounds")
     }
   }
@@ -407,6 +403,20 @@ object PruningConfig {
 
     new PruningConfig {
       override val mode: PruningMode = pruningMode
+    }
+  }
+}
+
+trait OuroborosConfig {
+  val knownStakeholders: Seq[Address]
+}
+
+object OuroborosConfig {
+  def apply(etcClientConfig: com.typesafe.config.Config): OuroborosConfig = {
+    val ouroborosConfig = etcClientConfig.getConfig("ouroboros")
+    new OuroborosConfig {
+      override val knownStakeholders = Try(ouroborosConfig.getStringList("known-stakeholders").asScala.toList)
+          .toOption.getOrElse(List.empty).map(Address(_))
     }
   }
 }
