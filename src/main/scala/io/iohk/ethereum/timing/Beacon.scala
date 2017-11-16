@@ -8,6 +8,7 @@ import scala.concurrent.duration._
 class Beacon(
   miner: ActorRef,
   slotDuration: FiniteDuration,
+  startingTime: Long = System.currentTimeMillis,
   externalSchedulerOpt: Option[Scheduler] = None)
   extends Actor
     with ActorLogging {
@@ -15,7 +16,6 @@ class Beacon(
   import Beacon._
 
   val startingSlotNumber: SlotNumber = 1
-  val startingTime: Long = System.currentTimeMillis
 
   def scheduler: Scheduler = externalSchedulerOpt getOrElse context.system.scheduler
 
@@ -32,7 +32,7 @@ class Beacon(
     case NewSlot(currentSlotNumber) =>
       log.debug(s"Generating new slot $currentSlotNumber")
 
-      import io.iohk.ethereum.mining.Miner._
+      import io.iohk.ethereum.mining.ProofOfStakeMiner._
       miner ! StartMining(currentSlotNumber)
 
       // FIXME: The use of longValue may cause precision loss.
