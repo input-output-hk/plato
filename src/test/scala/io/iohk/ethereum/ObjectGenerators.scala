@@ -132,6 +132,7 @@ trait ObjectGenerators {
     extraData <- byteStringOfLengthNGen(8)
     mixHash <- byteStringOfLengthNGen(8)
     nonce <- byteStringOfLengthNGen(8)
+    slotNumber <- bigIntGen
   } yield BlockHeader(
     parentHash = parentHash,
     ommersHash = ommersHash,
@@ -147,7 +148,8 @@ trait ObjectGenerators {
     unixTimestamp = unixTimestamp,
     extraData = extraData,
     mixHash = mixHash,
-    nonce = nonce)
+    nonce = nonce,
+    slotNumber = slotNumber)
 
   def seqBlockHeaderGen: Gen[Seq[BlockHeader]] = Gen.listOf(blockHeaderGen)
 

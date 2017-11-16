@@ -52,12 +52,13 @@ case class BlockHeaderDef(
   timestamp: Long,
   extraData: ByteString,
   mixHash: ByteString,
-  nonce: ByteString
+  nonce: ByteString,
+  slotNumber: BigInt
 ) {
 
   def toBlockHeader: BlockHeader =
     BlockHeader(parentHash, uncleHash, coinbase, stateRoot, transactionsTrie, receiptTrie, bloom, difficulty, number,
-      gasLimit, gasUsed, timestamp, extraData, mixHash, nonce
+      gasLimit, gasUsed, timestamp, extraData, mixHash, nonce, slotNumber
     )
 }
 

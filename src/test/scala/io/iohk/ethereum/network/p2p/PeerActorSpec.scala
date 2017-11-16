@@ -188,7 +188,7 @@ class PeerActorSpec extends FlatSpec with Matchers {
       ByteString("unused"), ByteString("unused"), ByteString("unused"), ByteString("unused"),
       ByteString("unused"), ByteString("unused"), ByteString("unused"),
       daoForkBlockTotalDifficulty + 100000, 3000000 ,0, 0, 0,
-      ByteString("unused"),ByteString("unused"),ByteString("unused"))
+      ByteString("unused"),ByteString("unused"),ByteString("unused"), slotNumber = 0)
     storagesInstance.storages.appStateStorage.putBestBlockNumber(3000000) // after the fork
     blockchain.save(header)
     storagesInstance.storages.blockNumberMappingStorage.put(3000000, header.hash)
@@ -354,7 +354,8 @@ class PeerActorSpec extends FlatSpec with Matchers {
         unixTimestamp = 1469020839L,
         extraData = ByteString(Hex.decode("e4b883e5bda9e7a59ee4bb99e9b1bc")),
         mixHash = ByteString(Hex.decode("c52daa7054babe515b17ee98540c0889cf5e1595c5dd77496997ca84a68c8da1")),
-        nonce = ByteString(Hex.decode("05276a600980199d")))
+        nonce = ByteString(Hex.decode("05276a600980199d")),
+        slotNumber = BigInt(1920000))
 
     val nonEtcForkBlockHeader =
       BlockHeader(
@@ -372,7 +373,8 @@ class PeerActorSpec extends FlatSpec with Matchers {
         unixTimestamp = 1469020839L,
         extraData = ByteString("unused"),
         mixHash = ByteString("unused"),
-        nonce = ByteString("unused"))
+        nonce = ByteString("unused"),
+        slotNumber = BigInt(1920000))
   }
 
   trait NodeStatusSetup extends SecureRandomBuilder with EphemBlockchainTestSetup {
@@ -400,7 +402,8 @@ class PeerActorSpec extends FlatSpec with Matchers {
       unixTimestamp = 0,
       extraData = ByteString("0"),
       mixHash = ByteString("0"),
-      nonce = ByteString("0"))
+      nonce = ByteString("0"),
+      slotNumber = 0)
     blockchain.save(testGenesisHeader)
 
     val daoForkBlockNumber = 1920000

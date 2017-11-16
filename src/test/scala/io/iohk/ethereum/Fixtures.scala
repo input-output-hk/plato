@@ -42,7 +42,8 @@ object Fixtures {
         unixTimestamp = 1486131165,
         extraData = ByteString(Hex.decode("d5830104098650617269747986312e31332e30826c69")),
         mixHash = ByteString(Hex.decode("be90ac33b3f6d0316e60eef505ff5ec7333c9f3c85c1a36fc2523cd6b75ddb8a")),
-        nonce = ByteString(Hex.decode("2b0fb0c002946392"))
+        nonce = ByteString(Hex.decode("2b0fb0c002946392")),
+        slotNumber = 3125369
       )
 
       val body = BlockBody(
@@ -111,7 +112,7 @@ object Fixtures {
         ByteString(Hex.decode("067bd4b1a9d37ff932473212856262d59f999935a4a357faf71b1d7e276b762b"))
       )
 
-      val size = 1000L
+      val size = 1004L
     }
 
     object Genesis extends FixtureBlock {
@@ -130,7 +131,8 @@ object Fixtures {
         unixTimestamp = 0,
         extraData = ByteString(Hex.decode("11bbe8db4e347b4e8c937c1c8370e4b5ed33adb3db69cbdb7a38e1e50b1b82fa")),
         mixHash = ByteString(Hex.decode("0000000000000000000000000000000000000000000000000000000000000000")),
-        nonce = ByteString(Hex.decode("0000000000000042"))
+        nonce = ByteString(Hex.decode("0000000000000042")),
+        slotNumber = 0
       )
       override val body: BlockBody = BlockBody(
         transactionList = Seq[SignedTransaction](
@@ -139,7 +141,7 @@ object Fixtures {
         )
       )
       override val transactionHashes: Seq[ByteString] = Seq()
-      override val size: Long = 540
+      override val size: Long = 541
     }
 
     object DaoForkBlock extends FixtureBlock {
@@ -158,7 +160,8 @@ object Fixtures {
         unixTimestamp = 1469020839,
         extraData = ByteString(Hex.decode("e4b883e5bda9e7a59ee4bb99e9b1bc")),
         mixHash = ByteString(Hex.decode("c52daa7054babe515b17ee98540c0889cf5e1595c5dd77496997ca84a68c8da1")),
-        nonce = ByteString(Hex.decode("05276a600980199d"))
+        nonce = ByteString(Hex.decode("05276a600980199d")),
+        slotNumber = 1920000
       )
       override val body: BlockBody = BlockBody(
         transactionList = Seq[SignedTransaction](
@@ -227,7 +230,7 @@ object Fixtures {
         ByteString(Hex.decode("4677a93807b73a0875d3a292eacb450d0af0d6f0eec6f283f8ad927ec539a17b")),
         ByteString(Hex.decode("2a5177e6d6cea40594c7d4b0115dcd087443be3ec2fa81db3c21946a5e51cea9"))
       )
-      override val size: Long = 978L
+      override val size: Long = 982L
     }
 
     object ProDaoForkBlock extends FixtureBlock {
@@ -246,7 +249,8 @@ object Fixtures {
         unixTimestamp = 1469020840,
         extraData = ByteString(Hex.decode("64616f2d686172642d666f726b")),
         mixHash = ByteString(Hex.decode("5b5acbf4bf305f948bd7be176047b20623e1417f75597341a059729165b92397")),
-        nonce = ByteString(Hex.decode("bede87201de42426"))
+        nonce = ByteString(Hex.decode("bede87201de42426")),
+        slotNumber = 1920000
       )
       override lazy val body: BlockBody = BlockBody(
         transactionList = Seq[SignedTransaction](
@@ -332,7 +336,8 @@ object Fixtures {
         unixTimestamp = 1469020838,
         extraData = ByteString(Hex.decode("4477617266506f6f6c")),
         mixHash = ByteString(Hex.decode("7f9ac1ddeafff0f926ed9887b8cf7d50c3f919d902e618b957022c46c8b404a6")),
-        nonce = ByteString(Hex.decode("60832709c8979daa"))
+        nonce = ByteString(Hex.decode("60832709c8979daa")),
+        slotNumber = 1919999
       )
       override lazy val body: BlockBody = ???
       override lazy val transactionHashes: Seq[ByteString] = ???

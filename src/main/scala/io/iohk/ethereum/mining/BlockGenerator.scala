@@ -28,7 +28,7 @@ class BlockGenerator(blockchain: Blockchain, blockchainConfig: BlockchainConfig,
 
   private val cache: AtomicReference[List[PendingBlock]] = new AtomicReference(Nil)
 
-  def generateBlockForMining(parent: Block, transactions: Seq[SignedTransaction], ommers: Seq[BlockHeader], beneficiary: Address):
+  def generateBlockForMining(parent: Block, transactions: Seq[SignedTransaction], ommers: Seq[BlockHeader], beneficiary: Address, slotNumber: BigInt):
   Either[BlockPreparationError, PendingBlock] = {
     val blockNumber = parent.header.number + 1
     val parentHash = parent.header.hash
@@ -36,7 +36,7 @@ class BlockGenerator(blockchain: Blockchain, blockchainConfig: BlockchainConfig,
     val result = validators.ommersValidator.validate(parentHash, blockNumber, ommers, blockchain)
       .left.map(InvalidOmmers).flatMap { _ =>
         val blockTimestamp = blockTimestampProvider.getEpochSecond
-        val header: BlockHeader = prepareHeader(blockNumber, ommers, beneficiary, parent, blockTimestamp)
+        val header: BlockHeader = prepareHeader(blockNumber, ommers, beneficiary, parent, blockTimestamp, slotNumber)
         val transactionsForBlock: List[SignedTransaction] = prepareTransactions(transactions, header.gasLimit)
         val body = BlockBody(transactionsForBlock, ommers)
         val block = Block(header, body)
@@ -89,7 +89,7 @@ class BlockGenerator(blockchain: Blockchain, blockchainConfig: BlockchainConfig,
     transactionsForBlock
   }
 
-  private def prepareHeader(blockNumber: BigInt, ommers: Seq[BlockHeader], beneficiary: Address, parent: Block, blockTimestamp: Long) = {
+  private def prepareHeader(blockNumber: BigInt, ommers: Seq[BlockHeader], beneficiary: Address, parent: Block, blockTimestamp: Long, slotNumber: BigInt) = {
     import blockchainConfig.daoForkConfig
 
     BlockHeader(
@@ -108,7 +108,8 @@ class BlockGenerator(blockchain: Blockchain, blockchainConfig: BlockchainConfig,
       unixTimestamp = blockTimestamp,
       extraData = daoForkConfig.flatMap(daoForkConfig => daoForkConfig.getExtraData(blockNumber)).getOrElse(miningConfig.headerExtraData),
       mixHash = ByteString.empty,
-      nonce = ByteString.empty
+      nonce = ByteString.empty,
+      slotNumber = slotNumber
     )
   }
 
