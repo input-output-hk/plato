@@ -1267,10 +1267,8 @@ class JsonRpcControllerSpec extends FlatSpec with Matchers with PropertyChecks w
     val miningConfig = new MiningConfig {
       override val blockCacheSize: Int = 30
       override val ommersPoolSize: Int = 30
-      override val activeTimeout: FiniteDuration = Timeouts.normalTimeout
       override val ommerPoolQueryTimeout: FiniteDuration = Timeouts.normalTimeout
       override val headerExtraData: ByteString = ByteString.empty
-      override val mineRounds: Int = 100000
     }
 
     val filterConfig = new FilterConfig {

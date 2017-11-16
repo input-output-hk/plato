@@ -696,10 +696,8 @@ class EthServiceSpec extends FlatSpec with Matchers with ScalaFutures with MockF
     val miningConfig = new MiningConfig {
       override val blockCacheSize: Int = 30
       override val ommersPoolSize: Int = 30
-      override val activeTimeout: FiniteDuration = Timeouts.shortTimeout
       override val ommerPoolQueryTimeout: FiniteDuration = Timeouts.normalTimeout
       override val headerExtraData: ByteString = ByteString.empty
-      override val mineRounds: Int = 100000
     }
 
     val filterConfig = new FilterConfig {

@@ -242,10 +242,8 @@ object TxPoolConfig {
 trait MiningConfig {
   val ommersPoolSize: Int
   val blockCacheSize: Int
-  val activeTimeout: FiniteDuration
   val ommerPoolQueryTimeout: FiniteDuration
   val headerExtraData: ByteString
-  val mineRounds: Int
 }
 
 object MiningConfig {
@@ -255,13 +253,11 @@ object MiningConfig {
     new MiningConfig {
       val blockCacheSize: Int = miningConfig.getInt("block-cashe-size")
       val ommersPoolSize: Int = miningConfig.getInt("ommers-pool-size")
-      val activeTimeout: FiniteDuration = miningConfig.getDuration("active-timeout").toMillis.millis
       val ommerPoolQueryTimeout: FiniteDuration = miningConfig.getDuration("ommer-pool-query-timeout").toMillis.millis
       override val headerExtraData: ByteString =
         ByteString(miningConfig
           .getString("header-extra-data").getBytes)
           .take(BlockHeaderValidatorImpl.MaxExtraDataSize)
-      override val mineRounds = miningConfig.getInt("mine-rounds")
     }
   }
 }
