@@ -4,6 +4,6 @@ import io.iohk.ethereum.domain.{Address, Blockchain}
 
 trait ElectionManager {
 
-  def verifyIsLeader(publicKey: Address, slotNumber: BigInt, blockchain: Blockchain): Boolean
+  def verifyIsLeader(stakeholder: Address, slotNumber: BigInt, blockchain: Blockchain): Boolean
 
 }
