@@ -410,3 +410,17 @@ object PruningConfig {
     }
   }
 }
+
+trait OuroborosConfig {
+  val knownStakeholders: Seq[Address]
+}
+
+object OuroborosConfig {
+  def apply(etcClientConfig: com.typesafe.config.Config): OuroborosConfig = {
+    val ouroborosConfig = etcClientConfig.getConfig("ouroboros")
+    new OuroborosConfig {
+      override val knownStakeholders = Try(ouroborosConfig.getStringList("known-stakeholders").asScala.toList)
+          .toOption.getOrElse(List.empty).map(Address(_))
+    }
+  }
+}
