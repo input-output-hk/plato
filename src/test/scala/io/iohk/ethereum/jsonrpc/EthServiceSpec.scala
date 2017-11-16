@@ -463,11 +463,6 @@ class EthServiceSpec extends FlatSpec with Matchers with ScalaFutures with MockF
     response.futureValue shouldEqual Right(GetMiningResponse(false))
   }*/
 
-  it should "return correct coinbase" in new TestSetup {
-    val response = ethService.getCoinbase(GetCoinbaseRequest())
-    response.futureValue shouldEqual Right(GetCoinbaseResponse(miningConfig.coinbase))
-  }
-
   it should "return 0 gas price if there are no transactions" in new TestSetup {
     (appStateStorage.getBestBlockNumber _).expects().returning(42)
 
@@ -712,14 +707,12 @@ class EthServiceSpec extends FlatSpec with Matchers with ScalaFutures with MockF
     val filterManager = TestProbe()
 
     val miningConfig = new MiningConfig {
-      override val coinbase: Address = Address(42)
       override val blockCacheSize: Int = 30
       override val ommersPoolSize: Int = 30
       override val activeTimeout: FiniteDuration = Timeouts.shortTimeout
       override val ommerPoolQueryTimeout: FiniteDuration = Timeouts.normalTimeout
       override val headerExtraData: ByteString = ByteString.empty
       override val miningEnabled: Boolean = false
-      override val ethashDir: String = "~/.ethash"
       override val mineRounds: Int = 100000
     }
 

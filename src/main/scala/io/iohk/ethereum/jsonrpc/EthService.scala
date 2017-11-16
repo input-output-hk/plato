@@ -112,9 +112,6 @@ object EthService {
   case class GetUncleCountByBlockHashRequest(blockHash: ByteString)
   case class GetUncleCountByBlockHashResponse(result: BigInt)
 
-  case class GetCoinbaseRequest()
-  case class GetCoinbaseResponse(address: Address)
-
   case class GetBlockTransactionCountByNumberRequest(block: BlockParam)
   case class GetBlockTransactionCountByNumberResponse(result: BigInt)
 
@@ -412,9 +409,6 @@ class EthService(
         PendingTransactionsResponse(Nil)
       }
   }
-
-  def getCoinbase(req: GetCoinbaseRequest): ServiceResponse[GetCoinbaseResponse] =
-    Future.successful(Right(GetCoinbaseResponse(miningConfig.coinbase)))
 
   /**
     * Implements the eth_syncing method that returns syncing information if the node is syncing.

@@ -5,7 +5,7 @@ import io.iohk.ethereum.jsonrpc.EthService._
 import io.iohk.ethereum.jsonrpc.JsonRpcController.{JsonDecoder, JsonEncoder}
 import io.iohk.ethereum.jsonrpc.JsonRpcErrors.InvalidParams
 import io.iohk.ethereum.jsonrpc.PersonalService.{SendTransactionRequest, SendTransactionResponse, SignRequest}
-import org.json4s.{Extraction, JsonAST}
+import org.json4s.Extraction
 import org.json4s.JsonAST.{JArray, JBool, JString, JValue, _}
 import org.json4s.JsonDSL._
 
@@ -40,17 +40,6 @@ object EthJsonMethodsImplicits extends JsonMethodsImplicits {
     }
 
     override def encodeJson(t: GetMiningResponse): JValue = JBool(t.isMining)
-  }
-
-  implicit val eth_coinbase = new JsonDecoder[GetCoinbaseRequest] with JsonEncoder[GetCoinbaseResponse] {
-    override def decodeJson(params: Option[JArray]): Either[JsonRpcError, GetCoinbaseRequest] = params match {
-      case None | Some(JArray(Nil)) => Right(GetCoinbaseRequest())
-      case Some(_) => Left(InvalidParams())
-    }
-
-    override def encodeJson(t: GetCoinbaseResponse): JsonAST.JValue ={
-      encodeAsHex(t.address.bytes)
-    }
   }
 
   implicit val eth_getBlockTransactionCountByHash = new JsonDecoder[TxCountByBlockHashRequest] with JsonEncoder[TxCountByBlockHashResponse] {

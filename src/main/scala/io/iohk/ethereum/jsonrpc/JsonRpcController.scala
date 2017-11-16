@@ -100,8 +100,6 @@ class JsonRpcController(
       handle[GetMiningRequest, GetMiningResponse](ethService.getMining, req)
     case req @ JsonRpcRequest(_, "eth_blockNumber", _, _) =>
       handle[BestBlockNumberRequest, BestBlockNumberResponse](ethService.bestBlockNumber, req)
-    case req @ JsonRpcRequest(_, "eth_coinbase", _, _) =>
-      handle[GetCoinbaseRequest, GetCoinbaseResponse](ethService.getCoinbase, req)
     case req @ JsonRpcRequest(_, "eth_getBlockTransactionCountByHash", _, _) =>
       handle[TxCountByBlockHashRequest, TxCountByBlockHashResponse](ethService.getBlockTransactionCountByHash, req)
     case req @ JsonRpcRequest(_, "eth_getBlockByHash", _, _) =>
