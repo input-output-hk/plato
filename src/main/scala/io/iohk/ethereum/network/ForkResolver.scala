@@ -11,6 +11,11 @@ trait ForkResolver {
   def isAccepted(fork: Fork): Boolean
 }
 
+/**
+  * As the will be no DAO fork block on Ouroboros, the ForkResolver was set to return that the peer is
+  * always "on the same side of the fork" as our node.
+  * FIXME: Remove it and it's usages.
+  */
 object ForkResolver {
 
   trait Fork
@@ -22,10 +27,7 @@ object ForkResolver {
 
     override def forkBlockNumber: BigInt = daoForkConfig.forkBlockNumber
 
-    override def recognizeFork(blockHeader: BlockHeader): Fork = {
-      if (blockHeader.hash == daoForkConfig.forkBlockHash) AcceptedFork
-      else RejectedFork
-    }
+    override def recognizeFork(blockHeader: BlockHeader): Fork = AcceptedFork
 
     override def isAccepted(fork: Fork): Boolean = fork == AcceptedFork
   }

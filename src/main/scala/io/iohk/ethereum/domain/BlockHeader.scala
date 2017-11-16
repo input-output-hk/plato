@@ -6,6 +6,12 @@ import io.iohk.ethereum.network.p2p.messages.PV62.BlockHeaderImplicits._
 import io.iohk.ethereum.rlp.{RLPList, encode => rlpEncode}
 import org.spongycastle.util.encoders.Hex
 
+/**
+  * FIXME: Several fields were left in Ouroboros for compatibility only and should be removed:
+  *  - mixHash and nonce: as PoW is no longer used
+  *  - difficulty: as it's not used in PoS, the best chain is determined just by length
+  *  - unixTimestamp: as it's usages will be replaced by the slotNumber
+  */
 case class BlockHeader(
     parentHash: ByteString,
     ommersHash: ByteString,

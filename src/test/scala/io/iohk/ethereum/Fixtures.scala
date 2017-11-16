@@ -7,6 +7,13 @@ import org.spongycastle.util.encoders.Hex
 
 object Fixtures {
 
+  /**
+    * This blocks were initially obtained from the Ethereum network, however some minor changes were
+    * included due to the difference with the Ouroboros protocol:
+    *  - Difficulty was set to 1 for all blocks
+    *  - Slot number field was added an set equal to block number
+    *  - Block size was adjusted accordingly to fit the changes made
+    */
   object Blocks {
 
     trait FixtureBlock {
@@ -35,7 +42,7 @@ object Fixtures {
         transactionsRoot = ByteString(Hex.decode("8ae451039a8bf403b899dcd23252d94761ddd23b88c769d9b7996546edc47fac")),
         receiptsRoot = ByteString(Hex.decode("8b472d8d4d39bae6a5570c2a42276ed2d6a56ac51a1a356d5b17c5564d01fd5d")),
         logsBloom = ByteString(Hex.decode("0" * 512)),
-        difficulty = BigInt("14005986920576"),
+        difficulty = 1,
         number = 3125369,
         gasLimit = 4699996,
         gasUsed = 84000,
@@ -112,7 +119,7 @@ object Fixtures {
         ByteString(Hex.decode("067bd4b1a9d37ff932473212856262d59f999935a4a357faf71b1d7e276b762b"))
       )
 
-      val size = 1004L
+      val size = 998L
     }
 
     object Genesis extends FixtureBlock {
@@ -124,7 +131,7 @@ object Fixtures {
         transactionsRoot = ByteString(Hex.decode("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")),
         receiptsRoot = ByteString(Hex.decode("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")),
         logsBloom = ByteString(Hex.decode("0" * 512)),
-        difficulty = BigInt("17179869184"),
+        difficulty = 1,
         number = 0,
         gasLimit = 5000,
         gasUsed = 0,
@@ -141,7 +148,7 @@ object Fixtures {
         )
       )
       override val transactionHashes: Seq[ByteString] = Seq()
-      override val size: Long = 541
+      override val size: Long = 536
     }
 
     object DaoForkBlock extends FixtureBlock {
@@ -153,7 +160,7 @@ object Fixtures {
         transactionsRoot = ByteString(Hex.decode("d33068a7f21bff5018a00ca08a3566a06be4196dfe9e39f96e431565a619d455")),
         receiptsRoot = ByteString(Hex.decode("7bda9aa65977800376129148cbfe89d35a016dd51c95d6e6dc1e76307d315468")),
         logsBloom = ByteString(Hex.decode("0" * 512)),
-        difficulty = BigInt("62413376722602"),
+        difficulty = 1,
         number = 1920000,
         gasLimit = 4712384,
         gasUsed = 84000,
@@ -230,7 +237,7 @@ object Fixtures {
         ByteString(Hex.decode("4677a93807b73a0875d3a292eacb450d0af0d6f0eec6f283f8ad927ec539a17b")),
         ByteString(Hex.decode("2a5177e6d6cea40594c7d4b0115dcd087443be3ec2fa81db3c21946a5e51cea9"))
       )
-      override val size: Long = 982L
+      override val size: Long = 976L
     }
 
     object ProDaoForkBlock extends FixtureBlock {
@@ -242,7 +249,7 @@ object Fixtures {
         transactionsRoot = ByteString(Hex.decode("7701df8e07169452554d14aadd7bfa256d4a1d0355c1d174ab373e3e2d0a3743")),
         receiptsRoot = ByteString(Hex.decode("26cf9d9422e9dd95aedc7914db690b92bab6902f5221d62694a2fa5d065f534b")),
         logsBloom = ByteString(Hex.decode("0" * 512)),
-        difficulty = BigInt("62413376722602"),
+        difficulty = 1,
         number = 1920000,
         gasLimit = 4712384,
         gasUsed = 84000,
@@ -317,7 +324,7 @@ object Fixtures {
         ByteString(Hex.decode("50d8156ee48d01b56cb17b6cb2ac8f29e1bf565be0e604b2d8ffb2fb50a0f611")),
         ByteString(Hex.decode("2a5177e6d6cea40594c7d4b0115dcd087443be3ec2fa81db3c21946a5e51cea9"))
       )
-      override val size: Long = 976
+      override val size: Long = 974
     }
 
     object DaoParentBlock extends FixtureBlock {
@@ -329,7 +336,7 @@ object Fixtures {
         transactionsRoot = ByteString(Hex.decode("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")),
         receiptsRoot = ByteString(Hex.decode("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")),
         logsBloom = ByteString(Hex.decode("00" * 256)),
-        difficulty = BigInt("62382916183238"),
+        difficulty = 1,
         number = 1919999,
         gasLimit = 4707788,
         gasUsed = 0,

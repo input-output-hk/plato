@@ -73,8 +73,7 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
       val validateResult = blockHeaderValidator.validate(blockHeader, validBlockParent)
       timestamp match {
         case t if t <= validBlockParent.unixTimestamp => assert(validateResult == Left(HeaderTimestampError))
-        case validBlockHeader.unixTimestamp => assert(validateResult == Right(BlockHeaderValid))
-        case _ => assert(validateResult == Left(HeaderDifficultyError))
+        case _ => assert(validateResult == Right(BlockHeaderValid))
       }
     }
   }
@@ -142,26 +141,6 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
     }
   }
 
-  it should "properly validate a block after difficulty bomb pause" in new EphemBlockchainTestSetup {
-    val res = blockHeaderValidator.validate(pausedDifficultyBombBlock, pausedDifficultyBombBlockParent)
-    res shouldBe Right(BlockHeaderValid)
-  }
-
-  it should "properly calculate the difficulty after difficulty bomb resume" in new EphemBlockchainTestSetup {
-    val parentHeader: BlockHeader = validBlockParent.copy(
-      number = 5000101,
-      unixTimestamp = 1513175023,
-      difficulty = BigInt("22627021745803"))
-
-    val blockNumber: BigInt = parentHeader.number + 1
-    val blockTimestamp: Long = parentHeader.unixTimestamp + 6
-
-    val difficulty: BigInt = difficultyCalculator.calculateDifficulty(blockNumber, blockTimestamp, parentHeader)
-    val expected = BigInt("22638338531720")
-
-    difficulty shouldBe expected
-  }
-
   val pausedDifficultyBombBlock = BlockHeader(
     parentHash = ByteString(Hex.decode("77af90df2b60071da7f11060747b6590a3bc2f357da4addccb5eef7cb8c2b723")),
     ommersHash = ByteString(Hex.decode("1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347")),
@@ -170,7 +149,7 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
     transactionsRoot = ByteString(Hex.decode("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")),
     receiptsRoot = ByteString(Hex.decode("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")),
     logsBloom = ByteString(Hex.decode("00" * 256)),
-    difficulty = BigInt("20626433633447"),
+    difficulty = 1,
     number = 3582022,
     gasLimit = 4700036,
     gasUsed = 0,
@@ -189,7 +168,7 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
     transactionsRoot = ByteString(Hex.decode("6616c23aeb486dd47aca667814ffed831553c7322440913b95847235a4c3bb97")),
     receiptsRoot = ByteString(Hex.decode("5fa90473cd08a08fc766329651d81bb6e4ef2bb330cf90c3025927a3bafe0c57")),
     logsBloom = ByteString(Hex.decode("00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000100000000000000000000000080000000000000000020000000000000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000008000000000000000")),
-    difficulty = BigInt("20616098743527"),
+    difficulty = 1,
     number = 3582021,
     gasLimit = 4699925,
     gasUsed = 1005896,
@@ -208,7 +187,7 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
     transactionsRoot = ByteString(Hex.decode("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")),
     receiptsRoot = ByteString(Hex.decode("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")),
     logsBloom = ByteString(Hex.decode("00" * 256)),
-    difficulty = BigInt("989289"),
+    difficulty = 1,
     number = 19,
     gasLimit = 131749155,
     gasUsed = 0,
@@ -227,7 +206,7 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
     transactionsRoot = ByteString(Hex.decode("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")),
     receiptsRoot = ByteString(Hex.decode("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")),
     logsBloom = ByteString(Hex.decode("00" * 256)),
-    difficulty = BigInt("989772"),
+    difficulty = 1,
     number = 20,
     gasLimit = 131620495,
     gasUsed = 0,
@@ -279,7 +258,7 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
     transactionsRoot = ByteString(Hex.decode("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")),
     receiptsRoot = ByteString(Hex.decode("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")),
     logsBloom = ByteString(Hex.decode("00" * 256)),
-    difficulty = BigInt("62230570926948"),
+    difficulty = 1,
     number = 1920008,
     gasLimit = 4707788,
     gasUsed = 0,
@@ -298,7 +277,7 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
     transactionsRoot = ByteString(Hex.decode("a8060f1391fd4cbde4b03d83b32a1bda445578cd6ec6b7982db20c499ed3682b")),
     receiptsRoot = ByteString(Hex.decode("ab66b1986e713eaf5621059e79f04ba9c528187c1b9da969f46442c3f915c120")),
     logsBloom = ByteString(Hex.decode("00000000000000020000000000020000000000000008000000000000000000000000000000000000000000000000400000000000000000000000000000202010000000000000000000000008000000000000000000000000400000000000000000000800000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000001001000020000000000000000000000000000000000000000000000000000000000000000000002000000000000000000000000004000000000000000000000000000000010000000000000000000000000000000100000000000000000000000000000")),
-    difficulty = BigInt("62230571058020"),
+    difficulty = 1,
     number = 1920009,
     gasLimit = 4712384,
     gasUsed = 109952,
@@ -317,7 +296,7 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
     transactionsRoot = ByteString(Hex.decode("0c6d4a643ed081f92e384a5853f14d7f5ff5d68b65d0c90b46159584a80effe0")),
     receiptsRoot = ByteString(Hex.decode("a7d1ddb80060d4b77c07007e9a9f0b83413bd2c5de71501683ba4764982eef4b")),
     logsBloom = ByteString(Hex.decode("00000000000000020000000000020000001000000000000000000000000000000008000000000000000000000000400000000000000000000000000000202000000000000800000000000008000000000000000000000000400000000008000000000000000000000000000000000000000000000000000000000010000000000000000000000000000221000000000000000000080400000000000000011000020000000200001000000000000000000000000000000000400000000000000000000002000000000100000000000000000000000040000000000000000000000010000000000000000000000000000000000000000000000000000000000000")),
-    difficulty = BigInt("62230571189092"),
+    difficulty = 1,
     number = 1920010,
     gasLimit = 4712388,
     gasUsed = 114754,
