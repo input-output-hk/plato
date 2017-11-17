@@ -10,7 +10,7 @@ import io.iohk.ethereum.db.components.Storages.PruningModeComponent
 import io.iohk.ethereum.db.components.{DataSourcesComponent, SharedLevelDBDataSources, Storages, StoragesComponent}
 import io.iohk.ethereum.db.storage.AppStateStorage
 import io.iohk.ethereum.db.storage.pruning.PruningMode
-import io.iohk.ethereum.domain.{Blockchain, BlockchainImpl, SlotTimestampConverter}
+import io.iohk.ethereum.domain.{Blockchain, BlockchainImpl, SlotTimeConverter}
 import io.iohk.ethereum.jsonrpc.server.JsonRpcServer.JsonRpcServerConfig
 import io.iohk.ethereum.jsonrpc.NetService.NetServiceConfig
 import io.iohk.ethereum.ledger.{Ledger, LedgerImpl}
@@ -35,6 +35,8 @@ import io.iohk.ethereum.vm.VM
 import io.iohk.ethereum.ommers.OmmersPool
 import io.iohk.ethereum.pos.ElectionManagerImpl
 import io.iohk.ethereum.utils.Config.SyncConfig
+
+import scala.concurrent.duration._
 
 // scalastyle:off number.of.types
 trait BlockchainConfigBuilder {
@@ -134,6 +136,8 @@ trait BlockchainBuilder {
   self: StorageBuilder =>
 
   lazy val blockchain: BlockchainImpl = BlockchainImpl(storagesInstance.storages)
+
+  lazy val genesisTimestamp: Long = blockchain.genesisHeader.unixTimestamp
 }
 
 trait ForkResolverBuilder {
@@ -354,11 +358,11 @@ trait OmmersPoolBuilder {
 trait ValidatorsBuilder {
   self: BlockchainConfigBuilder
     with ElectionManagerBuilder
-    with SlotTimestampConverterBuilder =>
+    with SlotTimeConverterBuilder =>
 
   lazy val validators = new Validators {
     val blockValidator: BlockValidator = BlockValidator
-    val blockHeaderValidator: BlockHeaderValidator = new BlockHeaderValidatorImpl(blockchainConfig, electionManager, slotTimestampConverter)
+    val blockHeaderValidator: BlockHeaderValidator = new BlockHeaderValidatorImpl(blockchainConfig, electionManager, slotTimeConverter)
     val ommersValidator: OmmersValidator = new OmmersValidatorImpl(blockchainConfig, blockHeaderValidator)
     val signedTransactionValidator: SignedTransactionValidator = new SignedTransactionValidatorImpl(blockchainConfig)
   }
@@ -454,13 +458,13 @@ trait ProofOfStakeMinerBuilder {
     electionManager))
 }
 
-trait SlotTimestampConverterBuilder {
+trait SlotTimeConverterBuilder {
   self: OuroborosConfigBuilder
     with BlockchainBuilder =>
 
-  lazy val genesisTimestamp: Long = blockchain.genesisHeader.unixTimestamp
+  private lazy val slot1StartingTime: FiniteDuration = genesisTimestamp.seconds
 
-  lazy val slotTimestampConverter: SlotTimestampConverter = SlotTimestampConverter(ouroborosConfig, genesisTimestamp)
+  lazy val slotTimeConverter: SlotTimeConverter = SlotTimeConverter(ouroborosConfig, slot1StartingTime)
 }
 
 trait Node extends NodeKeyBuilder
@@ -506,4 +510,4 @@ trait Node extends NodeKeyBuilder
   with OuroborosConfigBuilder
   with ElectionManagerBuilder
   with ProofOfStakeMinerBuilder
-  with SlotTimestampConverterBuilder
+  with SlotTimeConverterBuilder
