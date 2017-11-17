@@ -134,7 +134,7 @@ class GenesisDataLoader(
       number = 0,
       gasLimit = BigInt(genesisData.gasLimit.replace("0x", ""), 16),
       gasUsed = 0,
-      unixTimestamp = BigInt(genesisData.timestamp.replace("0x", ""), 16).toLong,
+      unixTimestamp = 1510936883, //(System.currentTimeMillis() + 5000).millis.toSeconds,//BigInt(genesisData.timestamp.replace("0x", ""), 16).toLong,
       extraData = genesisData.extraData,
       mixHash = genesisData.mixHash.getOrElse(zeros(hashLength)),
       nonce = genesisData.nonce,

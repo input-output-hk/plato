@@ -1,6 +1,7 @@
 package io.iohk.ethereum.timing
 
-import akka.actor.{Actor, ActorLogging, ActorRef, Scheduler}
+import akka.actor.{Actor, ActorLogging, ActorRef, Props, Scheduler}
+
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 
@@ -60,4 +61,10 @@ object Beacon {
 
   case object Start
   case class NewSlot(slotNumber: BigInt)
+
+  def props(miner: ActorRef,
+            slotDuration: FiniteDuration,
+            systemStartTime: Long = System.currentTimeMillis / 1000,
+            externalSchedulerOpt: Option[Scheduler] = None): Props =
+    Props(new Beacon(miner, slotDuration, systemStartTime * 1000, externalSchedulerOpt))
 }

@@ -5,6 +5,7 @@ import io.iohk.ethereum.network.discovery.DiscoveryListener
 import io.iohk.ethereum.network.{PeerManagerActor, ServerActor}
 import io.iohk.ethereum.utils.Logger
 import io.iohk.ethereum.nodebuilder.Node
+import io.iohk.ethereum.timing.Beacon
 
 import scala.concurrent.Await
 import scala.util.{Failure, Success, Try}
@@ -36,7 +37,7 @@ object App {
 
       syncController ! SyncController.Start
 
-      // TODO: Initialize beaconActor in order to start the protocol
+      beaconActor ! Beacon.Start
 
       peerDiscoveryManager // unlazy
 

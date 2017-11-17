@@ -34,6 +34,7 @@ import io.iohk.ethereum.validators._
 import io.iohk.ethereum.vm.VM
 import io.iohk.ethereum.ommers.OmmersPool
 import io.iohk.ethereum.pos.ElectionManagerImpl
+import io.iohk.ethereum.timing.Beacon
 import io.iohk.ethereum.utils.Config.SyncConfig
 
 import scala.concurrent.duration._
@@ -467,6 +468,17 @@ trait SlotTimeConverterBuilder {
   lazy val slotTimeConverter: SlotTimeConverter = SlotTimeConverter(ouroborosConfig, slot1StartingTime)
 }
 
+trait BeaconBuilder {
+  self: ActorSystemBuilder
+    with ProofOfStakeMinerBuilder
+    with OuroborosConfigBuilder
+    with BlockchainBuilder =>
+
+  lazy val beaconActor = actorSystem.actorOf(Beacon.props(
+    miner, ouroborosConfig.slotDuration, genesisTimestamp), "beacon")
+
+}
+
 trait Node extends NodeKeyBuilder
   with ActorSystemBuilder
   with StorageBuilder
@@ -511,3 +523,4 @@ trait Node extends NodeKeyBuilder
   with ElectionManagerBuilder
   with ProofOfStakeMinerBuilder
   with SlotTimeConverterBuilder
+  with BeaconBuilder
