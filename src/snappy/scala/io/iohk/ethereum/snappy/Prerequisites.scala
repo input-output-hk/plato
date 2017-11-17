@@ -50,7 +50,7 @@ class Prerequisites(config: Config) {
   val targetBlockchain = targetStorages.map(ts => BlockchainImpl(ts.storages))
 
   private val components = new ValidatorsBuilder with BlockchainConfigBuilder with SyncConfigBuilder
-                              with ElectionManagerBuilder with SlotCalculatorBuilder
+                              with ElectionManagerBuilder with SlotTimestampConverterBuilder
                               with OuroborosConfigBuilder with BlockchainBuilder with StorageBuilder {
     override lazy val blockchain = sourceBlockchain
     override lazy val storagesInstance = sourceStorages

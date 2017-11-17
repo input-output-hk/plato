@@ -21,7 +21,7 @@ object BlockHeaderValidatorImpl {
 
 class BlockHeaderValidatorImpl(blockchainConfig: BlockchainConfig,
                                electionManager: ElectionManager,
-                               slotCalculator: SlotTimestampConverter) extends BlockHeaderValidator {
+                               slotTimestampConverter: SlotTimestampConverter) extends BlockHeaderValidator {
 
   import BlockHeaderValidatorImpl._
   import BlockHeaderError._
@@ -165,8 +165,8 @@ class BlockHeaderValidatorImpl(blockchainConfig: BlockchainConfig,
     * @return a [[BlockHeaderValid]] if valid, an [[HeaderBeneficiaryError]] otherwise
     */
   private def validateIsLeader(blockHeader: BlockHeader): Either[BlockHeaderError, BlockHeaderValid] = {
-    val coinbase = Address(blockHeader.beneficiary)
-    val isLeader = electionManager.verifyIsLeader(coinbase, blockHeader.slotNumber)
+    val blockCoinbase = Address(blockHeader.beneficiary)
+    val isLeader = electionManager.verifyIsLeader(blockCoinbase, blockHeader.slotNumber)
     if(isLeader) Right(BlockHeaderValid)
     else Left(HeaderBeneficiaryError)
   }
@@ -181,8 +181,10 @@ class BlockHeaderValidatorImpl(blockchainConfig: BlockchainConfig,
     * @return a [[BlockHeaderValid]] if valid, an [[HeaderSlotNumberError]] otherwise
     */
   private def validateSlotNumber(blockHeader: BlockHeader, parentHeader: BlockHeader): Either[BlockHeaderError, BlockHeaderValid] = {
+    val blockSlotBeginningTime = slotTimestampConverter.getSlotStartingTime(blockHeader.slotNumber)
+
     val isAfterParent = blockHeader.slotNumber > parentHeader.slotNumber
-    val isFromFuture = System.currentTimeMillis() < slotCalculator.getSlotStartingTime(blockHeader.slotNumber)
+    val isFromFuture = System.currentTimeMillis() < blockSlotBeginningTime
     if (isAfterParent && !isFromFuture) Right(BlockHeaderValid)
     else Left(HeaderSlotNumberError)
   }

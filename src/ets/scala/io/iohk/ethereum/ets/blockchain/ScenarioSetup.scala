@@ -17,7 +17,7 @@ import scala.util.{Failure, Success, Try}
 abstract class ScenarioSetup(scenario: BlockchainScenario)
   extends EphemBlockchainTestSetup
   with ElectionManagerBuilder
-  with SlotCalculatorBuilder
+  with SlotTimestampConverterBuilder
   with ValidatorsBuilder
   with SyncConfigBuilder
   with BlockchainConfigBuilder

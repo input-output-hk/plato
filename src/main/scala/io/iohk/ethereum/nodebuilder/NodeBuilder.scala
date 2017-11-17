@@ -354,11 +354,11 @@ trait OmmersPoolBuilder {
 trait ValidatorsBuilder {
   self: BlockchainConfigBuilder
     with ElectionManagerBuilder
-    with SlotCalculatorBuilder =>
+    with SlotTimestampConverterBuilder =>
 
   lazy val validators = new Validators {
     val blockValidator: BlockValidator = BlockValidator
-    val blockHeaderValidator: BlockHeaderValidator = new BlockHeaderValidatorImpl(blockchainConfig, electionManager, slotCalculator)
+    val blockHeaderValidator: BlockHeaderValidator = new BlockHeaderValidatorImpl(blockchainConfig, electionManager, slotTimestampConverter)
     val ommersValidator: OmmersValidator = new OmmersValidatorImpl(blockchainConfig, blockHeaderValidator)
     val signedTransactionValidator: SignedTransactionValidator = new SignedTransactionValidatorImpl(blockchainConfig)
   }
@@ -454,13 +454,13 @@ trait ProofOfStakeMinerBuilder {
     electionManager))
 }
 
-trait SlotCalculatorBuilder {
+trait SlotTimestampConverterBuilder {
   self: OuroborosConfigBuilder
     with BlockchainBuilder =>
 
   lazy val genesisTimestamp: Long = blockchain.genesisHeader.unixTimestamp
 
-  lazy val slotCalculator: SlotTimestampConverter = SlotTimestampConverter(ouroborosConfig, genesisTimestamp)
+  lazy val slotTimestampConverter: SlotTimestampConverter = SlotTimestampConverter(ouroborosConfig, genesisTimestamp)
 }
 
 trait Node extends NodeKeyBuilder
@@ -506,4 +506,4 @@ trait Node extends NodeKeyBuilder
   with OuroborosConfigBuilder
   with ElectionManagerBuilder
   with ProofOfStakeMinerBuilder
-  with SlotCalculatorBuilder
+  with SlotTimestampConverterBuilder
