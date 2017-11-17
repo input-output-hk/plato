@@ -17,7 +17,12 @@ class BeaconSpec extends FlatSpec with Matchers {
     minerMock.expectMsg(StartMining(1))
   }
 
-  // TODO: Add the other tests.
+  /* TODO: Add the other tests:
+  Scenario 1: Beacon starts upon system startup
+  Scenario 2: Beacon starts later
+    - if in the middle of a slot N, then wait until N+1 and send message for slot N+1
+    - if just at the start of slot N, then no wait and send message for slot N
+  */
 
 }
 
