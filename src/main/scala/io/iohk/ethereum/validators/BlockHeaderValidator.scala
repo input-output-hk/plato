@@ -1,7 +1,8 @@
 package io.iohk.ethereum.validators
 
 import akka.util.ByteString
-import io.iohk.ethereum.domain.{BlockHeader, Blockchain, DifficultyCalculator}
+import io.iohk.ethereum.domain._
+import io.iohk.ethereum.pos.ElectionManager
 import io.iohk.ethereum.utils.{BlockchainConfig, DaoForkConfig}
 
 trait BlockHeaderValidator {
@@ -18,7 +19,9 @@ object BlockHeaderValidatorImpl {
   val MaxGasLimit = Long.MaxValue // max gasLimit is equal 2^63-1 according to EIP106
 }
 
-class BlockHeaderValidatorImpl(blockchainConfig: BlockchainConfig) extends BlockHeaderValidator {
+class BlockHeaderValidatorImpl(blockchainConfig: BlockchainConfig,
+                               electionManager: ElectionManager,
+                               slotTimeConverter: SlotTimeConverter) extends BlockHeaderValidator {
 
   import BlockHeaderValidatorImpl._
   import BlockHeaderError._
@@ -39,6 +42,8 @@ class BlockHeaderValidatorImpl(blockchainConfig: BlockchainConfig) extends Block
       _ <- validateGasUsed(blockHeader)
       _ <- validateGasLimit(blockHeader, parentHeader)
       _ <- validateNumber(blockHeader, parentHeader)
+      _ <- validateIsLeader(blockHeader)
+      _ <- validateSlotNumber(blockHeader, parentHeader)
     } yield BlockHeaderValid
   }
 
@@ -152,6 +157,38 @@ class BlockHeaderValidatorImpl(blockchainConfig: BlockchainConfig) extends Block
   private def validateNumber(blockHeader: BlockHeader, parentHeader: BlockHeader): Either[BlockHeaderError, BlockHeaderValid] =
     if(blockHeader.number == parentHeader.number + 1) Right(BlockHeaderValid)
     else Left(HeaderNumberError)
+
+  /**
+    * Validates that the coinbase is the leader of the slot to which the blockHeader belongs
+    *
+    * @param blockHeader BlockHeader to validate
+    * @return a [[BlockHeaderValid]] if valid, an [[HeaderBeneficiaryError]] otherwise
+    */
+  private def validateIsLeader(blockHeader: BlockHeader): Either[BlockHeaderError, BlockHeaderValid] = {
+    val blockCoinbase = Address(blockHeader.beneficiary)
+    val isLeader = electionManager.verifyIsLeader(blockCoinbase, blockHeader.slotNumber)
+    if(isLeader) Right(BlockHeaderValid)
+    else Left(HeaderBeneficiaryError)
+  }
+
+  /**
+    * Validates that the slot number is correct:
+    *  - it's greater that it's parent slot number
+    *  - it doesn't belong to a future slot
+    *
+    * @param blockHeader BlockHeader to validate
+    * @param parentHeader BlockHeader of the parent of the block to validate.
+    * @return a [[BlockHeaderValid]] if valid, an [[HeaderSlotNumberError]] otherwise
+    */
+  private def validateSlotNumber(blockHeader: BlockHeader, parentHeader: BlockHeader): Either[BlockHeaderError, BlockHeaderValid] = {
+    val blockSlotBeginningTimeMillis = slotTimeConverter.getSlotStartingMillis(blockHeader.slotNumber)
+    val currentTimeMillis = System.currentTimeMillis()
+
+    val isAfterParent = blockHeader.slotNumber > parentHeader.slotNumber
+    val isFromFuture = currentTimeMillis < blockSlotBeginningTimeMillis
+    if (isAfterParent && !isFromFuture) Right(BlockHeaderValid)
+    else Left(HeaderSlotNumberError)
+  }
 }
 
 sealed trait BlockHeaderError
@@ -165,6 +202,8 @@ object BlockHeaderError {
   case object HeaderGasUsedError extends BlockHeaderError
   case object HeaderGasLimitError extends BlockHeaderError
   case object HeaderNumberError extends BlockHeaderError
+  case object HeaderBeneficiaryError extends BlockHeaderError
+  case object HeaderSlotNumberError extends BlockHeaderError
 }
 
 sealed trait BlockHeaderValid

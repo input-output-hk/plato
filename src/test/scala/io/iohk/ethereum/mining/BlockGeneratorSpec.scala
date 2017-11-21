@@ -3,6 +3,7 @@ package io.iohk.ethereum.mining
 import java.time.Instant
 
 import akka.util.ByteString
+import io.iohk.ethereum.Mocks.MockValidatorsAlwaysSucceed
 import io.iohk.ethereum.{Timeouts, crypto}
 import io.iohk.ethereum.blockchain.data.GenesisDataLoader
 import io.iohk.ethereum.blockchain.sync.EphemBlockchainTestSetup
@@ -281,7 +282,7 @@ class BlockGeneratorSpec extends FlatSpec with Matchers with PropertyChecks with
 
     lazy val validators = new Validators {
       val blockValidator: BlockValidator = BlockValidator
-      val blockHeaderValidator: BlockHeaderValidator = new BlockHeaderValidatorImpl(blockchainConfig)
+      val blockHeaderValidator: BlockHeaderValidator = MockValidatorsAlwaysSucceed.blockHeaderValidator
       val ommersValidator: OmmersValidator = new OmmersValidatorImpl(blockchainConfig, blockHeaderValidator)
       val signedTransactionValidator: SignedTransactionValidator = new SignedTransactionValidatorImpl(blockchainConfig)
     }

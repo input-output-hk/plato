@@ -135,7 +135,7 @@ object Mocks {
   }
 
   case class MockElectionManager(isValid: Address => Boolean) extends ElectionManager {
-    override def verifyIsLeader(stakeholder: Address, slotNumber: BigInt, blockchain: Blockchain): Boolean = isValid(stakeholder)
+    override def verifyIsLeader(stakeholder: Address, slotNumber: BigInt): Boolean = isValid(stakeholder)
   }
 
   case class MockKeyStore(stakeholders: Either[KeyStore.KeyStoreError, List[Address]]) extends KeyStore {

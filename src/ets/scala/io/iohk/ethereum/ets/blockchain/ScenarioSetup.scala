@@ -6,7 +6,7 @@ import io.iohk.ethereum.domain.{Account, Address, Block, UInt256}
 import io.iohk.ethereum.ets.common.AccountState
 import io.iohk.ethereum.ledger._
 import io.iohk.ethereum.network.p2p.messages.PV62.BlockBody
-import io.iohk.ethereum.nodebuilder.{BlockchainConfigBuilder, SyncConfigBuilder, ValidatorsBuilder}
+import io.iohk.ethereum.nodebuilder._
 import io.iohk.ethereum.utils.BigIntExtensionMethods._
 import io.iohk.ethereum.utils.BlockchainConfig
 import io.iohk.ethereum.vm.VM
@@ -16,9 +16,12 @@ import scala.util.{Failure, Success, Try}
 
 abstract class ScenarioSetup(scenario: BlockchainScenario)
   extends EphemBlockchainTestSetup
+  with ElectionManagerBuilder
+  with SlotTimeConverterBuilder
   with ValidatorsBuilder
   with SyncConfigBuilder
-  with BlockchainConfigBuilder {
+  with BlockchainConfigBuilder
+  with OuroborosConfigBuilder {
 
   val emptyWorld = blockchain.getWorldStateProxy(-1, UInt256.Zero, None)
 
