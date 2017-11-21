@@ -1,38 +1,38 @@
 package io.iohk.ethereum.timing
 
-import akka.actor.{Actor, ActorLogging, ActorRef, Scheduler}
+import akka.actor.{Actor, ActorLogging, ActorRef, Props, Scheduler}
+
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 
 
-class Beacon(
+class BeaconActor(
   miner: ActorRef,
   slotDuration: FiniteDuration,
-  systemStartTime: Long = System.currentTimeMillis,
+  systemStartTime: FiniteDuration = System.currentTimeMillis.millis,
   externalSchedulerOpt: Option[Scheduler] = None)
   extends Actor
     with ActorLogging {
 
-  import Beacon._
-
-  val startingSlotNumber: BigInt = calculateStartingSlot()
+  import BeaconActor._
 
   def scheduler: Scheduler = externalSchedulerOpt getOrElse context.system.scheduler
 
   private def calculateStartingSlot(): BigInt = {
     val currentTime = System.currentTimeMillis
-    val elapsedTimeSinceStartTime = currentTime - systemStartTime
+    val elapsedTimeSinceStartTime = currentTime - systemStartTime.toMillis
     // FIXME: When the Beacon is started in the middle of a slot N, it should schedule the slot N+1 taking into account
     // the time left to end the current slot N.
     (elapsedTimeSinceStartTime / slotDuration.toMillis) + 1
-    //scala.math.ceil(elapsedTimeSinceStartTime / slotDuration.toMillis.toFloat).toLong + 1
   }
 
   override def receive: Receive = idle
 
   def idle: Receive = {
     case Start =>
+      log.debug(s"Beacon started at ${System.currentTimeMillis}")
       context become start
+      val startingSlotNumber = calculateStartingSlot()
       self ! NewSlot(startingSlotNumber)
     case _ => // nothing
   }
@@ -45,7 +45,7 @@ class Beacon(
       miner ! StartMining(currentSlotNumber)
 
       // FIXME: The use of toLong may cause precision loss.
-      val nextSlotTime = systemStartTime + (slotDuration.toMillis * currentSlotNumber.toLong)
+      val nextSlotTime = systemStartTime.toMillis + (slotDuration.toMillis * currentSlotNumber.toLong)
       val currentTime = System.currentTimeMillis
       val waitForNextSlot = FiniteDuration(nextSlotTime - currentTime, MILLISECONDS)
 
@@ -56,7 +56,19 @@ class Beacon(
 }
 
 
-object Beacon {
+object BeaconActor {
+
+  def props(
+    miner: ActorRef,
+    slotDuration: FiniteDuration,
+    systemStartTime: FiniteDuration = System.currentTimeMillis.millis,
+    externalSchedulerOpt: Option[Scheduler] = None): Props =
+    Props(new BeaconActor(
+      miner,
+      slotDuration,
+      systemStartTime,
+      externalSchedulerOpt)
+    )
 
   case object Start
   case class NewSlot(slotNumber: BigInt)
