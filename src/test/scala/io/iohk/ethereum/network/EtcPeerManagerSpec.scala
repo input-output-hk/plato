@@ -6,10 +6,9 @@ import akka.actor.{ActorSystem, Props}
 import akka.testkit.{TestActorRef, TestProbe}
 import akka.util.ByteString
 import io.iohk.ethereum.Fixtures
-import io.iohk.ethereum.Fixtures.Blocks.{DaoForkBlock, Genesis}
+import io.iohk.ethereum.Fixtures.Blocks.DaoForkBlock
 import io.iohk.ethereum.blockchain.sync.EphemBlockchainTestSetup
 import io.iohk.ethereum.domain.{Block, BlockHeader}
-import io.iohk.ethereum.network.PeerActor.DisconnectPeer
 import io.iohk.ethereum.network.PeerEventBusActor.PeerEvent.{MessageFromPeer, PeerDisconnected, PeerHandshakeSuccessful}
 import io.iohk.ethereum.network.PeerEventBusActor.{PeerSelector, Subscribe}
 import io.iohk.ethereum.network.PeerEventBusActor.SubscriptionClassifier._
@@ -17,7 +16,6 @@ import io.iohk.ethereum.network.EtcPeerManagerActor._
 import io.iohk.ethereum.network.p2p.messages.CommonMessages.{NewBlock, Status}
 import io.iohk.ethereum.network.p2p.messages.PV62._
 import io.iohk.ethereum.network.p2p.messages.Versions
-import io.iohk.ethereum.network.p2p.messages.WireProtocol.Disconnect
 import io.iohk.ethereum.utils.{BlockchainConfig, Config}
 import org.scalatest.{FlatSpec, Matchers}
 import org.spongycastle.util.encoders.Hex
@@ -192,22 +190,6 @@ class EtcPeerManagerSpec extends FlatSpec with Matchers {
     //then
     requestSender.send(peersInfoHolder, PeerInfoRequest(peer1.id))
     requestSender.expectMsg(PeerInfoResponse(Some(peer1Info.withForkAccepted(true))))
-  }
-
-  it should "disconnect from a peer with different fork block" in new TestSetup {
-    peerEventBus.expectMsg(Subscribe(PeerHandshaked))
-    setupNewPeer(peer1, peer1Probe, peer1Info)
-
-    //given
-    val blockHeaders = BlockHeaders(Seq(Genesis.header.copy(number = Fixtures.Blocks.DaoForkBlock.header.number)))
-
-    //when
-    peersInfoHolder ! MessageFromPeer(blockHeaders, peer1.id)
-
-    //then
-    requestSender.send(peersInfoHolder, PeerInfoRequest(peer1.id))
-    requestSender.expectMsg(PeerInfoResponse(Some(peer1Info)))
-    peer1Probe.expectMsg(DisconnectPeer(Disconnect.Reasons.UselessPeer))
   }
 
   it should "remove peers information when a peers is disconnected" in new TestSetup {

@@ -37,7 +37,7 @@ class ProofOfStakeMiner(
     keyStore.listAccounts() match {
       case Right(accounts) =>
         val mayBeLeader: Option[Address] = accounts.collectFirst {
-          case account if electionManager.verifyIsLeader(account, slotNumber, blockchain) => account
+          case account if electionManager.verifyIsLeader(account, slotNumber) => account
         }
         mayBeLeader match {
           case Some(leader) =>

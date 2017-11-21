@@ -4,35 +4,31 @@ import akka.util.ByteString
 import io.iohk.ethereum.{Fixtures, ObjectGenerators}
 import io.iohk.ethereum.blockchain.sync.EphemBlockchainTestSetup
 import io.iohk.ethereum.domain.{UInt256, _}
+import io.iohk.ethereum.pos.ElectionManagerImpl
 import io.iohk.ethereum.utils.{BlockchainConfig, DaoForkConfig, MonetaryPolicyConfig}
 import io.iohk.ethereum.validators.BlockHeaderError._
 import org.scalatest.prop.PropertyChecks
 import org.scalatest.{FlatSpec, Matchers}
 import org.spongycastle.util.encoders.Hex
 import io.iohk.ethereum.validators.BlockHeaderValidatorImpl._
+import org.scalamock.scalatest.MockFactory
 
-class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyChecks with ObjectGenerators {
+class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyChecks with ObjectGenerators with MockFactory {
 
+  "BlockHeaderValidator" should "validate correctly formed BlockHeaders" in new TestSetup {
+    (electionManagerMock.verifyIsLeader _).expects(*, *).returning(true).anyNumberOfTimes()
+    (slotCalculatorMock.getSlotStartingMillis _).expects(*).returning(System.currentTimeMillis() - 1000).anyNumberOfTimes()
 
-  val ExtraDataSizeLimit = 20
-
-  //BlockHeader member's lengths obtained from Yellow paper
-  val NonceLength = 8 //64bit
-  val MixHashLength = 32 //256bit
-
-  val blockchainConfig = createBlockchainConfig()
-
-  val blockHeaderValidator = new BlockHeaderValidatorImpl(blockchainConfig)
-  val difficultyCalculator = new DifficultyCalculator(blockchainConfig)
-
-  "BlockHeaderValidator" should "validate correctly formed BlockHeaders" in {
     blockHeaderValidator.validate(validBlockHeader, validBlockParent) match {
       case Right(_) => succeed
       case _ => fail
     }
   }
 
-  it should "return a failure if created based on invalid extra data" in {
+  it should "return a failure if created based on invalid extra data" in new TestSetup {
+    (electionManagerMock.verifyIsLeader _).expects(*,*).returning(true).anyNumberOfTimes()
+    (slotCalculatorMock.getSlotStartingMillis _).expects(*).returning(System.currentTimeMillis() - 1000).anyNumberOfTimes()
+
     forAll(randomSizeByteStringGen(
       MaxExtraDataSize + 1,
       MaxExtraDataSize + ExtraDataSizeLimit)
@@ -42,8 +38,11 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
     }
   }
 
-  it should "validate DAO block (extra data)" in {
+  it should "validate DAO block (extra data)" in new TestSetup {
     import Fixtures.Blocks._
+    (electionManagerMock.verifyIsLeader _).expects(*,*).returning(true).anyNumberOfTimes()
+    (slotCalculatorMock.getSlotStartingMillis _).expects(*).returning(System.currentTimeMillis() - 1000).anyNumberOfTimes()
+
     val cases = Table(
       ("Block", "Parent Block", "Supports Dao Fork", "Valid"),
       (DaoForkBlock.header, DaoParentBlock.header, false, true),
@@ -58,7 +57,7 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
     )
 
     forAll(cases) { (block, parentBlock, supportsDaoFork, valid ) =>
-      val blockHeaderValidator = new BlockHeaderValidatorImpl(createBlockchainConfig(supportsDaoFork))
+      val blockHeaderValidator = new BlockHeaderValidatorImpl(createBlockchainConfig(supportsDaoFork), electionManagerMock, slotCalculatorMock)
       blockHeaderValidator.validate(block, parentBlock) match {
         case Right(_) => assert(valid)
         case Left(DaoHeaderExtraDataError) => assert(!valid)
@@ -67,19 +66,24 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
     }
   }
 
-  it should "return a failure if created based on invalid timestamp" in {
+  it should "return a failure if created based on invalid timestamp" in new TestSetup {
+    (electionManagerMock.verifyIsLeader _).expects(*,*).returning(true).anyNumberOfTimes()
+    (slotCalculatorMock.getSlotStartingMillis _).expects(*).returning(System.currentTimeMillis() - 1000).anyNumberOfTimes()
+
     forAll(longGen) { timestamp =>
       val blockHeader = validBlockHeader.copy(unixTimestamp = timestamp)
       val validateResult = blockHeaderValidator.validate(blockHeader, validBlockParent)
       timestamp match {
         case t if t <= validBlockParent.unixTimestamp => assert(validateResult == Left(HeaderTimestampError))
-        case validBlockHeader.unixTimestamp => assert(validateResult == Right(BlockHeaderValid))
-        case _ => assert(validateResult == Left(HeaderDifficultyError))
+        case _ => assert(validateResult == Right(BlockHeaderValid))
       }
     }
   }
 
-  it should "return a failure if created based on invalid difficulty" in {
+  it should "return a failure if created based on invalid difficulty" in new TestSetup {
+    (electionManagerMock.verifyIsLeader _).expects(*,*).returning(true).anyNumberOfTimes()
+    (slotCalculatorMock.getSlotStartingMillis _).expects(*).returning(System.currentTimeMillis() - 1000).anyNumberOfTimes()
+
     forAll(bigIntGen) { difficulty =>
       val blockHeader = validBlockHeader.copy(difficulty = difficulty)
       val validateResult = blockHeaderValidator.validate(blockHeader, validBlockParent)
@@ -88,7 +92,10 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
     }
   }
 
-  it should "return a failure if created based on invalid gas used" in {
+  it should "return a failure if created based on invalid gas used" in new TestSetup {
+    (electionManagerMock.verifyIsLeader _).expects(*,*).returning(true).anyNumberOfTimes()
+    (slotCalculatorMock.getSlotStartingMillis _).expects(*).returning(System.currentTimeMillis() - 1000).anyNumberOfTimes()
+
     forAll(bigIntGen) { gasUsed =>
       val blockHeader = validBlockHeader.copy(gasUsed = gasUsed)
       val validateResult = blockHeaderValidator.validate(blockHeader, validBlockParent)
@@ -97,7 +104,10 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
     }
   }
 
-  it should "return a failure if created based on invalid gas limit" in {
+  it should "return a failure if created based on invalid gas limit" in new TestSetup {
+    (electionManagerMock.verifyIsLeader _).expects(*,*).returning(true).anyNumberOfTimes()
+    (slotCalculatorMock.getSlotStartingMillis _).expects(*).returning(System.currentTimeMillis() - 1000).anyNumberOfTimes()
+
     val LowerGasLimit = MinGasLimit.max(
       validBlockParent.gasLimit - validBlockParent.gasLimit / GasLimitBoundDivisor + 1)
     val UpperGasLimit = validBlockParent.gasLimit + validBlockParent.gasLimit / GasLimitBoundDivisor - 1
@@ -111,13 +121,19 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
     }
   }
 
-  it should "return a failure if created with gas limit above threshold and block number >= eip106 block number" in {
+  it should "return a failure if created with gas limit above threshold and block number >= eip106 block number" in new TestSetup {
+    (electionManagerMock.verifyIsLeader _).expects(*,*).returning(true).anyNumberOfTimes()
+    (slotCalculatorMock.getSlotStartingMillis _).expects(*).returning(System.currentTimeMillis() - 1000).anyNumberOfTimes()
+
     val validParent = validBlockParent.copy(gasLimit = Long.MaxValue)
     val invalidBlockHeader = validBlockHeader.copy(gasLimit = BigInt(Long.MaxValue) + 1)
     blockHeaderValidator.validate(invalidBlockHeader, validParent) shouldBe Left(HeaderGasLimitError)
   }
 
-  it should "return a failure if created based on invalid number" in {
+  it should "return a failure if created based on invalid number" in new TestSetup {
+    (electionManagerMock.verifyIsLeader _).expects(*,*).returning(true).anyNumberOfTimes()
+    (slotCalculatorMock.getSlotStartingMillis _).expects(*).returning(System.currentTimeMillis() - 1000).anyNumberOfTimes()
+
     forAll(longGen) { number =>
       val blockHeader = validBlockHeader.copy(number = number)
       val validateResult = blockHeaderValidator.validate(blockHeader, validBlockParent)
@@ -127,7 +143,10 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
     }
   }
 
-  it should "validate correctly a block whose parent is in storage" in new EphemBlockchainTestSetup {
+  it should "validate correctly a block whose parent is in storage" in new TestSetup {
+    (electionManagerMock.verifyIsLeader _).expects(*,*).returning(true).anyNumberOfTimes()
+    (slotCalculatorMock.getSlotStartingMillis _).expects(*).returning(System.currentTimeMillis() - 1000).anyNumberOfTimes()
+
     blockchain.save(validBlockParent)
     blockHeaderValidator.validate(validBlockHeader, blockchain) match {
       case Right(_)  => succeed
@@ -135,31 +154,52 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
     }
   }
 
-  it should "return a failure if the parent's header is not in storage" in new EphemBlockchainTestSetup {
+  it should "return a failure if the parent's header is not in storage" in new TestSetup {
+    (electionManagerMock.verifyIsLeader _).expects(*,*).returning(true).anyNumberOfTimes()
+    (slotCalculatorMock.getSlotStartingMillis _).expects(*).returning(System.currentTimeMillis() - 1000).anyNumberOfTimes()
+
     blockHeaderValidator.validate(validBlockHeader, blockchain) match {
       case Left(HeaderParentNotFoundError) => succeed
       case _ => fail
     }
   }
 
-  it should "properly validate a block after difficulty bomb pause" in new EphemBlockchainTestSetup {
-    val res = blockHeaderValidator.validate(pausedDifficultyBombBlock, pausedDifficultyBombBlockParent)
-    res shouldBe Right(BlockHeaderValid)
+  it should "return a failure if the slot number is lower than it's parent's" in new TestSetup {
+    (electionManagerMock.verifyIsLeader _).expects(*,*).returning(true).anyNumberOfTimes()
+    (slotCalculatorMock.getSlotStartingMillis _).expects(*).returning(System.currentTimeMillis() - 1000).anyNumberOfTimes()
+
+    val invalidBlockHeader = validBlockHeader.copy(slotNumber = validBlockParent.slotNumber - 1)
+    blockHeaderValidator.validate(invalidBlockHeader, validBlockParent) shouldBe Left(HeaderSlotNumberError)
   }
 
-  it should "properly calculate the difficulty after difficulty bomb resume" in new EphemBlockchainTestSetup {
-    val parentHeader: BlockHeader = validBlockParent.copy(
-      number = 5000101,
-      unixTimestamp = 1513175023,
-      difficulty = BigInt("22627021745803"))
+  it should "return a failure if the block is from a future slot" in new TestSetup {
+    (electionManagerMock.verifyIsLeader _).expects(*,*).returning(true).anyNumberOfTimes()
+    (slotCalculatorMock.getSlotStartingMillis _).expects(*).returning(System.currentTimeMillis() + 1000).anyNumberOfTimes()
 
-    val blockNumber: BigInt = parentHeader.number + 1
-    val blockTimestamp: Long = parentHeader.unixTimestamp + 6
+    blockHeaderValidator.validate(validBlockHeader, validBlockParent) shouldBe Left(HeaderSlotNumberError)
+  }
 
-    val difficulty: BigInt = difficultyCalculator.calculateDifficulty(blockNumber, blockTimestamp, parentHeader)
-    val expected = BigInt("22638338531720")
+  it should "return a failure if the block beneficiary wasn't the slot leader" in new TestSetup {
+    (electionManagerMock.verifyIsLeader _).expects(*,*).returning(false).anyNumberOfTimes()
+    (slotCalculatorMock.getSlotStartingMillis _).expects(*).returning(System.currentTimeMillis() - 1000).anyNumberOfTimes()
 
-    difficulty shouldBe expected
+    val invalidBlockHeader = validBlockHeader.copy(slotNumber = validBlockParent.slotNumber - 1)
+    blockHeaderValidator.validate(invalidBlockHeader, validBlockParent) shouldBe Left(HeaderBeneficiaryError)
+  }
+
+  trait TestSetup extends EphemBlockchainTestSetup {
+    val ExtraDataSizeLimit = 20
+
+    //BlockHeader member's lengths obtained from Yellow paper
+    val NonceLength = 8 //64bit
+    val MixHashLength = 32 //256bit
+
+    val blockchainConfig = createBlockchainConfig()
+    val electionManagerMock = mock[ElectionManagerImpl]
+    val slotCalculatorMock = mock[SlotTimeConverter]
+
+    val blockHeaderValidator = new BlockHeaderValidatorImpl(blockchainConfig, electionManagerMock, slotCalculatorMock)
+    val difficultyCalculator = new DifficultyCalculator(blockchainConfig)
   }
 
   val pausedDifficultyBombBlock = BlockHeader(
@@ -170,7 +210,7 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
     transactionsRoot = ByteString(Hex.decode("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")),
     receiptsRoot = ByteString(Hex.decode("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")),
     logsBloom = ByteString(Hex.decode("00" * 256)),
-    difficulty = BigInt("20626433633447"),
+    difficulty = 1,
     number = 3582022,
     gasLimit = 4700036,
     gasUsed = 0,
@@ -189,7 +229,7 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
     transactionsRoot = ByteString(Hex.decode("6616c23aeb486dd47aca667814ffed831553c7322440913b95847235a4c3bb97")),
     receiptsRoot = ByteString(Hex.decode("5fa90473cd08a08fc766329651d81bb6e4ef2bb330cf90c3025927a3bafe0c57")),
     logsBloom = ByteString(Hex.decode("00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000100000000000000000000000080000000000000000020000000000000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000008000000000000000")),
-    difficulty = BigInt("20616098743527"),
+    difficulty = 1,
     number = 3582021,
     gasLimit = 4699925,
     gasUsed = 1005896,
@@ -208,7 +248,7 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
     transactionsRoot = ByteString(Hex.decode("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")),
     receiptsRoot = ByteString(Hex.decode("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")),
     logsBloom = ByteString(Hex.decode("00" * 256)),
-    difficulty = BigInt("989289"),
+    difficulty = 1,
     number = 19,
     gasLimit = 131749155,
     gasUsed = 0,
@@ -227,7 +267,7 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
     transactionsRoot = ByteString(Hex.decode("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")),
     receiptsRoot = ByteString(Hex.decode("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")),
     logsBloom = ByteString(Hex.decode("00" * 256)),
-    difficulty = BigInt("989772"),
+    difficulty = 1,
     number = 20,
     gasLimit = 131620495,
     gasUsed = 0,
@@ -279,7 +319,7 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
     transactionsRoot = ByteString(Hex.decode("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")),
     receiptsRoot = ByteString(Hex.decode("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")),
     logsBloom = ByteString(Hex.decode("00" * 256)),
-    difficulty = BigInt("62230570926948"),
+    difficulty = 1,
     number = 1920008,
     gasLimit = 4707788,
     gasUsed = 0,
@@ -298,7 +338,7 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
     transactionsRoot = ByteString(Hex.decode("a8060f1391fd4cbde4b03d83b32a1bda445578cd6ec6b7982db20c499ed3682b")),
     receiptsRoot = ByteString(Hex.decode("ab66b1986e713eaf5621059e79f04ba9c528187c1b9da969f46442c3f915c120")),
     logsBloom = ByteString(Hex.decode("00000000000000020000000000020000000000000008000000000000000000000000000000000000000000000000400000000000000000000000000000202010000000000000000000000008000000000000000000000000400000000000000000000800000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000001001000020000000000000000000000000000000000000000000000000000000000000000000002000000000000000000000000004000000000000000000000000000000010000000000000000000000000000000100000000000000000000000000000")),
-    difficulty = BigInt("62230571058020"),
+    difficulty = 1,
     number = 1920009,
     gasLimit = 4712384,
     gasUsed = 109952,
@@ -317,7 +357,7 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
     transactionsRoot = ByteString(Hex.decode("0c6d4a643ed081f92e384a5853f14d7f5ff5d68b65d0c90b46159584a80effe0")),
     receiptsRoot = ByteString(Hex.decode("a7d1ddb80060d4b77c07007e9a9f0b83413bd2c5de71501683ba4764982eef4b")),
     logsBloom = ByteString(Hex.decode("00000000000000020000000000020000001000000000000000000000000000000008000000000000000000000000400000000000000000000000000000202000000000000800000000000008000000000000000000000000400000000008000000000000000000000000000000000000000000000000000000000010000000000000000000000000000221000000000000000000080400000000000000011000020000000200001000000000000000000000000000000000400000000000000000000002000000000100000000000000000000000040000000000000000000000010000000000000000000000000000000000000000000000000000000000000")),
-    difficulty = BigInt("62230571189092"),
+    difficulty = 1,
     number = 1920010,
     gasLimit = 4712388,
     gasUsed = 114754,

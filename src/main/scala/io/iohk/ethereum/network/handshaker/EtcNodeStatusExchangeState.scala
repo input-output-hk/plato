@@ -23,12 +23,7 @@ case class EtcNodeStatusExchangeState(handshakerConfiguration: EtcHandshakerConf
     case remoteStatus: Status =>
       log.debug("Peer returned status ({})", remoteStatus)
 
-      forkResolverOpt match {
-        case Some(forkResolver) =>
-          EtcForkBlockExchangeState(handshakerConfiguration, forkResolver, remoteStatus)
-        case None =>
-          ConnectedState(PeerInfo(remoteStatus, remoteStatus.totalDifficulty, true, 0))
-      }
+      ConnectedState(PeerInfo(remoteStatus, remoteStatus.totalDifficulty, true, 0))
 
   }
 

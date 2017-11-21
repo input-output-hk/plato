@@ -4,13 +4,14 @@ import akka.actor.{ActorRef, ActorSystem}
 import akka.testkit.{TestActor, TestActorRef, TestProbe}
 import akka.util.ByteString
 import io.iohk.ethereum.Mocks
+import io.iohk.ethereum.Mocks.MockValidatorsAlwaysSucceed
 import io.iohk.ethereum.blockchain.sync.RegularSync
 import io.iohk.ethereum.domain._
 import io.iohk.ethereum.network.p2p.messages.PV62.BlockBody
 import io.iohk.ethereum.ommers.OmmersPool
 import io.iohk.ethereum.transactions.PendingTransactionsManager
 import io.iohk.ethereum.utils.{BlockchainConfig, Config, MiningConfig}
-import io.iohk.ethereum.validators.{BlockHeaderValid, BlockHeaderValidatorImpl}
+import io.iohk.ethereum.validators.BlockHeaderValid
 import org.scalamock.scalatest.MockFactory
 import org.scalatest.{FlatSpec, Matchers, Tag}
 import org.spongycastle.util.encoders.Hex
@@ -31,6 +32,7 @@ class ProofOfStakeMinerSpec extends FlatSpec with Matchers {
     val bfm = blockForMining(parent.header)
 
     (blockchain.getBestBlock _).expects().returns(parent).anyNumberOfTimes()
+    (blockchain.getBlockHeaderByHash _).expects(parent.header.hash).returns(Some(parent.header))
     (blockGenerator.generateBlockForMining _).expects(
       parent, Nil, Nil, stakeholder, currentSlotNumber
     ).returning(Right(PendingBlock(bfm, Nil))).anyNumberOfTimes()
@@ -55,7 +57,7 @@ class ProofOfStakeMinerSpec extends FlatSpec with Matchers {
     miner ! ProofOfStakeMiner.StartMining(currentSlotNumber)
     val block = waitForMinedBlock()
     block.body.transactionList shouldBe Seq(txToMine)
-    blockHeaderValidator.validate(block.header, parent.header) shouldBe Right(BlockHeaderValid)
+    blockHeaderValidator.validate(block.header, blockchain) shouldBe Right(BlockHeaderValid)
   }
 
   "Miner" should "not mine a block if there isn't a stakeholder leader selected" taggedAs(ProofOfStakeMinerSpecTag) in new TestSetup {
@@ -169,7 +171,7 @@ class ProofOfStakeMinerSpec extends FlatSpec with Matchers {
 
     implicit val system = ActorSystem("ProofOfStakeMinerSpec_System")
 
-    val blockHeaderValidator = new BlockHeaderValidatorImpl(blockchainConfig)
+    val blockHeaderValidator = MockValidatorsAlwaysSucceed.blockHeaderValidator
     val ommersPool = TestProbe()
     val pendingTransactionsManager = TestProbe()
     val syncController = TestProbe()
