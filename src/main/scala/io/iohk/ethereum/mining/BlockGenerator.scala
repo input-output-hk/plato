@@ -7,13 +7,12 @@ import java.util.function.UnaryOperator
 import akka.util.ByteString
 import io.iohk.ethereum.db.dataSource.EphemDataSource
 import io.iohk.ethereum.db.storage.{ArchiveNodeStorage, NodeStorage}
-import io.iohk.ethereum.domain.{Block, BlockHeader, Receipt, SignedTransaction, _}
+import io.iohk.ethereum.domain._
 import io.iohk.ethereum.ledger.Ledger.{BlockPreparationResult, BlockResult}
-import io.iohk.ethereum.ledger.{BlockPreparationError, BloomFilter, Ledger}
-import io.iohk.ethereum.mining.BlockGenerator.InvalidOmmers
+import io.iohk.ethereum.ledger.{BlockPreparationError, BloomFilter, InvalidBlockHeaderSignature, Ledger}
 import io.iohk.ethereum.mpt.{ByteArraySerializable, MerklePatriciaTrie}
 import io.iohk.ethereum.network.p2p.messages.PV62.BlockBody
-import io.iohk.ethereum.network.p2p.messages.PV62.BlockHeaderImplicits._
+import io.iohk.ethereum.network.p2p.messages.PV62.SignedBlockHeaderImplicits._
 import io.iohk.ethereum.utils.{BlockchainConfig, MiningConfig}
 import io.iohk.ethereum.utils.ByteUtils.or
 import io.iohk.ethereum.validators.MptListValidator.intByteArraySerializable
@@ -22,46 +21,42 @@ import io.iohk.ethereum.validators.Validators
 import io.iohk.ethereum.crypto._
 
 class BlockGenerator(blockchain: Blockchain, blockchainConfig: BlockchainConfig, miningConfig: MiningConfig,
-  ledger: Ledger, validators: Validators, blockTimestampProvider: BlockTimestampProvider = DefaultBlockTimestampProvider) {
+  ledger: Ledger, validators: Validators, blockTimestampProvider: BlockTimestampProvider = DefaultBlockTimestampProvider,
+  blockHeaderSigner: (BlockHeader, Address) => Option[SignedBlockHeader]) {
 
   val difficulty = new DifficultyCalculator(blockchainConfig)
 
   private val cache: AtomicReference[List[PendingBlock]] = new AtomicReference(Nil)
 
-  def generateBlockForMining(parent: Block, transactions: Seq[SignedTransaction], ommers: Seq[BlockHeader], beneficiary: Address, slotNumber: BigInt):
+  def generateBlockForMining(parent: Block, transactions: Seq[SignedTransaction], ommers: Seq[SignedBlockHeader], beneficiary: Address, slotNumber: BigInt):
   Either[BlockPreparationError, PendingBlock] = {
-    val blockNumber = parent.header.number + 1
-    val parentHash = parent.header.hash
-
-    val result = validators.ommersValidator.validate(parentHash, blockNumber, ommers, blockchain)
-      .left.map(InvalidOmmers).flatMap { _ =>
-        val blockTimestamp = blockTimestampProvider.getEpochSecond
-        val header: BlockHeader = prepareHeader(blockNumber, ommers, beneficiary, parent, blockTimestamp, slotNumber)
-        val transactionsForBlock: List[SignedTransaction] = prepareTransactions(transactions, header.gasLimit)
-        val body = BlockBody(transactionsForBlock, ommers)
-        val block = Block(header, body)
-
-        val prepared = ledger.prepareBlock(block) match {
-          case BlockPreparationResult(prepareBlock, BlockResult(_, gasUsed, receipts), stateRoot) =>
-            val receiptsLogs: Seq[Array[Byte]] = BloomFilter.EmptyBloomFilter.toArray +: receipts.map(_.logsBloomFilter.toArray)
-            val bloomFilter = ByteString(or(receiptsLogs: _*))
-
-            PendingBlock(block.copy(header = block.header.copy(
-              transactionsRoot = buildMpt(prepareBlock.body.transactionList, SignedTransaction.byteArraySerializable),
-              stateRoot = stateRoot,
-              receiptsRoot = buildMpt(receipts, Receipt.byteArraySerializable),
-              logsBloom = bloomFilter,
-              gasUsed = gasUsed),
-              body = prepareBlock.body), receipts)
-        }
-        Right(prepared)
+    val blockNumber = parent.signedHeader.header.number + 1
+    val parentHash = parent.signedHeader.hash
+    val blockTimestamp = blockTimestampProvider.getEpochSecond
+    val preHeader = prepareHeader(blockNumber, ommers, beneficiary, parent, blockTimestamp, slotNumber)
+    val fakeSignature = ECDSASignature(0, 0, 0.toByte)
+    val preSignedHeader = SignedBlockHeader(preHeader, fakeSignature)
+    val transactionsForBlock: List[SignedTransaction] = prepareTransactions(transactions, preSignedHeader.header.gasLimit)
+    val body = BlockBody(transactionsForBlock, ommers)
+    val preBlock = Block(preSignedHeader, body)
+    val result = ledger.prepareBlock(preBlock) match {
+      case BlockPreparationResult(prepareBlock, BlockResult(_, gasUsed, receipts), stateRoot) =>
+        val receiptsLogs: Seq[Array[Byte]] = BloomFilter.EmptyBloomFilter.toArray +: receipts.map(_.logsBloomFilter.toArray)
+        val bloomFilter = ByteString(or(receiptsLogs: _*))
+        val header = preBlock.signedHeader.header.copy(
+          transactionsRoot = buildMpt(prepareBlock.body.transactionList, SignedTransaction.byteArraySerializable),
+          stateRoot = stateRoot,
+          receiptsRoot = buildMpt(receipts, Receipt.byteArraySerializable),
+          logsBloom = bloomFilter,
+          gasUsed = gasUsed)
+        blockHeaderSigner(header, beneficiary).toRight(InvalidBlockHeaderSignature).map(
+          signedBlockHeader => PendingBlock(Block(signedBlockHeader, body), receipts)
+        )
     }
-
-    result.right.foreach(b => cache.updateAndGet(new UnaryOperator[List[PendingBlock]] {
+    result.foreach(b => cache.updateAndGet(new UnaryOperator[List[PendingBlock]] {
       override def apply(t: List[PendingBlock]): List[PendingBlock] =
         (b :: t).take(miningConfig.blockCacheSize)
     }))
-
     result
   }
 
@@ -89,11 +84,16 @@ class BlockGenerator(blockchain: Blockchain, blockchainConfig: BlockchainConfig,
     transactionsForBlock
   }
 
-  private def prepareHeader(blockNumber: BigInt, ommers: Seq[BlockHeader], beneficiary: Address, parent: Block, blockTimestamp: Long, slotNumber: BigInt) = {
+  private def prepareHeader(blockNumber: BigInt,
+                            ommers: Seq[SignedBlockHeader],
+                            beneficiary: Address,
+                            parent: Block,
+                            blockTimestamp: Long,
+                            slotNumber: BigInt) = {
     import blockchainConfig.daoForkConfig
 
     BlockHeader(
-      parentHash = parent.header.hash,
+      parentHash = parent.signedHeader.hash,
       ommersHash = ByteString(kec256(ommers.toBytes: Array[Byte])),
       beneficiary = beneficiary.bytes,
       stateRoot = ByteString.empty,
@@ -101,9 +101,9 @@ class BlockGenerator(blockchain: Blockchain, blockchainConfig: BlockchainConfig,
       transactionsRoot = ByteString.empty,
       receiptsRoot = ByteString.empty,
       logsBloom = ByteString.empty,
-      difficulty = difficulty.calculateDifficulty(blockNumber, blockTimestamp, parent.header),
+      difficulty = difficulty.calculateDifficulty(blockNumber, blockTimestamp, parent.signedHeader.header),
       number = blockNumber,
-      gasLimit = calculateGasLimit(parent.header.gasLimit),
+      gasLimit = calculateGasLimit(parent.signedHeader.header.gasLimit),
       gasUsed = 0,
       unixTimestamp = blockTimestamp,
       extraData = daoForkConfig.flatMap(daoForkConfig => daoForkConfig.getExtraData(blockNumber)).getOrElse(miningConfig.headerExtraData),
@@ -113,22 +113,13 @@ class BlockGenerator(blockchain: Blockchain, blockchainConfig: BlockchainConfig,
     )
   }
 
-  def getPrepared(powHeaderHash: ByteString): Option[PendingBlock] = {
-    cache.getAndUpdate(new UnaryOperator[List[PendingBlock]] {
-      override def apply(t: List[PendingBlock]): List[PendingBlock] =
-        t.filterNot(pb => ByteString(kec256(BlockHeader.getEncodedWithoutNonce(pb.block.header))) == powHeaderHash)
-    }).find { pb =>
-      ByteString(kec256(BlockHeader.getEncodedWithoutNonce(pb.block.header))) == powHeaderHash
-    }
-  }
-
   /**
     * This function returns the block currently being mined block with highest timestamp
     */
   def getPending: Option[PendingBlock] = {
     val pendingBlocks = cache.get()
     if(pendingBlocks.isEmpty) None
-    else Some(pendingBlocks.maxBy(_.block.header.unixTimestamp))
+    else Some(pendingBlocks.maxBy(_.block.signedHeader.header.unixTimestamp))
   }
 
   //returns maximal limit to be able to include as many transactions as possible

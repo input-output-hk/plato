@@ -13,8 +13,6 @@ import io.iohk.ethereum.network.p2p.messages.PV62.BlockBody
 import io.iohk.ethereum.pos.ElectionManager
 import io.iohk.ethereum.validators.BlockHeaderError.HeaderNumberError
 import io.iohk.ethereum.validators.BlockValidator.{BlockTransactionsHashError, BlockValid}
-import io.iohk.ethereum.validators.OmmersValidator.OmmersError.OmmersNotValidError
-import io.iohk.ethereum.validators.OmmersValidator.{GetBlockHeaderByHash, GetNBlocksBack, OmmersValid}
 import io.iohk.ethereum.validators._
 import io.iohk.ethereum.vm._
 
@@ -43,7 +41,7 @@ object Mocks {
 
     def importBlock(block: Block): BlockImportResult = ???
 
-    def resolveBranch(headers: Seq[BlockHeader]): BranchResolutionResult = ???
+    def resolveBranch(headers: Seq[SignedBlockHeader]): BranchResolutionResult = ???
 
     def binarySearchGasEstimation(stx: SignedTransaction, blockHeader: BlockHeader): BigInt = ???
 
@@ -68,29 +66,22 @@ object Mocks {
   class MockValidatorsFailingOnBlockBodies extends MockValidatorsAlwaysSucceed {
 
     override val blockValidator: BlockValidator = new BlockValidator {
-      override def validateBlockAndReceipts(blockHeader: BlockHeader, receipts: Seq[Receipt]) = Right(BlockValid)
-      override def validateHeaderAndBody(blockHeader: BlockHeader, blockBody: BlockBody) = Left(BlockTransactionsHashError)
+      override def validateBlockAndReceipts(blockHeader: SignedBlockHeader, receipts: Seq[Receipt]) = Right(BlockValid)
+      override def validateHeaderAndBody(blockHeader: SignedBlockHeader, blockBody: BlockBody) = Left(BlockTransactionsHashError)
     }
   }
 
   class MockValidatorsAlwaysSucceed extends Validators {
 
     override val blockValidator: BlockValidator = new BlockValidator {
-      override def validateBlockAndReceipts(blockHeader: BlockHeader, receipts: Seq[Receipt]) = Right(BlockValid)
-      override def validateHeaderAndBody(blockHeader: BlockHeader, blockBody: BlockBody) = Right(BlockValid)
+      override def validateBlockAndReceipts(blockHeader: SignedBlockHeader, receipts: Seq[Receipt]) = Right(BlockValid)
+      override def validateHeaderAndBody(blockHeader: SignedBlockHeader, blockBody: BlockBody) = Right(BlockValid)
     }
 
     override val blockHeaderValidator: BlockHeaderValidator = new BlockHeaderValidator {
-      def validate(blockHeader: BlockHeader, getBlockHeaderByHash: ByteString => Option[BlockHeader]): Either[BlockHeaderError, BlockHeaderValid] =
+      def validate(blockHeader: SignedBlockHeader, getBlockHeaderByHash: ByteString => Option[SignedBlockHeader]): Either[BlockHeaderError, BlockHeaderValid] =
         Right(BlockHeaderValid)
     }
-
-    override val ommersValidator: OmmersValidator =
-      (parentHash: ByteString,
-        blockNumber: BigInt,
-        ommers: Seq[BlockHeader],
-        getBlockHeaderByHash: GetBlockHeaderByHash,
-        getNBlocksBack: GetNBlocksBack) => Right(OmmersValid)
 
     override val signedTransactionValidator: SignedTransactionValidator =
       (stx: SignedTransaction, account: Account, blockHeader: BlockHeader, upfrontGasCost: UInt256, accumGasLimit: BigInt) => Right(SignedTransactionValid)
@@ -105,19 +96,12 @@ object Mocks {
     }
 
     override val blockHeaderValidator = new BlockHeaderValidator {
-      def validate(blockHeader: BlockHeader, getBlockHeaderByHash: ByteString => Option[BlockHeader]) = Left(HeaderNumberError)
+      def validate(blockHeader: SignedBlockHeader, getBlockHeaderByHash: ByteString => Option[SignedBlockHeader]) = Left(HeaderNumberError)
     }
 
-    override val ommersValidator: OmmersValidator =
-      (parentHash: ByteString,
-        blockNumber: BigInt,
-        ommers: Seq[BlockHeader],
-        getBlockHeaderByHash: GetBlockHeaderByHash,
-        getNBlocksBack: GetNBlocksBack) => Left(OmmersNotValidError)
-
     override val blockValidator = new BlockValidator {
-      def validateHeaderAndBody(blockHeader: BlockHeader, blockBody: BlockBody) = Left(BlockTransactionsHashError)
-      def validateBlockAndReceipts(blockHeader: BlockHeader, receipts: Seq[Receipt]) = Left(BlockTransactionsHashError)
+      def validateHeaderAndBody(blockHeader: SignedBlockHeader, blockBody: BlockBody) = Left(BlockTransactionsHashError)
+      def validateBlockAndReceipts(blockHeader: SignedBlockHeader, receipts: Seq[Receipt]) = Left(BlockTransactionsHashError)
     }
   }
 

@@ -3,7 +3,7 @@ package io.iohk.ethereum.blockchain.sync
 import akka.actor.{ActorSystem, Props}
 import akka.testkit.{TestActorRef, TestProbe}
 import akka.util.ByteString
-import io.iohk.ethereum.domain.{BlockHeader, Receipt}
+import io.iohk.ethereum.domain.{Receipt, SignedBlockHeader}
 import io.iohk.ethereum.mpt.{ExtensionNode, HexPrefix, MptNode}
 import io.iohk.ethereum.network.PeerEventBusActor.PeerEvent.MessageFromPeer
 import io.iohk.ethereum.network.PeerEventBusActor.SubscriptionClassifier.MessageClassifier
@@ -26,7 +26,7 @@ class BlockchainHostActorSpec extends FlatSpec with Matchers {
   it should "return Receipts for block hashes" in new TestSetup {
 
     peerEventBus.expectMsg(Subscribe(MessageClassifier(
-      Set(GetNodeData.code, GetReceipts.code, GetBlockBodies.code, GetBlockHeaders.code), PeerSelector.AllPeers)))
+      Set(GetNodeData.code, GetReceipts.code, GetBlockBodies.code, GetSignedBlockHeaders.code), PeerSelector.AllPeers)))
 
     //given
     val receiptsHashes = Seq(
@@ -65,132 +65,132 @@ class BlockchainHostActorSpec extends FlatSpec with Matchers {
 
   it should "return block headers by block number" in new TestSetup {
     //given
-    val firstHeader: BlockHeader = baseBlockHeader.copy(number = 3)
-    val secondHeader: BlockHeader = baseBlockHeader.copy(number = 4)
+    val firstHeader: SignedBlockHeader = replaceBlockNumber(baseBlockHeader, newBlockNumber = 3)
+    val secondHeader: SignedBlockHeader = replaceBlockNumber(baseBlockHeader, newBlockNumber = 4)
 
     blockchain.save(firstHeader)
     blockchain.save(secondHeader)
-    blockchain.save(baseBlockHeader.copy(number = 5))
-    blockchain.save(baseBlockHeader.copy(number = 6))
+    blockchain.save(replaceBlockNumber(baseBlockHeader, newBlockNumber = 5))
+    blockchain.save(replaceBlockNumber(baseBlockHeader, newBlockNumber = 6))
 
     //when
-    blockchainHost ! MessageFromPeer(GetBlockHeaders(Left(3), 2, 0, reverse = false), peerId)
+    blockchainHost ! MessageFromPeer(GetSignedBlockHeaders(Left(3), 2, 0, reverse = false), peerId)
 
     //then
-    etcPeerManager.expectMsg(EtcPeerManagerActor.SendMessage(BlockHeaders(Seq(firstHeader, secondHeader)), peerId))
+    etcPeerManager.expectMsg(EtcPeerManagerActor.SendMessage(SignedBlockHeaders(Seq(firstHeader, secondHeader)), peerId))
   }
 
   it should "return block headers by block number when response is shorter then what was requested" in new TestSetup {
     //given
-    val firstHeader: BlockHeader = baseBlockHeader.copy(number = 3)
-    val secondHeader: BlockHeader = baseBlockHeader.copy(number = 4)
+    val firstHeader: SignedBlockHeader = replaceBlockNumber(baseBlockHeader, newBlockNumber = 3)
+    val secondHeader: SignedBlockHeader = replaceBlockNumber(baseBlockHeader, newBlockNumber = 4)
 
     blockchain.save(firstHeader)
     blockchain.save(secondHeader)
 
     //when
-    blockchainHost ! MessageFromPeer(GetBlockHeaders(Left(3), 3, 0, reverse = false), peerId)
+    blockchainHost ! MessageFromPeer(GetSignedBlockHeaders(Left(3), 3, 0, reverse = false), peerId)
 
     //then
-    etcPeerManager.expectMsg(EtcPeerManagerActor.SendMessage(BlockHeaders(Seq(firstHeader, secondHeader)), peerId))
+    etcPeerManager.expectMsg(EtcPeerManagerActor.SendMessage(SignedBlockHeaders(Seq(firstHeader, secondHeader)), peerId))
   }
 
   it should "return block headers by block number in reverse order" in new TestSetup {
     //given
-    val firstHeader: BlockHeader = baseBlockHeader.copy(number = 3)
-    val secondHeader: BlockHeader = baseBlockHeader.copy(number = 2)
+    val firstHeader: SignedBlockHeader = replaceBlockNumber(baseBlockHeader, newBlockNumber = 3)
+    val secondHeader: SignedBlockHeader = replaceBlockNumber(baseBlockHeader, newBlockNumber = 2)
 
     blockchain.save(firstHeader)
     blockchain.save(secondHeader)
-    blockchain.save(baseBlockHeader.copy(number = 1))
+    blockchain.save(replaceBlockNumber(baseBlockHeader, newBlockNumber = 1))
 
     //when
-    blockchainHost ! MessageFromPeer(GetBlockHeaders(Left(3), 2, 0, reverse = true), peerId)
+    blockchainHost ! MessageFromPeer(GetSignedBlockHeaders(Left(3), 2, 0, reverse = true), peerId)
 
     //then
-    etcPeerManager.expectMsg(EtcPeerManagerActor.SendMessage(BlockHeaders(Seq(firstHeader, secondHeader)), peerId))
+    etcPeerManager.expectMsg(EtcPeerManagerActor.SendMessage(SignedBlockHeaders(Seq(firstHeader, secondHeader)), peerId))
   }
 
   it should "return block headers by block hash" in new TestSetup {
     //given
-    val firstHeader: BlockHeader = baseBlockHeader.copy(number = 3)
-    val secondHeader: BlockHeader = baseBlockHeader.copy(number = 4)
+    val firstHeader: SignedBlockHeader = replaceBlockNumber(baseBlockHeader, newBlockNumber = 3)
+    val secondHeader: SignedBlockHeader = replaceBlockNumber(baseBlockHeader, newBlockNumber = 4)
 
     blockchain.save(firstHeader)
     blockchain.save(secondHeader)
-    blockchain.save(baseBlockHeader.copy(number = 5))
-    blockchain.save(baseBlockHeader.copy(number = 6))
+    blockchain.save(replaceBlockNumber(baseBlockHeader, newBlockNumber = 5))
+    blockchain.save(replaceBlockNumber(baseBlockHeader, newBlockNumber = 6))
 
     //when
-    blockchainHost ! MessageFromPeer(GetBlockHeaders(Right(firstHeader.hash), 2, 0, reverse = false), peerId)
+    blockchainHost ! MessageFromPeer(GetSignedBlockHeaders(Right(firstHeader.hash), 2, 0, reverse = false), peerId)
 
     //then
-    etcPeerManager.expectMsg(EtcPeerManagerActor.SendMessage(BlockHeaders(Seq(firstHeader, secondHeader)), peerId))
+    etcPeerManager.expectMsg(EtcPeerManagerActor.SendMessage(SignedBlockHeaders(Seq(firstHeader, secondHeader)), peerId))
   }
 
   it should "return block headers by block hash when skipping headers" in new TestSetup {
     //given
-    val firstHeader: BlockHeader = baseBlockHeader.copy(number = 3)
-    val secondHeader: BlockHeader = baseBlockHeader.copy(number = 5)
+    val firstHeader: SignedBlockHeader = replaceBlockNumber(baseBlockHeader, newBlockNumber = 3)
+    val secondHeader: SignedBlockHeader = replaceBlockNumber(baseBlockHeader, newBlockNumber = 5)
 
     blockchain.save(firstHeader)
-    blockchain.save(baseBlockHeader.copy(number = 4))
+    blockchain.save(replaceBlockNumber(baseBlockHeader, newBlockNumber = 4))
     blockchain.save(secondHeader)
-    blockchain.save(baseBlockHeader.copy(number = 6))
-    blockchain.save(baseBlockHeader.copy(number = 7))
+    blockchain.save(replaceBlockNumber(baseBlockHeader, newBlockNumber = 6))
+    blockchain.save(replaceBlockNumber(baseBlockHeader, newBlockNumber = 7))
 
     //when
     blockchainHost ! MessageFromPeer(
-      GetBlockHeaders(Right(firstHeader.hash), maxHeaders = 2, skip = 1, reverse = false), peerId)
+      GetSignedBlockHeaders(Right(firstHeader.hash), maxHeaders = 2, skip = 1, reverse = false), peerId)
 
     //then
-    etcPeerManager.expectMsg(EtcPeerManagerActor.SendMessage(BlockHeaders(Seq(firstHeader, secondHeader)), peerId))
+    etcPeerManager.expectMsg(EtcPeerManagerActor.SendMessage(SignedBlockHeaders(Seq(firstHeader, secondHeader)), peerId))
   }
 
   it should "return block headers in reverse when there are skipped blocks" in new TestSetup {
     //given
-    val firstHeader: BlockHeader = baseBlockHeader.copy(number = 3)
-    val secondHeader: BlockHeader = baseBlockHeader.copy(number = 1)
+    val firstHeader: SignedBlockHeader = replaceBlockNumber(baseBlockHeader, newBlockNumber = 3)
+    val secondHeader: SignedBlockHeader = replaceBlockNumber(baseBlockHeader, newBlockNumber = 1)
 
     blockchain.save(firstHeader)
     blockchain.save(secondHeader)
 
     //when
-    blockchainHost ! MessageFromPeer(GetBlockHeaders(Right(firstHeader.hash), 2, 1, reverse = true), peerId)
+    blockchainHost ! MessageFromPeer(GetSignedBlockHeaders(Right(firstHeader.hash), 2, 1, reverse = true), peerId)
 
     //then
-    etcPeerManager.expectMsg(EtcPeerManagerActor.SendMessage(BlockHeaders(Seq(firstHeader, secondHeader)), peerId))
+    etcPeerManager.expectMsg(EtcPeerManagerActor.SendMessage(SignedBlockHeaders(Seq(firstHeader, secondHeader)), peerId))
   }
 
   it should "return block headers in reverse when there are skipped blocks and we are asking for blocks before genesis" in new TestSetup {
     //given
-    val firstHeader: BlockHeader = baseBlockHeader.copy(number = 3)
-    val secondHeader: BlockHeader = baseBlockHeader.copy(number = 1)
+    val firstHeader: SignedBlockHeader = replaceBlockNumber(baseBlockHeader, newBlockNumber = 3)
+    val secondHeader: SignedBlockHeader = replaceBlockNumber(baseBlockHeader, newBlockNumber = 1)
 
     blockchain.save(firstHeader)
     blockchain.save(secondHeader)
 
     //when
-    blockchainHost ! MessageFromPeer(GetBlockHeaders(Right(firstHeader.hash), 3, 1, reverse = true), peerId)
+    blockchainHost ! MessageFromPeer(GetSignedBlockHeaders(Right(firstHeader.hash), 3, 1, reverse = true), peerId)
 
     //then
-    etcPeerManager.expectMsg(EtcPeerManagerActor.SendMessage(BlockHeaders(Seq(firstHeader, secondHeader)), peerId))
+    etcPeerManager.expectMsg(EtcPeerManagerActor.SendMessage(SignedBlockHeaders(Seq(firstHeader, secondHeader)), peerId))
   }
 
   it should "return block headers in reverse when there are skipped blocks ending at genesis" in new TestSetup {
     //given
-    val firstHeader: BlockHeader = baseBlockHeader.copy(number = 4)
-    val secondHeader: BlockHeader = baseBlockHeader.copy(number = 2)
+    val firstHeader: SignedBlockHeader = replaceBlockNumber(baseBlockHeader, newBlockNumber = 4)
+    val secondHeader: SignedBlockHeader = replaceBlockNumber(baseBlockHeader, newBlockNumber = 2)
 
     blockchain.save(firstHeader)
     blockchain.save(secondHeader)
 
     //when
-    blockchainHost ! MessageFromPeer(GetBlockHeaders(Right(firstHeader.hash), 4, 1, reverse = true), peerId)
+    blockchainHost ! MessageFromPeer(GetSignedBlockHeaders(Right(firstHeader.hash), 4, 1, reverse = true), peerId)
 
     //then
     etcPeerManager.expectMsg(
-      EtcPeerManagerActor.SendMessage(BlockHeaders(Seq(firstHeader, secondHeader, blockchain.genesisHeader)), peerId))
+      EtcPeerManagerActor.SendMessage(SignedBlockHeaders(Seq(firstHeader, secondHeader, blockchain.genesisSignedHeader)), peerId))
   }
 
   it should "return evm code for hash" in new TestSetup {
@@ -225,7 +225,7 @@ class BlockchainHostActorSpec extends FlatSpec with Matchers {
   trait TestSetup extends EphemBlockchainTestSetup {
     implicit val system = ActorSystem("BlockchainHostActor_System")
 
-    blockchain.save(Fixtures.Blocks.Genesis.header)
+    blockchain.save(Fixtures.Blocks.Genesis.signedHeader)
 
     val peerConf = new PeerConfiguration {
       override val fastSyncHostConfiguration: FastSyncHostConfiguration = new FastSyncHostConfiguration {
@@ -253,7 +253,7 @@ class BlockchainHostActorSpec extends FlatSpec with Matchers {
       override val updateNodesInterval: FiniteDuration = 20.seconds
     }
 
-    val baseBlockHeader = Fixtures.Blocks.Block3125369.header
+    val baseBlockHeader = Fixtures.Blocks.Block3125369.signedHeader
     val baseBlockBody = BlockBody(Nil, Nil)
 
     val peerId = PeerId("1")
@@ -263,6 +263,9 @@ class BlockchainHostActorSpec extends FlatSpec with Matchers {
 
     val blockchainHost = TestActorRef(Props(new BlockchainHostActor(blockchain, peerConf,
       peerEventBus.ref, etcPeerManager.ref)))
+
+    def replaceBlockNumber(signedBlockHeader: SignedBlockHeader, newBlockNumber: BigInt) =
+      signedBlockHeader.copy(header = signedBlockHeader.header.copy(number = newBlockNumber))
   }
 
 }

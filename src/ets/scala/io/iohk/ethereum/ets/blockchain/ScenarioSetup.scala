@@ -33,7 +33,7 @@ abstract class ScenarioSetup(scenario: BlockchainScenario)
     val genesisBlock = scenario.genesisRLP match {
       case Some(rlp) =>
         val block = rlp.toArray.toBlock
-        assert(block.header == scenario.genesisBlockHeader.toBlockHeader,
+        assert(block.signedHeader == scenario.genesisBlockHeader.toBlockHeader,
           "decoded genesis block header did not match the expectation")
         block
 
@@ -42,8 +42,8 @@ abstract class ScenarioSetup(scenario: BlockchainScenario)
     }
 
     blockchain.save(genesisBlock)
-    blockchain.save(genesisBlock.header.hash, Nil)
-    blockchain.save(genesisBlock.header.hash, genesisBlock.header.difficulty)
+    blockchain.save(genesisBlock.signedHeader.hash, Nil)
+    blockchain.save(genesisBlock.signedHeader.hash, genesisBlock.signedHeader.difficulty)
     genesisBlock
   }
 

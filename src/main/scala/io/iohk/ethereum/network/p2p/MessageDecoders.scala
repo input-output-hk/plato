@@ -8,9 +8,9 @@ import io.iohk.ethereum.network.p2p.messages.CommonMessages._
 import io.iohk.ethereum.network.p2p.messages.PV61.BlockHashesFromNumber._
 import io.iohk.ethereum.network.p2p.messages.PV62.NewBlockHashes._
 import io.iohk.ethereum.network.p2p.messages.PV62.BlockBodies._
-import io.iohk.ethereum.network.p2p.messages.PV62.BlockHeaders._
+import io.iohk.ethereum.network.p2p.messages.PV62.SignedBlockHeaders._
 import io.iohk.ethereum.network.p2p.messages.PV62.GetBlockBodies._
-import io.iohk.ethereum.network.p2p.messages.PV62.GetBlockHeaders._
+import io.iohk.ethereum.network.p2p.messages.PV62.GetSignedBlockHeaders._
 import io.iohk.ethereum.network.p2p.messages.PV63.GetNodeData._
 import io.iohk.ethereum.network.p2p.messages.PV63.GetReceipts._
 import io.iohk.ethereum.network.p2p.messages.PV63.NodeData._
@@ -48,8 +48,8 @@ object EthereumMessageDecoder extends MessageDecoder {
     case (PV61, t) => handlePV61(t, payload)
 
     case (PV62 | PV63, pv62.NewBlockHashes.code) => payload.toNewBlockHashes
-    case (PV62 | PV63, pv62.GetBlockHeaders.code) => payload.toGetBlockHeaders
-    case (PV62 | PV63, pv62.BlockHeaders.code) => payload.toBlockHeaders
+    case (PV62 | PV63, pv62.GetSignedBlockHeaders.code) => payload.toGetBlockHeaders
+    case (PV62 | PV63, pv62.SignedBlockHeaders.code) => payload.toBlockHeaders
     case (PV62 | PV63, pv62.GetBlockBodies.code) => payload.toGetBlockBodies
     case (PV62 | PV63, pv62.BlockBodies.code) => payload.toBlockBodies
 

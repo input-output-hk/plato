@@ -23,7 +23,6 @@ import io.iohk.ethereum.network.PeerManagerActor.{FastSyncHostConfiguration, Pee
 import io.iohk.ethereum.network.handshaker.{EtcHandshaker, EtcHandshakerConfiguration}
 import io.iohk.ethereum.network.p2p.messages.CommonMessages.Status.StatusEnc
 import io.iohk.ethereum.network.p2p.messages.CommonMessages.Status
-import io.iohk.ethereum.network.p2p.messages.PV62.GetBlockHeaders.GetBlockHeadersEnc
 import io.iohk.ethereum.network.p2p.messages.PV62._
 import io.iohk.ethereum.network.p2p.messages.Versions
 import io.iohk.ethereum.network.p2p.messages.WireProtocol.Hello.HelloEnc
@@ -38,6 +37,8 @@ import org.scalatest.{FlatSpec, Matchers}
 import org.spongycastle.crypto.AsymmetricCipherKeyPair
 import org.spongycastle.crypto.params.ECPublicKeyParameters
 import org.spongycastle.util.encoders.Hex
+import io.iohk.ethereum.Fixtures.FakeSignature
+import io.iohk.ethereum.network.p2p.messages.PV62.GetSignedBlockHeaders.GetSignedBlockHeadersEnc
 
 class PeerActorSpec extends FlatSpec with Matchers {
 
@@ -210,43 +211,43 @@ class PeerActorSpec extends FlatSpec with Matchers {
 
     val blockBody = new BlockBody(Seq(), Seq())
 
-    val etcForkBlockHeader =
-      BlockHeader(
-        parentHash = ByteString(Hex.decode("a218e2c611f21232d857e3c8cecdcdf1f65f25a4477f98f6f47e4063807f2308")),
-        ommersHash = ByteString(Hex.decode("1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347")),
-        beneficiary = ByteString(Hex.decode("61c808d82a3ac53231750dadc13c777b59310bd9")),
-        stateRoot = ByteString(Hex.decode("614d7d358b03cbdaf0343529673be20ad45809d02487f023e047efdce9da8aff")),
-        transactionsRoot = ByteString(Hex.decode("d33068a7f21bff5018a00ca08a3566a06be4196dfe9e39f96e431565a619d455")),
-        receiptsRoot = ByteString(Hex.decode("7bda9aa65977800376129148cbfe89d35a016dd51c95d6e6dc1e76307d315468")),
-        logsBloom = ByteString(Hex.decode("00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000")),
-        difficulty = 1,
-        number = BigInt(1920000),
-        gasLimit = BigInt(4712384),
-        gasUsed = BigInt(84000),
-        unixTimestamp = 1469020839L,
-        extraData = ByteString(Hex.decode("e4b883e5bda9e7a59ee4bb99e9b1bc")),
-        mixHash = ByteString(Hex.decode("c52daa7054babe515b17ee98540c0889cf5e1595c5dd77496997ca84a68c8da1")),
-        nonce = ByteString(Hex.decode("05276a600980199d")),
-        slotNumber = BigInt(1920000))
+    val etcForkBlockHeader = SignedBlockHeader(BlockHeader(
+      parentHash = ByteString(Hex.decode("a218e2c611f21232d857e3c8cecdcdf1f65f25a4477f98f6f47e4063807f2308")),
+      ommersHash = ByteString(Hex.decode("1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347")),
+      beneficiary = ByteString(Hex.decode("61c808d82a3ac53231750dadc13c777b59310bd9")),
+      stateRoot = ByteString(Hex.decode("614d7d358b03cbdaf0343529673be20ad45809d02487f023e047efdce9da8aff")),
+      transactionsRoot = ByteString(Hex.decode("d33068a7f21bff5018a00ca08a3566a06be4196dfe9e39f96e431565a619d455")),
+      receiptsRoot = ByteString(Hex.decode("7bda9aa65977800376129148cbfe89d35a016dd51c95d6e6dc1e76307d315468")),
+      logsBloom = ByteString(Hex.decode("00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000")),
+      difficulty = 1,
+      number = BigInt(1920000),
+      gasLimit = BigInt(4712384),
+      gasUsed = BigInt(84000),
+      unixTimestamp = 1469020839L,
+      extraData = ByteString(Hex.decode("e4b883e5bda9e7a59ee4bb99e9b1bc")),
+      mixHash = ByteString(Hex.decode("c52daa7054babe515b17ee98540c0889cf5e1595c5dd77496997ca84a68c8da1")),
+      nonce = ByteString(Hex.decode("05276a600980199d")),
+      slotNumber = BigInt(1920000)),
+      FakeSignature)
 
-    val nonEtcForkBlockHeader =
-      BlockHeader(
-        parentHash = ByteString("this"),
-        ommersHash = ByteString("is"),
-        beneficiary = ByteString("not"),
-        stateRoot = ByteString("an"),
-        transactionsRoot = ByteString("ETC"),
-        receiptsRoot = ByteString("fork"),
-        logsBloom = ByteString("block"),
-        difficulty = 1,
-        number = BigInt(1920000),
-        gasLimit = BigInt(4712384),
-        gasUsed = BigInt(84000),
-        unixTimestamp = 1469020839L,
-        extraData = ByteString("unused"),
-        mixHash = ByteString("unused"),
-        nonce = ByteString("unused"),
-        slotNumber = BigInt(1920000))
+    val nonEtcForkBlockHeader = SignedBlockHeader(BlockHeader(
+      parentHash = ByteString("this"),
+      ommersHash = ByteString("is"),
+      beneficiary = ByteString("not"),
+      stateRoot = ByteString("an"),
+      transactionsRoot = ByteString("ETC"),
+      receiptsRoot = ByteString("fork"),
+      logsBloom = ByteString("block"),
+      difficulty = 1,
+      number = BigInt(1920000),
+      gasLimit = BigInt(4712384),
+      gasUsed = BigInt(84000),
+      unixTimestamp = 1469020839L,
+      extraData = ByteString("unused"),
+      mixHash = ByteString("unused"),
+      nonce = ByteString("unused"),
+      slotNumber = BigInt(1920000)),
+      FakeSignature)
   }
 
   trait NodeStatusSetup extends SecureRandomBuilder with EphemBlockchainTestSetup {
@@ -259,7 +260,7 @@ class PeerActorSpec extends FlatSpec with Matchers {
 
     val nodeStatusHolder = Agent(nodeStatus)
 
-    val testGenesisHeader = BlockHeader(
+    val testGenesisHeader = SignedBlockHeader(BlockHeader(
       parentHash = ByteString("0"),
       ommersHash = ByteString("0"),
       beneficiary = ByteString("0"),
@@ -275,7 +276,7 @@ class PeerActorSpec extends FlatSpec with Matchers {
       extraData = ByteString("0"),
       mixHash = ByteString("0"),
       nonce = ByteString("0"),
-      slotNumber = 0)
+      slotNumber = 0), FakeSignature)
     blockchain.save(testGenesisHeader)
 
     val daoForkBlockNumber = 1920000
@@ -346,12 +347,12 @@ class PeerActorSpec extends FlatSpec with Matchers {
       rlpxConnection.expectMsgPF() { case RLPxConnectionHandler.SendMessage(_: StatusEnc) => () }
       rlpxConnection.send(peer, RLPxConnectionHandler.MessageReceived(remoteStatus))
 
-      rlpxConnection.expectMsgPF() { case RLPxConnectionHandler.SendMessage(_: GetBlockHeadersEnc) => () }
-      rlpxConnection.send(peer, RLPxConnectionHandler.MessageReceived(BlockHeaders(Seq(etcForkBlockHeader))))
+      rlpxConnection.expectMsgPF() { case RLPxConnectionHandler.SendMessage(_: GetSignedBlockHeadersEnc) => () }
+      rlpxConnection.send(peer, RLPxConnectionHandler.MessageReceived(SignedBlockHeaders(Seq(etcForkBlockHeader))))
 
       // ask for highest block
-      rlpxConnection.expectMsgPF() { case RLPxConnectionHandler.SendMessage(_: GetBlockHeadersEnc) => () }
-      rlpxConnection.send(peer, RLPxConnectionHandler.MessageReceived(BlockHeaders(Nil)))
+      rlpxConnection.expectMsgPF() { case RLPxConnectionHandler.SendMessage(_: GetSignedBlockHeadersEnc) => () }
+      rlpxConnection.send(peer, RLPxConnectionHandler.MessageReceived(SignedBlockHeaders(Nil)))
     }
 
     implicit val system = ActorSystem("PeerActorSpec_System")

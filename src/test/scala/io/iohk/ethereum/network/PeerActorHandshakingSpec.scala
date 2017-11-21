@@ -162,9 +162,9 @@ class PeerActorHandshakingSpec extends FlatSpec with Matchers {
     val defaultStatus = Status(
       protocolVersion = Versions.PV63,
       networkId = 1,
-      totalDifficulty = Fixtures.Blocks.Genesis.header.difficulty,
-      bestHash = Fixtures.Blocks.Genesis.header.hash,
-      genesisHash = Fixtures.Blocks.Genesis.header.hash
+      totalDifficulty = Fixtures.Blocks.Genesis.signedHeader.header.difficulty,
+      bestHash = Fixtures.Blocks.Genesis.signedHeader.hash,
+      genesisHash = Fixtures.Blocks.Genesis.signedHeader.hash
     )
     val defaultBlockNumber = 1000
     val defaultForkAccepted = true

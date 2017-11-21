@@ -10,7 +10,7 @@ import io.iohk.ethereum.network.PeerEventBusActor.SubscriptionClassifier._
 import io.iohk.ethereum.network.handshaker.Handshaker.HandshakeResult
 import io.iohk.ethereum.network.p2p.{Message, MessageSerializable}
 import io.iohk.ethereum.network.p2p.messages.CommonMessages.{NewBlock, Status}
-import io.iohk.ethereum.network.p2p.messages.PV62.{BlockHeaders, GetBlockHeaders, NewBlockHashes}
+import io.iohk.ethereum.network.p2p.messages.PV62.{SignedBlockHeaders, GetSignedBlockHeaders, NewBlockHashes}
 import io.iohk.ethereum.network.p2p.messages.WireProtocol.Disconnect
 
 /**
@@ -72,7 +72,7 @@ class EtcPeerManagerActor(peerManagerActor: ActorRef, peerEventBusActor: ActorRe
       peerEventBusActor ! Subscribe(MessageClassifier(msgCodesWithInfo, PeerSelector.WithId(peer.id)))
 
       //Ask for the highest block from the peer
-      peer.ref ! SendMessage(GetBlockHeaders(Right(peerInfo.remoteStatus.bestHash), 1, 0, false))
+      peer.ref ! SendMessage(GetSignedBlockHeaders(Right(peerInfo.remoteStatus.bestHash), 1, 0, false))
       context become handleMessages(peersWithInfo + (peer.id -> PeerWithInfo(peer, peerInfo)))
 
     case PeerDisconnected(peerId) if peersWithInfo.contains(peerId) =>
@@ -146,13 +146,13 @@ class EtcPeerManagerActor(peerManagerActor: ActorRef, peerEventBusActor: ActorRe
     * @return new peer info with the fork block accepted value updated
     */
   private def updateForkAccepted(message: Message, peer: Peer)(initialPeerInfo: PeerInfo): PeerInfo = message match {
-    case BlockHeaders(blockHeaders) =>
+    case SignedBlockHeaders(signedBlockHeaders) =>
       val newPeerInfoOpt: Option[PeerInfo] =
         for {
           forkResolver <- forkResolverOpt
-          forkBlockHeader <- blockHeaders.find(_.number == forkResolver.forkBlockNumber)
+          forkBlockHeader <- signedBlockHeaders.find(_.header.number == forkResolver.forkBlockNumber)
         } yield {
-          val newFork = forkResolver.recognizeFork(forkBlockHeader)
+          val newFork = forkResolver.recognizeFork(forkBlockHeader.header)
           log.debug("Received fork block header with fork: {}", newFork)
 
           if (!forkResolver.isAccepted(newFork)) {
@@ -187,10 +187,10 @@ class EtcPeerManagerActor(peerManagerActor: ActorRef, peerEventBusActor: ActorRe
     }
 
     message match {
-      case m: BlockHeaders =>
-        update(m.headers.map(_.number))
+      case m: SignedBlockHeaders =>
+        update(m.headers.map(_.header.number))
       case m: NewBlock =>
-        update(Seq(m.block.header.number))
+        update(Seq(m.block.signedHeader.header.number))
       case m: NewBlockHashes =>
         update(m.hashes.map(_.number))
       case _ => initialPeerInfo
@@ -201,7 +201,7 @@ class EtcPeerManagerActor(peerManagerActor: ActorRef, peerEventBusActor: ActorRe
 
 object EtcPeerManagerActor {
 
-  val msgCodesWithInfo: Set[Int] = Set(BlockHeaders.code, NewBlock.code, NewBlockHashes.code)
+  val msgCodesWithInfo: Set[Int] = Set(SignedBlockHeaders.code, NewBlock.code, NewBlockHashes.code)
 
   case class PeerInfo(remoteStatus: Status,
                       totalDifficulty: BigInt,

@@ -6,10 +6,11 @@ import io.iohk.ethereum.pos.ElectionManager
 import io.iohk.ethereum.utils.{BlockchainConfig, DaoForkConfig}
 
 trait BlockHeaderValidator {
-  def validate(blockHeader: BlockHeader, getBlockHeaderByHash: ByteString => Option[BlockHeader]): Either[BlockHeaderError, BlockHeaderValid]
+  def validate(signedBlockHeader: SignedBlockHeader, getSignedBlockHeaderByHash: ByteString =>
+    Option[SignedBlockHeader]): Either[BlockHeaderError, BlockHeaderValid]
 
-  def validate(blockHeader: BlockHeader, blockchain: Blockchain): Either[BlockHeaderError, BlockHeaderValid] =
-    validate(blockHeader, blockchain.getBlockHeaderByHash _)
+  def validate(signedBlockHeader: SignedBlockHeader, blockchain: Blockchain): Either[BlockHeaderError, BlockHeaderValid] =
+    validate(signedBlockHeader, blockchain.getSignedBlockHeaderByHash _)
 }
 
 object BlockHeaderValidatorImpl {
@@ -31,32 +32,33 @@ class BlockHeaderValidatorImpl(blockchainConfig: BlockchainConfig,
   /** This method allows validate a BlockHeader (stated on
     * section 4.4.4 of http://paper.gavwood.com/).
     *
-    * @param blockHeader BlockHeader to validate.
+    * @param signedBlockHeader BlockHeader to validate.
     * @param parentHeader BlockHeader of the parent of the block to validate.
     */
-  def validate(blockHeader: BlockHeader, parentHeader: BlockHeader): Either[BlockHeaderError, BlockHeaderValid] = {
+  def validate(signedBlockHeader: SignedBlockHeader, parentHeader: BlockHeader): Either[BlockHeaderError, BlockHeaderValid] = {
     for {
-      _ <- validateExtraData(blockHeader)
-      _ <- validateTimestamp(blockHeader, parentHeader)
-      _ <- validateDifficulty(blockHeader, parentHeader)
-      _ <- validateGasUsed(blockHeader)
-      _ <- validateGasLimit(blockHeader, parentHeader)
-      _ <- validateNumber(blockHeader, parentHeader)
-      _ <- validateIsLeader(blockHeader)
-      _ <- validateSlotNumber(blockHeader, parentHeader)
+      _ <- validateExtraData(signedBlockHeader.header)
+      _ <- validateTimestamp(signedBlockHeader.header, parentHeader)
+      _ <- validateDifficulty(signedBlockHeader.header, parentHeader)
+      _ <- validateGasUsed(signedBlockHeader.header)
+      _ <- validateGasLimit(signedBlockHeader.header, parentHeader)
+      _ <- validateNumber(signedBlockHeader.header, parentHeader)
+      _ <- validateIsLeader(signedBlockHeader.header)
+      _ <- validateSlotNumber(signedBlockHeader.header, parentHeader)
     } yield BlockHeaderValid
   }
 
   /** This method allows validate a BlockHeader (stated on
     * section 4.4.4 of http://paper.gavwood.com/).
     *
-    * @param blockHeader BlockHeader to validate.
-    * @param getBlockHeaderByHash function to obtain the parent header.
+    * @param signedBlockHeader BlockHeader to validate.
+    * @param getSignedBlockHeaderByHash function to obtain the parent header.
     */
-  def validate(blockHeader: BlockHeader, getBlockHeaderByHash: ByteString => Option[BlockHeader]): Either[BlockHeaderError, BlockHeaderValid] = {
+  def validate(signedBlockHeader: SignedBlockHeader, getSignedBlockHeaderByHash: ByteString =>
+    Option[SignedBlockHeader]): Either[BlockHeaderError, BlockHeaderValid] = {
     for {
-      blockHeaderParent <- getBlockHeaderByHash(blockHeader.parentHash).map(Right(_)).getOrElse(Left(HeaderParentNotFoundError))
-      _ <- validate(blockHeader, blockHeaderParent)
+      blockHeaderParent <- getSignedBlockHeaderByHash(signedBlockHeader.header.parentHash).map(Right(_)).getOrElse(Left(HeaderParentNotFoundError))
+      _ <- validate(signedBlockHeader, blockHeaderParent.header)
     } yield BlockHeaderValid
   }
 

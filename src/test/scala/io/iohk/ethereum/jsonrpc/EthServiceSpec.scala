@@ -5,6 +5,7 @@ import java.security.SecureRandom
 import akka.actor.ActorSystem
 import akka.testkit.TestProbe
 import akka.util.ByteString
+import io.iohk.ethereum.Fixtures.FakeSignature
 import io.iohk.ethereum.blockchain.sync.EphemBlockchainTestSetup
 import io.iohk.ethereum.{Fixtures, NormalPatience, Timeouts, crypto}
 import io.iohk.ethereum.domain.{Address, Block, BlockHeader, BlockchainImpl, UInt256, _}
@@ -15,7 +16,6 @@ import io.iohk.ethereum.transactions.PendingTransactionsManager
 import io.iohk.ethereum.utils._
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.{FlatSpec, Matchers}
-
 import scala.concurrent.duration.{Duration, FiniteDuration}
 import scala.concurrent.Await
 import io.iohk.ethereum.jsonrpc.EthService.ProtocolVersionRequest
@@ -72,7 +72,7 @@ class EthServiceSpec extends FlatSpec with Matchers with ScalaFutures with MockF
 
   it should "answer eth_getTransactionByBlockHashAndIndex with None when there is no block with the requested hash" in new TestSetup {
     val txIndexToRequest = blockToRequest.body.transactionList.size / 2
-    val request = GetTransactionByBlockHashAndIndexRequest(blockToRequest.header.hash, txIndexToRequest)
+    val request = GetTransactionByBlockHashAndIndexRequest(blockToRequest.signedHeader.hash, txIndexToRequest)
     val response = Await.result(ethService.getTransactionByBlockHashAndIndexRequest(request), Duration.Inf).right.get
 
     response.transactionResponse shouldBe None
@@ -82,7 +82,7 @@ class EthServiceSpec extends FlatSpec with Matchers with ScalaFutures with MockF
     blockchain.save(blockToRequest)
 
     val invalidTxIndex = blockToRequest.body.transactionList.size
-    val requestWithInvalidIndex = GetTransactionByBlockHashAndIndexRequest(blockToRequest.header.hash, invalidTxIndex)
+    val requestWithInvalidIndex = GetTransactionByBlockHashAndIndexRequest(blockToRequest.signedHeader.hash, invalidTxIndex)
     val response = Await.result(
       ethService.getTransactionByBlockHashAndIndexRequest(requestWithInvalidIndex),
       Duration.Inf
@@ -95,11 +95,11 @@ class EthServiceSpec extends FlatSpec with Matchers with ScalaFutures with MockF
     blockchain.save(blockToRequest)
 
     val txIndexToRequest = blockToRequest.body.transactionList.size / 2
-    val request = GetTransactionByBlockHashAndIndexRequest(blockToRequest.header.hash, txIndexToRequest)
+    val request = GetTransactionByBlockHashAndIndexRequest(blockToRequest.signedHeader.hash, txIndexToRequest)
     val response = Await.result(ethService.getTransactionByBlockHashAndIndexRequest(request), Duration.Inf).right.get
 
     val requestedStx = blockToRequest.body.transactionList.apply(txIndexToRequest)
-    val expectedTxResponse = TransactionResponse(requestedStx, Some(blockToRequest.header), Some(txIndexToRequest))
+    val expectedTxResponse = TransactionResponse(requestedStx, Some(blockToRequest.signedHeader), Some(txIndexToRequest))
     response.transactionResponse shouldBe Some(expectedTxResponse)
   }
 
@@ -116,7 +116,7 @@ class EthServiceSpec extends FlatSpec with Matchers with ScalaFutures with MockF
     blockResponse.hash shouldBe None
     blockResponse.nonce shouldBe None
     blockResponse.miner shouldBe None
-    blockResponse.number shouldBe blockToRequest.header.number
+    blockResponse.number shouldBe blockToRequest.signedHeader.header.number
   }
 
   it should "answer eth_getBlockByNumber with the latest block pending block is requested and there are no pending ones" in new TestSetup {
@@ -125,11 +125,11 @@ class EthServiceSpec extends FlatSpec with Matchers with ScalaFutures with MockF
     blockchain.save(blockToRequestHash, blockTd)
 
     (blockGenerator.getPending _).expects().returns(None)
-    (appStateStorage.getBestBlockNumber _).expects().returning(blockToRequest.header.number)
+    (appStateStorage.getBestBlockNumber _).expects().returning(blockToRequest.signedHeader.header.number)
 
     val request = BlockByNumberRequest(BlockParam.Pending, fullTxs = true)
     val response = ethService.getBlockByNumber(request).futureValue.right.get
-    response.blockResponse.get.hash.get shouldEqual blockToRequest.header.hash
+    response.blockResponse.get.hash.get shouldEqual blockToRequest.signedHeader.hash
   }
 
   it should "answer eth_getBlockByNumber with None when the requested block isn't in the blockchain" in new TestSetup {
@@ -146,7 +146,7 @@ class EthServiceSpec extends FlatSpec with Matchers with ScalaFutures with MockF
     val response = Await.result(ethService.getBlockByNumber(request), Duration.Inf).right.get
 
     val stxResponses = blockToRequest.body.transactionList.zipWithIndex.map { case (stx, txIndex) =>
-      TransactionResponse(stx, Some(blockToRequest.header), Some(txIndex))
+      TransactionResponse(stx, Some(blockToRequest.signedHeader), Some(txIndex))
     }
 
     response.blockResponse shouldBe Some(BlockResponse(blockToRequest, fullTxs = true, totalDifficulty = Some(blockTd)))
@@ -161,7 +161,7 @@ class EthServiceSpec extends FlatSpec with Matchers with ScalaFutures with MockF
     val response = Await.result(ethService.getBlockByNumber(request), Duration.Inf).right.get
 
     val stxResponses = blockToRequest.body.transactionList.zipWithIndex.map { case (stx, txIndex) =>
-      TransactionResponse(stx, Some(blockToRequest.header), Some(txIndex))
+      TransactionResponse(stx, Some(blockToRequest.signedHeader), Some(txIndex))
     }
 
     response.blockResponse shouldBe Some(BlockResponse(blockToRequest, fullTxs = true))
@@ -195,7 +195,7 @@ class EthServiceSpec extends FlatSpec with Matchers with ScalaFutures with MockF
     val response = Await.result(ethService.getByBlockHash(request), Duration.Inf).right.get
 
     val stxResponses = blockToRequest.body.transactionList.zipWithIndex.map { case (stx, txIndex) =>
-      TransactionResponse(stx, Some(blockToRequest.header), Some(txIndex))
+      TransactionResponse(stx, Some(blockToRequest.signedHeader), Some(txIndex))
     }
 
     response.blockResponse shouldBe Some(BlockResponse(blockToRequest, fullTxs = true, totalDifficulty = Some(blockTd)))
@@ -210,7 +210,7 @@ class EthServiceSpec extends FlatSpec with Matchers with ScalaFutures with MockF
     val response = Await.result(ethService.getByBlockHash(request), Duration.Inf).right.get
 
     val stxResponses = blockToRequest.body.transactionList.zipWithIndex.map { case (stx, txIndex) =>
-      TransactionResponse(stx, Some(blockToRequest.header), Some(txIndex))
+      TransactionResponse(stx, Some(blockToRequest.signedHeader), Some(txIndex))
     }
 
     response.blockResponse shouldBe Some(BlockResponse(blockToRequest, fullTxs = true))
@@ -366,7 +366,7 @@ class EthServiceSpec extends FlatSpec with Matchers with ScalaFutures with MockF
 
   it should "execute call and return a value" in new TestSetup {
     blockchain.save(blockToRequest)
-    (appStateStorage.getBestBlockNumber _).expects().returning(blockToRequest.header.number)
+    (appStateStorage.getBestBlockNumber _).expects().returning(blockToRequest.signedHeader.header.number)
 
     val txResult = TxResult(BlockchainImpl(storagesInstance.storages).getWorldStateProxy(-1, UInt256.Zero, None), 123, Nil, ByteString("return_value"), None)
     (ledger.simulateTransaction _).expects(*, *).returning(txResult)
@@ -382,7 +382,7 @@ class EthServiceSpec extends FlatSpec with Matchers with ScalaFutures with MockF
 
   it should "execute estimateGas and return a value" in new TestSetup {
     blockchain.save(blockToRequest)
-    (appStateStorage.getBestBlockNumber _).expects().returning(blockToRequest.header.number)
+    (appStateStorage.getBestBlockNumber _).expects().returning(blockToRequest.signedHeader.header.number)
 
     val estimatedGas = BigInt(123)
     (ledger.binarySearchGasEstimation _).expects(*, *).returning(estimatedGas)
@@ -398,7 +398,7 @@ class EthServiceSpec extends FlatSpec with Matchers with ScalaFutures with MockF
 
   it should "get uncle count by block number" in new TestSetup {
     blockchain.save(blockToRequest)
-    (appStateStorage.getBestBlockNumber _).expects().returning(blockToRequest.header.number)
+    (appStateStorage.getBestBlockNumber _).expects().returning(blockToRequest.signedHeader.header.number)
 
     val response = ethService.getUncleCountByBlockNumber(GetUncleCountByBlockNumberRequest(BlockParam.Latest))
 
@@ -408,7 +408,7 @@ class EthServiceSpec extends FlatSpec with Matchers with ScalaFutures with MockF
   it should "get uncle count by block hash" in new TestSetup {
     blockchain.save(blockToRequest)
 
-    val response = ethService.getUncleCountByBlockHash(GetUncleCountByBlockHashRequest(blockToRequest.header.hash))
+    val response = ethService.getUncleCountByBlockHash(GetUncleCountByBlockHashRequest(blockToRequest.signedHeader.hash))
 
     response.futureValue shouldEqual Right(GetUncleCountByBlockHashResponse(blockToRequest.body.uncleNodesList.size))
   }
@@ -416,14 +416,14 @@ class EthServiceSpec extends FlatSpec with Matchers with ScalaFutures with MockF
   it should "get transaction count by block number" in new TestSetup {
     blockchain.save(blockToRequest)
 
-    val response = ethService.getBlockTransactionCountByNumber(GetBlockTransactionCountByNumberRequest(BlockParam.WithNumber(blockToRequest.header.number)))
+    val response = ethService.getBlockTransactionCountByNumber(GetBlockTransactionCountByNumberRequest(BlockParam.WithNumber(blockToRequest.signedHeader.header.number)))
 
     response.futureValue shouldEqual Right(GetBlockTransactionCountByNumberResponse(blockToRequest.body.transactionList.size))
   }
 
   it should "get transaction count by latest block number" in new TestSetup {
     blockchain.save(blockToRequest)
-    (appStateStorage.getBestBlockNumber _).expects().returning(blockToRequest.header.number)
+    (appStateStorage.getBestBlockNumber _).expects().returning(blockToRequest.signedHeader.header.number)
 
     val response = ethService.getBlockTransactionCountByNumber(GetBlockTransactionCountByNumberRequest(BlockParam.Latest))
 
@@ -440,10 +440,11 @@ class EthServiceSpec extends FlatSpec with Matchers with ScalaFutures with MockF
       MerklePatriciaTrie[Array[Byte], Account](new ArchiveNodeStorage(storagesInstance.storages.nodeStorage))
         .put(crypto.kec256(address.bytes.toArray[Byte]), Account(0, UInt256(0), ByteString(""), ByteString("code hash")))
 
-    val newBlockHeader = blockToRequest.header.copy(stateRoot = ByteString(mpt.getRootHash))
-    val newblock = blockToRequest.copy(header = newBlockHeader)
+    val newBlockHeader = blockToRequest.signedHeader.header.copy(stateRoot = ByteString(mpt.getRootHash))
+    val newSignedBlockHeader = blockToRequest.signedHeader.copy(header = newBlockHeader)
+    val newblock = blockToRequest.copy(signedHeader = newSignedBlockHeader)
     blockchain.save(newblock)
-    (appStateStorage.getBestBlockNumber _).expects().returning(newblock.header.number)
+    (appStateStorage.getBestBlockNumber _).expects().returning(newblock.signedHeader.header.number)
 
     val response = ethService.getCode(GetCodeRequest(address, BlockParam.Latest))
 
@@ -459,7 +460,9 @@ class EthServiceSpec extends FlatSpec with Matchers with ScalaFutures with MockF
 
   it should "return average gas price" in new TestSetup {
     (appStateStorage.getBestBlockNumber _).expects().returning(42)
-    blockchain.save(Block(Fixtures.Blocks.Block3125369.header.copy(number = 42), Fixtures.Blocks.Block3125369.body))
+    val newBlockHeader = Fixtures.Blocks.Block3125369.signedHeader.header.copy(number = 42)
+    val newSignedBlockHeader = Fixtures.Blocks.Block3125369.signedHeader.copy(header = newBlockHeader)
+    blockchain.save(Block(newSignedBlockHeader, Fixtures.Blocks.Block3125369.body))
 
     val response = ethService.getGetGasPrice(GetGasPriceRequest())
     response.futureValue shouldEqual Right(GetGasPriceResponse(BigInt("20000000000")))
@@ -467,13 +470,13 @@ class EthServiceSpec extends FlatSpec with Matchers with ScalaFutures with MockF
 
   it should "getTransactionByBlockNumberAndIndexRequest return transaction by index" in new TestSetup {
     blockchain.save(blockToRequest)
-    (appStateStorage.getBestBlockNumber _).expects().returns(blockToRequest.header.number)
+    (appStateStorage.getBestBlockNumber _).expects().returns(blockToRequest.signedHeader.header.number)
 
     val txIndex: Int = 1
     val request = GetTransactionByBlockNumberAndIndexRequest(BlockParam.Latest, txIndex)
     val response = Await.result(ethService.getTransactionByBlockNumberAndIndexRequest(request), Duration.Inf).right.get
 
-    val expectedTxResponse = TransactionResponse(blockToRequest.body.transactionList(txIndex), Some(blockToRequest.header), Some(txIndex))
+    val expectedTxResponse = TransactionResponse(blockToRequest.body.transactionList(txIndex), Some(blockToRequest.signedHeader), Some(txIndex))
     response.transactionResponse shouldBe Some(expectedTxResponse)
   }
 
@@ -481,7 +484,7 @@ class EthServiceSpec extends FlatSpec with Matchers with ScalaFutures with MockF
     blockchain.save(blockToRequest)
 
     val txIndex: Int = blockToRequest.body.transactionList.length + 42
-    val request = GetTransactionByBlockNumberAndIndexRequest(BlockParam.WithNumber(blockToRequest.header.number), txIndex)
+    val request = GetTransactionByBlockNumberAndIndexRequest(BlockParam.WithNumber(blockToRequest.signedHeader.header.number), txIndex)
     val response = Await.result(ethService.getTransactionByBlockNumberAndIndexRequest(request), Duration.Inf).right.get
 
     response.transactionResponse shouldBe None
@@ -491,7 +494,7 @@ class EthServiceSpec extends FlatSpec with Matchers with ScalaFutures with MockF
     blockchain.save(blockToRequest)
 
     val txIndex: Int = 1
-    val request = GetTransactionByBlockNumberAndIndexRequest(BlockParam.WithNumber(blockToRequest.header.number - 42), txIndex)
+    val request = GetTransactionByBlockNumberAndIndexRequest(BlockParam.WithNumber(blockToRequest.signedHeader.header.number - 42), txIndex)
     val response = Await.result(ethService.getTransactionByBlockNumberAndIndexRequest(request), Duration.Inf).right.get
 
     response.transactionResponse shouldBe None
@@ -506,10 +509,11 @@ class EthServiceSpec extends FlatSpec with Matchers with ScalaFutures with MockF
       MerklePatriciaTrie[Array[Byte], Account](new ArchiveNodeStorage(storagesInstance.storages.nodeStorage))
         .put(crypto.kec256(address.bytes.toArray[Byte]), Account(0, UInt256(123), ByteString(""), ByteString("code hash")))
 
-    val newBlockHeader = blockToRequest.header.copy(stateRoot = ByteString(mpt.getRootHash))
-    val newblock = blockToRequest.copy(header = newBlockHeader)
+    val newBlockHeader = blockToRequest.signedHeader.header.copy(stateRoot = ByteString(mpt.getRootHash))
+    val newSignedBlockHeader = blockToRequest.signedHeader.copy(header =  newBlockHeader)
+    val newblock = blockToRequest.copy(signedHeader = newSignedBlockHeader)
     blockchain.save(newblock)
-    (appStateStorage.getBestBlockNumber _).expects().returning(newblock.header.number)
+    (appStateStorage.getBestBlockNumber _).expects().returning(newblock.signedHeader.header.number)
 
     val response = ethService.getBalance(GetBalanceRequest(address, BlockParam.Latest))
 
@@ -541,10 +545,11 @@ class EthServiceSpec extends FlatSpec with Matchers with ScalaFutures with MockF
       MerklePatriciaTrie[Array[Byte], Account](new ArchiveNodeStorage(storagesInstance.storages.nodeStorage))
         .put(crypto.kec256(address.bytes.toArray[Byte]), Account(0, UInt256(0), ByteString(storageMpt.getRootHash), ByteString("")))
 
-    val newBlockHeader = blockToRequest.header.copy(stateRoot = ByteString(mpt.getRootHash))
-    val newblock = blockToRequest.copy(header = newBlockHeader)
+    val newBlockHeader = blockToRequest.signedHeader.header.copy(stateRoot = ByteString(mpt.getRootHash))
+    val newSignedBlockHeader = blockToRequest.signedHeader.copy(header =  newBlockHeader)
+    val newblock = blockToRequest.copy(signedHeader = newSignedBlockHeader)
     blockchain.save(newblock)
-    (appStateStorage.getBestBlockNumber _).expects().returning(newblock.header.number)
+    (appStateStorage.getBestBlockNumber _).expects().returning(newblock.signedHeader.header.number)
 
     val response = ethService.getStorageAt(GetStorageAtRequest(address, 333, BlockParam.Latest))
 
@@ -560,10 +565,11 @@ class EthServiceSpec extends FlatSpec with Matchers with ScalaFutures with MockF
       MerklePatriciaTrie[Array[Byte], Account](new ArchiveNodeStorage(storagesInstance.storages.nodeStorage))
         .put(crypto.kec256(address.bytes.toArray[Byte]), Account(999, UInt256(0), ByteString(""), ByteString("")))
 
-    val newBlockHeader = blockToRequest.header.copy(stateRoot = ByteString(mpt.getRootHash))
-    val newblock = blockToRequest.copy(header = newBlockHeader)
+    val newBlockHeader = blockToRequest.signedHeader.header.copy(stateRoot = ByteString(mpt.getRootHash))
+    val newSignedBlockHeader = blockToRequest.signedHeader.copy(header =  newBlockHeader)
+    val newblock = blockToRequest.copy(signedHeader = newSignedBlockHeader)
     blockchain.save(newblock)
-    (appStateStorage.getBestBlockNumber _).expects().returning(newblock.header.number)
+    (appStateStorage.getBestBlockNumber _).expects().returning(newblock.signedHeader.header.number)
 
     val response = ethService.getTransactionCount(GetTransactionCountRequest(address, BlockParam.Latest))
 
@@ -591,7 +597,7 @@ class EthServiceSpec extends FlatSpec with Matchers with ScalaFutures with MockF
   }
 
   it should "handle get transaction by hash if the tx was already executed" in new TestSetup {
-    val blockWithTx = Block(Fixtures.Blocks.Block3125369.header, Fixtures.Blocks.Block3125369.body)
+    val blockWithTx = Block(Fixtures.Blocks.Block3125369.signedHeader, Fixtures.Blocks.Block3125369.body)
     blockchain.save(blockWithTx)
 
     val request = GetTransactionByHashRequest(txToRequestHash)
@@ -601,15 +607,15 @@ class EthServiceSpec extends FlatSpec with Matchers with ScalaFutures with MockF
     pendingTransactionsManager.reply(PendingTransactionsResponse(Nil))
 
     response.futureValue shouldEqual Right(GetTransactionByHashResponse(Some(
-      TransactionResponse(txToRequest, Some(blockWithTx.header), Some(0)))))
+      TransactionResponse(txToRequest, Some(blockWithTx.signedHeader), Some(0)))))
   }
 
   it should "calculate correct contract address for contract creating by transaction" in new TestSetup {
     val body = BlockBody(Seq(Fixtures.Blocks.Block3125369.body.transactionList.head, contractCreatingTransaction), Nil)
-    val blockWithTx = Block(Fixtures.Blocks.Block3125369.header, body)
+    val blockWithTx = Block(Fixtures.Blocks.Block3125369.signedHeader, body)
     blockchain.save(blockWithTx)
     val gasUsedByTx = 4242
-    blockchain.save(Fixtures.Blocks.Block3125369.header.hash,
+    blockchain.save(Fixtures.Blocks.Block3125369.signedHeader.hash,
       Seq(fakeReceipt, fakeReceipt.copy(cumulativeGasUsed = fakeReceipt.cumulativeGasUsed + gasUsedByTx)))
 
     val request = GetTransactionReceiptRequest(contractCreatingTransaction.hash)
@@ -619,8 +625,8 @@ class EthServiceSpec extends FlatSpec with Matchers with ScalaFutures with MockF
       TransactionReceiptResponse(
         transactionHash = contractCreatingTransaction.hash,
         transactionIndex = 1,
-        blockNumber = Fixtures.Blocks.Block3125369.header.number,
-        blockHash = Fixtures.Blocks.Block3125369.header.hash,
+        blockNumber = Fixtures.Blocks.Block3125369.signedHeader.header.number,
+        blockHash = Fixtures.Blocks.Block3125369.signedHeader.hash,
         cumulativeGasUsed = fakeReceipt.cumulativeGasUsed + gasUsedByTx,
         gasUsed = gasUsedByTx,
         contractAddress = Some(createdContractAddress),
@@ -628,8 +634,8 @@ class EthServiceSpec extends FlatSpec with Matchers with ScalaFutures with MockF
           logIndex = 0,
           transactionIndex = 1,
           transactionHash = contractCreatingTransaction.hash,
-          blockHash = Fixtures.Blocks.Block3125369.header.hash,
-          blockNumber = Fixtures.Blocks.Block3125369.header.number,
+          blockHash = Fixtures.Blocks.Block3125369.signedHeader.hash,
+          blockNumber = Fixtures.Blocks.Block3125369.signedHeader.header.number,
           address = fakeReceipt.logs.head.loggerAddress,
           data = fakeReceipt.logs.head.data,
           topics = fakeReceipt.logs.head.logTopics
@@ -637,7 +643,7 @@ class EthServiceSpec extends FlatSpec with Matchers with ScalaFutures with MockF
   }
 
   it should "return account recent transactions" in new TestSetup {
-    val blockWithTx = Block(Fixtures.Blocks.Block3125369.header, Fixtures.Blocks.Block3125369.body)
+    val blockWithTx = Block(Fixtures.Blocks.Block3125369.signedHeader, Fixtures.Blocks.Block3125369.body)
     blockchain.save(blockWithTx)
 
     val address = Address("0xee4439beb5c71513b080bbf9393441697a29f478")
@@ -651,13 +657,13 @@ class EthServiceSpec extends FlatSpec with Matchers with ScalaFutures with MockF
 
     val expectedReceived = Seq(TransactionResponse(
       Fixtures.Blocks.Block3125369.body.transactionList.head,
-      blockHeader = Some(Fixtures.Blocks.Block3125369.header),
+      blockHeader = Some(Fixtures.Blocks.Block3125369.signedHeader),
       pending = Some(false)))
     response.futureValue shouldEqual Right(GetAccountTransactionsResponse(Nil, expectedReceived))
   }
 
   it should "not return account recent transactions from older blocks and return pending txs" in new TestSetup {
-    val blockWithTx = Block(Fixtures.Blocks.Block3125369.header, Fixtures.Blocks.Block3125369.body)
+    val blockWithTx = Block(Fixtures.Blocks.Block3125369.signedHeader, Fixtures.Blocks.Block3125369.body)
     blockchain.save(blockWithTx)
 
     val keyPair = crypto.generateKeyPair(new SecureRandom)
@@ -710,19 +716,18 @@ class EthServiceSpec extends FlatSpec with Matchers with ScalaFutures with MockF
     val ethService = new EthService(blockchain, blockGenerator, appStateStorage, miningConfig, ledger,
       keyStore, pendingTransactionsManager.ref, syncingController.ref, ommersPool.ref, filterManager.ref, filterConfig, blockchainConfig, currentProtocolVersion)
 
-    val blockToRequest = Block(Fixtures.Blocks.Block3125369.header, Fixtures.Blocks.Block3125369.body)
-    val blockToRequestNumber = blockToRequest.header.number
-    val blockToRequestHash = blockToRequest.header.hash
-    val blockTd = blockToRequest.header.difficulty
+    val blockToRequest = Block(Fixtures.Blocks.Block3125369.signedHeader, Fixtures.Blocks.Block3125369.body)
+    val blockToRequestNumber = blockToRequest.signedHeader.header.number
+    val blockToRequestHash = blockToRequest.signedHeader.hash
+    val blockTd = blockToRequest.signedHeader.header.difficulty
 
-    val uncle = Fixtures.Blocks.DaoForkBlock.header
-    val uncleTd = uncle.difficulty
+    val uncle = Fixtures.Blocks.DaoForkBlock.signedHeader
+    val uncleTd = uncle.header.difficulty
     val blockToRequestWithUncles = blockToRequest.copy(body = BlockBody(Nil, Seq(uncle)))
-
 
     val difficulty = 131072
     val parentBlock = Block(
-      header = BlockHeader(
+      signedHeader = SignedBlockHeader(BlockHeader(
         parentHash = ByteString.empty,
         ommersHash = ByteString.empty,
         beneficiary = ByteString.empty,
@@ -739,12 +744,12 @@ class EthServiceSpec extends FlatSpec with Matchers with ScalaFutures with MockF
         mixHash = ByteString.empty,
         nonce = ByteString.empty,
         slotNumber = 0
-      ),
+      ), FakeSignature),
       body = BlockBody(Nil, Nil)
     )
     val block = Block(
-      header = BlockHeader(
-        parentHash = parentBlock.header.hash,
+      signedHeader = SignedBlockHeader(BlockHeader(
+        parentHash = parentBlock.signedHeader.hash,
         ommersHash = ByteString(Hex.decode("1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347")),
         beneficiary = ByteString(Hex.decode("000000000000000000000000000000000000002a")),
         stateRoot = ByteString(Hex.decode("2627314387b135a548040d3ca99dbf308265a3f9bd9246bee3e34d12ea9ff0dc")),
@@ -760,7 +765,7 @@ class EthServiceSpec extends FlatSpec with Matchers with ScalaFutures with MockF
         mixHash = ByteString.empty,
         nonce = ByteString.empty,
         slotNumber = 1
-      ),
+      ), FakeSignature),
       body = BlockBody(Nil, Nil)
     )
     val mixHash = ByteString(Hex.decode("40d9bd2064406d7f22390766d6fe5eccd2a67aa89bf218e99df35b2dbb425fb1"))

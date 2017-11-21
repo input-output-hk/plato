@@ -90,6 +90,5 @@ class RLPSpeedSuite extends FunSuite
 
   lazy val blockGen: Gen[Block] = for {
     header <- blockHeaderGen
-    uncles <- blockHeaderGen
-  } yield Block(header = header, BlockBody(transactionList = List.fill(10)(validTransaction), uncleNodesList = Seq(uncles)))
+  } yield Block(signedHeader = header, BlockBody(transactionList = List.fill(10)(validTransaction), uncleNodesList = Nil))
 }

@@ -26,16 +26,16 @@ class  SimulateTransactionTest extends FlatSpec with Matchers with Logger {
     *
     * */
 
-    val lastBlockGasLimit = genesisBlock.header.gasLimit
+    val lastBlockGasLimit = genesisBlock.signedHeader.gasLimit
 
     val tx = Transaction(0, 0, lastBlockGasLimit, existingAddress, 0, sendData)
     val fakeSignature = ECDSASignature(0, 0, 0.toByte)
     val stx = SignedTransaction(tx, fakeSignature, fromAddress)
 
-    val simulationResult = ledger.simulateTransaction(stx, genesisBlock.header)
-    val executionResult = ledger.executeTransaction(stx, genesisBlock.header, worldWithAccount)
+    val simulationResult = ledger.simulateTransaction(stx, genesisBlock.signedHeader)
+    val executionResult = ledger.executeTransaction(stx, genesisBlock.signedHeader, worldWithAccount)
 
-    val estimationResult = ledger.binarySearchGasEstimation(stx, genesisBlock.header)
+    val estimationResult = ledger.binarySearchGasEstimation(stx, genesisBlock.signedHeader)
 
     // Check that gasUsed from simulation and execution are equal
     simulationResult.gasUsed shouldEqual executionResult.gasUsed
@@ -44,14 +44,14 @@ class  SimulateTransactionTest extends FlatSpec with Matchers with Logger {
     estimationResult shouldEqual minGasLimitRequiredForFailingTransaction
 
     // Execute transaction with gasLimit lesser by one that estimated minimum
-    val errorExecResult = ledger.executeTransaction(stx.copy(tx = stx.tx.copy(gasLimit = estimationResult - 1)), genesisBlock.header, worldWithAccount)
+    val errorExecResult = ledger.executeTransaction(stx.copy(tx = stx.tx.copy(gasLimit = estimationResult - 1)), genesisBlock.signedHeader, worldWithAccount)
 
     // Check if running with gasLimit < estimatedMinimum return error
     errorExecResult.vmError shouldBe defined
   }
 
   it should "correctly estimate gasLimit for value transfer transaction" in new ScenarioSetup {
-    val lastBlockGasLimit = genesisBlock.header.gasLimit
+    val lastBlockGasLimit = genesisBlock.signedHeader.gasLimit
 
     val transferValue = 2
 
@@ -59,8 +59,8 @@ class  SimulateTransactionTest extends FlatSpec with Matchers with Logger {
     val fakeSignature = ECDSASignature(0, 0, 0.toByte)
     val stx = SignedTransaction(tx, fakeSignature, fromAddress)
 
-    val executionResult = ledger.executeTransaction(stx, genesisBlock.header, worldWithAccount)
-    val estimationResult = ledger.binarySearchGasEstimation(stx, genesisBlock.header)
+    val executionResult = ledger.executeTransaction(stx, genesisBlock.signedHeader, worldWithAccount)
+    val estimationResult = ledger.binarySearchGasEstimation(stx, genesisBlock.signedHeader)
 
     estimationResult shouldEqual executionResult.gasUsed
   }
@@ -138,9 +138,9 @@ trait ScenarioSetup
 
   val blockGasLimit = 1000000
   val block = Fixtures.Blocks.Genesis.block
-  val genesisBlock = block.copy(header = block.header.copy(stateRoot = worldWithAccount.stateRootHash, gasLimit = blockGasLimit))
+  val genesisBlock = block.copy(signedHeader = block.signedHeader.copy(stateRoot = worldWithAccount.stateRootHash, gasLimit = blockGasLimit))
 
   blockchain.save(genesisBlock)
-  blockchain.save(genesisBlock.header.hash, Nil)
-  blockchain.save(genesisBlock.header.hash, genesisBlock.header.difficulty)
+  blockchain.save(genesisBlock.signedHeader.hash, Nil)
+  blockchain.save(genesisBlock.signedHeader.hash, genesisBlock.signedHeader.difficulty)
 }

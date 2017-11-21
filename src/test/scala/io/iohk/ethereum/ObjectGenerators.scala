@@ -2,15 +2,11 @@ package io.iohk.ethereum
 
 import java.math.BigInteger
 import java.security.SecureRandom
-
 import akka.util.ByteString
 import io.iohk.ethereum.mpt.HexPrefix.bytesToNibbles
 import org.scalacheck.{Arbitrary, Gen}
 import io.iohk.ethereum.mpt.{BranchNode, ExtensionNode, LeafNode, MptNode}
 import io.iohk.ethereum.domain._
-import io.iohk.ethereum.network.p2p.messages.CommonMessages.NewBlock
-import io.iohk.ethereum.network.p2p.messages.PV62.BlockBody
-
 
 trait ObjectGenerators {
 
@@ -108,51 +104,5 @@ trait ObjectGenerators {
       txs.map { tx => SignedTransaction.sign(tx, senderKeys, chainId) }
     }
   }
-
-  def newBlockGen(secureRandom: SecureRandom, chainId: Option[Byte]): Gen[NewBlock] = for {
-    blockHeader <- blockHeaderGen
-    stxs <- signedTxSeqGen(10, secureRandom, chainId)
-    uncles <- seqBlockHeaderGen
-    td <- bigIntGen
-  } yield NewBlock(Block(blockHeader, BlockBody(stxs, uncles)), td)
-
-  def blockHeaderGen: Gen[BlockHeader] = for {
-    parentHash <- byteStringOfLengthNGen(32)
-    ommersHash <- byteStringOfLengthNGen(32)
-    beneficiary <- byteStringOfLengthNGen(20)
-    stateRoot <- byteStringOfLengthNGen(32)
-    transactionsRoot <- byteStringOfLengthNGen(32)
-    receiptsRoot <- byteStringOfLengthNGen(32)
-    logsBloom <- byteStringOfLengthNGen(50)
-    difficulty <- bigIntGen
-    number <- bigIntGen
-    gasLimit <- bigIntGen
-    gasUsed <- bigIntGen
-    unixTimestamp <- intGen.map(_.abs)
-    extraData <- byteStringOfLengthNGen(8)
-    mixHash <- byteStringOfLengthNGen(8)
-    nonce <- byteStringOfLengthNGen(8)
-    slotNumber <- bigIntGen
-  } yield BlockHeader(
-    parentHash = parentHash,
-    ommersHash = ommersHash,
-    beneficiary = beneficiary,
-    stateRoot = stateRoot,
-    transactionsRoot = transactionsRoot,
-    receiptsRoot = receiptsRoot,
-    logsBloom = logsBloom,
-    difficulty = difficulty,
-    number = number,
-    gasLimit = gasLimit,
-    gasUsed = gasUsed,
-    unixTimestamp = unixTimestamp,
-    extraData = extraData,
-    mixHash = mixHash,
-    nonce = nonce,
-    slotNumber = slotNumber)
-
-  def seqBlockHeaderGen: Gen[Seq[BlockHeader]] = Gen.listOf(blockHeaderGen)
-
 }
-
 object ObjectGenerators extends ObjectGenerators

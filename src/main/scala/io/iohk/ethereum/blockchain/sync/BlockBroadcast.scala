@@ -29,7 +29,8 @@ class BlockBroadcast(val etcPeerManager: ActorRef) {
   }
 
   private def shouldSendNewBlock(newBlock: NewBlock, peerInfo: PeerInfo): Boolean =
-    newBlock.block.header.number > peerInfo.maxBlockNumber || newBlock.totalDifficulty > peerInfo.totalDifficulty
+    newBlock.block.signedHeader.header.number > peerInfo.maxBlockNumber ||
+      newBlock.totalDifficulty > peerInfo.totalDifficulty
 
   private def broadcastNewBlock(newBlock: NewBlock, peers: Set[Peer]): Unit =
     obtainRandomPeerSubset(peers).foreach { peer =>
@@ -37,8 +38,9 @@ class BlockBroadcast(val etcPeerManager: ActorRef) {
     }
 
   private def broadcastNewBlockHash(newBlock: NewBlock, peers: Set[Peer]): Unit = peers.foreach { peer =>
-    val newBlockHeader = newBlock.block.header
-    val newBlockHashMsg = PV62.NewBlockHashes(Seq(BlockHash(newBlockHeader.hash, newBlockHeader.number)))
+    val newBlockHeader = newBlock.block.signedHeader
+    val newBlockHash = BlockHash(newBlockHeader.hash, newBlockHeader.header.number)
+    val newBlockHashMsg = PV62.NewBlockHashes(Seq(newBlockHash))
     etcPeerManager ! EtcPeerManagerActor.SendMessage(newBlockHashMsg, peer.id)
   }
 
