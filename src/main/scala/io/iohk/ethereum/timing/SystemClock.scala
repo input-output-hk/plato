@@ -1,8 +1,9 @@
 package io.iohk.ethereum.timing
 
-import scala.concurrent.duration.{FiniteDuration, MILLISECONDS}
+import io.iohk.ethereum.utils.NTP
 
+import scala.concurrent.duration._
 
-object SystemClock extends Clock {
-  override def now(): FiniteDuration = FiniteDuration(System.currentTimeMillis(), MILLISECONDS)
+case class SystemClock(ntp: NTP) extends Clock {
+  override def now(): FiniteDuration = ntp.correctedTime().millis
 }

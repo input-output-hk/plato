@@ -3,6 +3,7 @@ package io.iohk.ethereum.validators
 import akka.util.ByteString
 import io.iohk.ethereum.domain._
 import io.iohk.ethereum.pos.ElectionManager
+import io.iohk.ethereum.timing.Clock
 import io.iohk.ethereum.utils.{BlockchainConfig, DaoForkConfig}
 
 trait BlockHeaderValidator {
@@ -21,7 +22,8 @@ object BlockHeaderValidatorImpl {
 
 class BlockHeaderValidatorImpl(blockchainConfig: BlockchainConfig,
                                electionManager: ElectionManager,
-                               slotTimeConverter: SlotTimeConverter) extends BlockHeaderValidator {
+                               slotTimeConverter: SlotTimeConverter,
+                               clock: Clock) extends BlockHeaderValidator {
 
   import BlockHeaderValidatorImpl._
   import BlockHeaderError._
@@ -182,7 +184,7 @@ class BlockHeaderValidatorImpl(blockchainConfig: BlockchainConfig,
     */
   private def validateSlotNumber(blockHeader: BlockHeader, parentHeader: BlockHeader): Either[BlockHeaderError, BlockHeaderValid] = {
     val blockSlotBeginningTimeMillis = slotTimeConverter.getSlotStartingMillis(blockHeader.slotNumber)
-    val currentTimeMillis = System.currentTimeMillis()
+    val currentTimeMillis = clock.now().toMillis
 
     val isAfterParent = blockHeader.slotNumber > parentHeader.slotNumber
     val isFromFuture = currentTimeMillis < blockSlotBeginningTimeMillis
