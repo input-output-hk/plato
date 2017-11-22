@@ -479,7 +479,7 @@ trait BeaconActorBuilder {
   lazy val beacon: ActorRef = actorSystem.actorOf(BeaconActor.props(
     miner,
     ouroborosConfig.slotDuration,
-    systemStartTime))
+    systemStartTime), "beacon")
 }
 
 trait Node extends NodeKeyBuilder
@@ -526,3 +526,4 @@ trait Node extends NodeKeyBuilder
   with ElectionManagerBuilder
   with ProofOfStakeMinerBuilder
   with SlotTimeConverterBuilder
+  with BeaconActorBuilder

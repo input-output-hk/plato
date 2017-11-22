@@ -10,27 +10,29 @@ class BeaconActor(
   miner: ActorRef,
   slotDuration: FiniteDuration,
   systemStartTime: FiniteDuration = System.currentTimeMillis.millis,
-  externalSchedulerOpt: Option[Scheduler] = None)
+  externalSchedulerOpt: Option[Scheduler] = None,
+  clockOpt: Option[Clock] = None)
   extends Actor
     with ActorLogging {
 
   import BeaconActor._
 
   def scheduler: Scheduler = externalSchedulerOpt getOrElse context.system.scheduler
+  def clock: Clock = clockOpt getOrElse SystemClock
 
   private def calculateStartingSlot(): BigInt = {
-    val currentTime = System.currentTimeMillis
-    val elapsedTimeSinceStartTime = currentTime - systemStartTime.toMillis
+    val currentTime = clock.now
+    val elapsedTimeSinceStartTime = currentTime - systemStartTime
     // FIXME: When the Beacon is started in the middle of a slot N, it should schedule the slot N+1 taking into account
     // the time left to end the current slot N.
-    (elapsedTimeSinceStartTime / slotDuration.toMillis) + 1
+    (elapsedTimeSinceStartTime.toMillis / slotDuration.toMillis) + 1
   }
 
   override def receive: Receive = idle
 
   def idle: Receive = {
     case Start =>
-      log.debug(s"Beacon started at ${System.currentTimeMillis}")
+      log.debug(s"Beacon started")
       context become start
       val startingSlotNumber = calculateStartingSlot()
       self ! NewSlot(startingSlotNumber)
@@ -46,8 +48,8 @@ class BeaconActor(
 
       // FIXME: The use of toLong may cause precision loss.
       val nextSlotTime = systemStartTime.toMillis + (slotDuration.toMillis * currentSlotNumber.toLong)
-      val currentTime = System.currentTimeMillis
-      val waitForNextSlot = FiniteDuration(nextSlotTime - currentTime, MILLISECONDS)
+      val currentTime = clock.now
+      val waitForNextSlot = FiniteDuration(nextSlotTime - currentTime.toMillis, MILLISECONDS)
 
       log.debug(s"Next slot time is $nextSlotTime, current time is $currentTime, so waiting for $waitForNextSlot")
 
@@ -62,12 +64,14 @@ object BeaconActor {
     miner: ActorRef,
     slotDuration: FiniteDuration,
     systemStartTime: FiniteDuration = System.currentTimeMillis.millis,
-    externalSchedulerOpt: Option[Scheduler] = None): Props =
+    externalSchedulerOpt: Option[Scheduler] = None,
+    clockOpt: Option[Clock] = None): Props =
     Props(new BeaconActor(
       miner,
       slotDuration,
       systemStartTime,
-      externalSchedulerOpt)
+      externalSchedulerOpt,
+      clockOpt)
     )
 
   case object Start
