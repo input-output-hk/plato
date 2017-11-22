@@ -13,45 +13,49 @@ import scala.concurrent.duration._
 class BeaconActorSpec extends FlatSpec with Matchers {
 
   "The Beacon" should "immediately start with slot 1 upon system start-up" in new TestSetup() {
-    val systemStartTime = System.currentTimeMillis.millis
-    val beacon = TestActorRef(Props(new BeaconActor(
-      minerMock.ref, slotDuration, systemStartTime, Some(schedulerMock), Some(clockMock))))
-
     (clockMock.now _).expects().returns(systemStartTime).repeat(3)
 
     beacon ! Start
 
-    time.advance(slotDuration)
+    time.advance(1.millis) // almost 0
     minerMock.expectMsg(StartMining(1))
   }
 
-  /*
-  "The Beacon" should "start with the correct slot number when started up after system start-up" in new TestSetup() {
-    val systemStartTime = System.currentTimeMillis.millis - 4.seconds
-    val beacon = TestActorRef(Props(new BeaconActor(
-      minerMock.ref, slotDuration, systemStartTime, Some(schedulerMock))))
+  "The Beacon" should "immediately start with slot 1 when within the tolerance period" in new TestSetup() {
+   (clockMock.now _).expects().returns(systemStartTime + 100.millis).repeat(3)
+
     beacon ! Start
+
+    time.advance(1.millis) // almost 0
+    minerMock.expectMsg(StartMining(1))
+  }
+
+  "The Beacon" should "skip slot 1 when outside the tolerance period" in new TestSetup() {
+    (clockMock.now _).expects().returns(systemStartTime + 110.millis).repeat(3)
+
+    beacon ! Start
+
+    time.advance(slotDuration - 110.millis)
+    minerMock.expectMsg(StartMining(2))
+  }
+
+  "The Beacon" should "start with slot N when started up just at start of said slot (N >= 2)" in new TestSetup() {
+    (clockMock.now _).expects().returns(systemStartTime + 2.seconds).repeat(3) // just at the start of slot 2
+
+    beacon ! Start
+
+    time.advance(1.millis) // almost 0
+    minerMock.expectMsg(StartMining(2))
+  }
+
+  "The Beacon" should "skip the current slot N when started in the middle of said slot (N >= 2)" in new TestSetup() {
+    (clockMock.now _).expects().returns(systemStartTime + 3.seconds).repeat(3) // just in the middle of slot 2
+
+    beacon ! Start
+
+    time.advance(slotDuration - 1.second)
     minerMock.expectMsg(StartMining(3))
   }
-
-  "The Beacon" should "wait until the time comes to start with slot 1 when system start-up lies in the future" in new TestSetup() {
-    val systemStartTime = System.currentTimeMillis.millis + 10.minutes
-    val beacon = TestActorRef(Props(new BeaconActor(
-      minerMock.ref, slotDuration, systemStartTime, Some(schedulerMock))))
-    beacon ! Start
-    minerMock.expectMsg(StartMining(1))
-  }
-*/
-
-  /* TODO: Add the other tests:
-  - Beacon signals the Miner at the exact slot start time when no delay in the scheduler is present
-  - Beacon signals the Miner at the exact slot start time in spite of reasonable delays in the scheduler
-  Scenario 1: Beacon starts upon system startup
-    - correctly generates slot N+1 after D seconds have passed, where D is the slot duration
-  Scenario 2: Beacon starts later
-    - if in the middle of a slot N, then wait until N+1 and send message for slot N+1
-  */
-
 }
 
 class TestSetup extends MockFactory {
@@ -62,4 +66,7 @@ class TestSetup extends MockFactory {
   val time = new VirtualTime
   val schedulerMock = time.scheduler
   val clockMock = mock[Clock]
+  val systemStartTime = System.currentTimeMillis.millis
+  val beacon = TestActorRef(Props(new BeaconActor(
+    minerMock.ref, slotDuration, systemStartTime, Some(schedulerMock), Some(clockMock))))
 }

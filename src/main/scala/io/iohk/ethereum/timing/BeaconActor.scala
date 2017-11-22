@@ -2,6 +2,7 @@ package io.iohk.ethereum.timing
 
 import akka.actor.{Actor, ActorLogging, ActorRef, Props, Scheduler}
 
+import scala.collection.immutable.Stream
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 
@@ -17,43 +18,50 @@ class BeaconActor(
 
   import BeaconActor._
 
-  def scheduler: Scheduler = externalSchedulerOpt getOrElse context.system.scheduler
-  def clock: Clock = clockOpt getOrElse SystemClock
+  private def scheduler: Scheduler = externalSchedulerOpt getOrElse context.system.scheduler
+  private def clock: Clock = clockOpt getOrElse SystemClock
 
-  private def calculateStartingSlot(): BigInt = {
-    val currentTime = clock.now
-    val elapsedTimeSinceStartTime = currentTime - systemStartTime
-    // FIXME: When the Beacon is started in the middle of a slot N, it should schedule the slot N+1 taking into account
-    // the time left to end the current slot N.
-    (elapsedTimeSinceStartTime.toMillis / slotDuration.toMillis) + 1
-  }
+  private def prunePastSlots(slotList: SlotList, currentTime: FiniteDuration): SlotList = slotList.dropWhile {
+    slot =>
+      val timeDiff = currentTime - slot.startTime
+      if (slot.number == startingSlotNumber)
+        // The starting slot should be skipped only when outside the tolerance period.
+        timeDiff > startingSlotTolerance
+      else
+        // The Beacon started after slot N started, so skip it (with N not being the starting slot number).
+        timeDiff > 0.millis
+    }
 
   override def receive: Receive = idle
 
-  def idle: Receive = {
+  private def idle: Receive = {
     case Start =>
       log.debug(s"Beacon started")
+
+      val slotList = slots(systemStartTime, slotDuration)
+      val prunedList = prunePastSlots(slotList, clock.now())
+
       context become start
-      val startingSlotNumber = calculateStartingSlot()
-      self ! NewSlot(startingSlotNumber)
+      self ! RemainingSlots(prunedList)
     case _ => // nothing
   }
 
   private def start: Receive = {
-    case NewSlot(currentSlotNumber) =>
-      log.debug(s"Generating new slot $currentSlotNumber")
+    case RemainingSlots(slotList) =>
+      val slot = slotList.head
+      log.debug(s"Processing slot ${slot.number}")
 
-      import io.iohk.ethereum.mining.ProofOfStakeMiner._
-      miner ! StartMining(currentSlotNumber)
-
-      // FIXME: The use of toLong may cause precision loss.
-      val nextSlotTime = systemStartTime.toMillis + (slotDuration.toMillis * currentSlotNumber.toLong)
       val currentTime = clock.now
-      val waitForNextSlot = FiniteDuration(nextSlotTime - currentTime.toMillis, MILLISECONDS)
+      val delay = 0.millis max slot.startTime - currentTime
+      log.debug(s"Slot start time is ${slot.startTime}, current time is $currentTime, so waiting for $delay")
 
-      log.debug(s"Next slot time is $nextSlotTime, current time is $currentTime, so waiting for $waitForNextSlot")
+      scheduler.scheduleOnce(delay) { signalMiner(slot.number, slotList) }
+  }
 
-      scheduler.scheduleOnce(waitForNextSlot, self, NewSlot(currentSlotNumber + 1))
+  private def signalMiner(slotNumber: BigInt, slotList: SlotList): Unit = {
+    import io.iohk.ethereum.mining.ProofOfStakeMiner.StartMining
+    miner ! StartMining(slotNumber)
+    self ! RemainingSlots(slotList.tail)
   }
 }
 
@@ -74,6 +82,24 @@ object BeaconActor {
       clockOpt)
     )
 
+  val startingSlotNumber = 1
+
+  // NOTE: A tolerance period is allowed in order for the starting slot to be generated when the Beacon starts up a
+  // little bit later than the system (which is expected).
+  // TODO: Make the tolerance period a configurable parameter.
+  val startingSlotTolerance = 100.millis
+
+  case class Slot(number: BigInt, startTime: FiniteDuration)
+
+  type SlotList = Stream[Slot]
+
+  def slots(systemStartTime: FiniteDuration, slotDuration: FiniteDuration): SlotList = {
+    def loop(slotNumber: BigInt, slotStartTime: FiniteDuration, slotDuration: FiniteDuration): SlotList = {
+      Slot(slotNumber, slotStartTime) #:: loop(slotNumber + 1, slotStartTime + slotDuration, slotDuration)
+    }
+    loop(startingSlotNumber, systemStartTime, slotDuration)
+  }
+
   case object Start
-  case class NewSlot(slotNumber: BigInt)
+  case class RemainingSlots(slots: SlotList)
 }
