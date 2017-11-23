@@ -34,7 +34,7 @@ import io.iohk.ethereum.validators._
 import io.iohk.ethereum.vm.VM
 import io.iohk.ethereum.ommers.OmmersPool
 import io.iohk.ethereum.pos.ElectionManagerImpl
-import io.iohk.ethereum.timing.{BeaconActor, Clock, SystemClock}
+import io.iohk.ethereum.timing.{BeaconActor, Clock, NTPClock}
 import io.iohk.ethereum.utils.Config.SyncConfig
 
 import scala.concurrent.duration._
@@ -470,9 +470,9 @@ trait SlotTimeConverterBuilder {
 }
 
 trait ClockBuilder {
-  self: NTPBuilder =>
+  self: NTPServiceBuilder =>
 
-  lazy val clock: Clock = SystemClock(ntp)
+  lazy val clock: Clock = NTPClock(ntpService)
 }
 
 trait BeaconActorBuilder {
@@ -491,11 +491,11 @@ trait BeaconActorBuilder {
     clock), "beacon")
 }
 
-trait NTPBuilder {
+trait NTPServiceBuilder {
 
-  private lazy val ntpConfig = NTPConfig(Config.config)
+  private lazy val ntpServiceConfig = NTPServiceConfig(Config.config)
 
-  lazy val ntp = new NTP(ntpConfig)
+  lazy val ntpService = new NTPService(ntpServiceConfig)
 
 }
 
@@ -544,5 +544,5 @@ trait Node extends NodeKeyBuilder
   with ProofOfStakeMinerBuilder
   with SlotTimeConverterBuilder
   with BeaconActorBuilder
-  with NTPBuilder
+  with NTPServiceBuilder
   with ClockBuilder
