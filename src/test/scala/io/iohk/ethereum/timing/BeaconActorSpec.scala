@@ -68,5 +68,5 @@ class TestSetup extends MockFactory {
   val clockMock = mock[Clock]
   val systemStartTime = System.currentTimeMillis.millis
   val beacon = TestActorRef(Props(new BeaconActor(
-    minerMock.ref, slotDuration, systemStartTime, Some(schedulerMock), Some(clockMock))))
+    minerMock.ref, slotDuration, systemStartTime, clockMock, Some(schedulerMock))))
 }

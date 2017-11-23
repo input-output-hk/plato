@@ -10,16 +10,15 @@ import scala.concurrent.duration._
 class BeaconActor(
   miner: ActorRef,
   slotDuration: FiniteDuration,
-  systemStartTime: FiniteDuration = System.currentTimeMillis.millis,
-  externalSchedulerOpt: Option[Scheduler] = None,
-  clockOpt: Option[Clock] = None)
+  systemStartTime: FiniteDuration,
+  clock: Clock,
+  externalSchedulerOpt: Option[Scheduler] = None)
   extends Actor
     with ActorLogging {
 
   import BeaconActor._
 
   private def scheduler: Scheduler = externalSchedulerOpt getOrElse context.system.scheduler
-  private def clock: Clock = clockOpt getOrElse SystemClock
 
   private def prunePastSlots(slotList: SlotList, currentTime: FiniteDuration): SlotList = slotList.dropWhile {
     slot =>
@@ -51,7 +50,7 @@ class BeaconActor(
       val slot = slotList.head
       log.debug(s"Processing slot ${slot.number}")
 
-      val currentTime = clock.now
+      val currentTime = clock.now()
       val delay = 0.millis max slot.startTime - currentTime
       log.debug(s"Slot start time is ${slot.startTime}, current time is $currentTime, so waiting for $delay")
 
@@ -71,15 +70,15 @@ object BeaconActor {
   def props(
     miner: ActorRef,
     slotDuration: FiniteDuration,
-    systemStartTime: FiniteDuration = System.currentTimeMillis.millis,
-    externalSchedulerOpt: Option[Scheduler] = None,
-    clockOpt: Option[Clock] = None): Props =
+    systemStartTime: FiniteDuration,
+    clock: Clock,
+    externalSchedulerOpt: Option[Scheduler] = None): Props =
     Props(new BeaconActor(
       miner,
       slotDuration,
       systemStartTime,
-      externalSchedulerOpt,
-      clockOpt)
+      clock,
+      externalSchedulerOpt)
     )
 
   val startingSlotNumber = 1

@@ -34,7 +34,7 @@ import io.iohk.ethereum.validators._
 import io.iohk.ethereum.vm.VM
 import io.iohk.ethereum.ommers.OmmersPool
 import io.iohk.ethereum.pos.ElectionManagerImpl
-import io.iohk.ethereum.timing.BeaconActor
+import io.iohk.ethereum.timing.{BeaconActor, Clock, SystemClock}
 import io.iohk.ethereum.utils.Config.SyncConfig
 
 import scala.concurrent.duration._
@@ -367,11 +367,12 @@ trait OmmersPoolBuilder {
 trait ValidatorsBuilder {
   self: BlockchainConfigBuilder
     with ElectionManagerBuilder
-    with SlotTimeConverterBuilder =>
+    with SlotTimeConverterBuilder
+    with ClockBuilder =>
 
   lazy val validators = new Validators {
     val blockValidator: BlockValidator = BlockValidator
-    val blockHeaderValidator: BlockHeaderValidator = new BlockHeaderValidatorImpl(blockchainConfig, electionManager, slotTimeConverter)
+    val blockHeaderValidator: BlockHeaderValidator = new BlockHeaderValidatorImpl(blockchainConfig, electionManager, slotTimeConverter, clock)
     val ommersValidator: OmmersValidator = new OmmersValidatorImpl(blockchainConfig, blockHeaderValidator)
     val signedTransactionValidator: SignedTransactionValidator = new SignedTransactionValidatorImpl(blockchainConfig)
   }
@@ -476,18 +477,34 @@ trait SlotTimeConverterBuilder {
   lazy val slotTimeConverter: SlotTimeConverter = SlotTimeConverter(ouroborosConfig, slot1StartingTime)
 }
 
+trait ClockBuilder {
+  self: NTPBuilder =>
+
+  lazy val clock: Clock = SystemClock(ntp)
+}
+
 trait BeaconActorBuilder {
   self: ActorSystemBuilder
     with BlockchainBuilder
     with ProofOfStakeMinerBuilder
-    with OuroborosConfigBuilder =>
+    with OuroborosConfigBuilder
+    with ClockBuilder =>
 
   private lazy val systemStartTime: FiniteDuration = genesisTimestamp.seconds
 
   lazy val beacon: ActorRef = actorSystem.actorOf(BeaconActor.props(
     miner,
     ouroborosConfig.slotDuration,
-    systemStartTime), "beacon")
+    systemStartTime,
+    clock), "beacon")
+}
+
+trait NTPBuilder {
+
+  private lazy val ntpConfig = NTPConfig(Config.config)
+
+  lazy val ntp = new NTP(ntpConfig)
+
 }
 
 trait Node extends NodeKeyBuilder
@@ -535,3 +552,5 @@ trait Node extends NodeKeyBuilder
   with ProofOfStakeMinerBuilder
   with SlotTimeConverterBuilder
   with BeaconActorBuilder
+  with NTPBuilder
+  with ClockBuilder
