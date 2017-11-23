@@ -50,7 +50,7 @@ class BlockGenerator(blockchain: Blockchain, blockchainConfig: BlockchainConfig,
           logsBloom = bloomFilter,
           gasUsed = gasUsed)
         blockHeaderSigner(header, beneficiary).toRight(InvalidBlockHeaderSignature).map(
-          signedBlockHeader => PendingBlock(Block(signedBlockHeader, body), receipts)
+          signedBlockHeader => PendingBlock(Block(signedBlockHeader, prepareBlock.body), receipts)
         )
     }
     result.foreach(b => cache.updateAndGet(new UnaryOperator[List[PendingBlock]] {

@@ -54,26 +54,23 @@ class LedgerSpec extends FlatSpec with PropertyChecks with Matchers with MockFac
     )
 
   sealed trait Changes
-
   case class UpdateBalance(amount: UInt256) extends Changes
-
   case object IncreaseNonce extends Changes
-
   case object DeleteAccount extends Changes
 
   def applyChanges(stateRootHash: ByteString, blockchainStorages: BlockchainStorages, changes: Seq[(Address, Changes)]): ByteString = {
     val initialWorld = BlockchainImpl(blockchainStorages).getWorldStateProxy(-1, UInt256.Zero, Some(stateRootHash))
-    val newWorld = changes.foldLeft[InMemoryWorldStateProxy](initialWorld) { case (recWorld, (address, change)) =>
-      change match {
-        case UpdateBalance(balanceIncrease) =>
-          val accountWithBalanceIncrease = recWorld.getAccount(address).getOrElse(Account.empty()).increaseBalance(balanceIncrease)
-          recWorld.saveAccount(address, accountWithBalanceIncrease)
-        case IncreaseNonce =>
-          val accountWithNonceIncrease = recWorld.getAccount(address).getOrElse(Account.empty()).increaseNonce()
-          recWorld.saveAccount(address, accountWithNonceIncrease)
-        case DeleteAccount =>
-          recWorld.deleteAccount(address)
-      }
+    val newWorld = changes.foldLeft[InMemoryWorldStateProxy](initialWorld){ case (recWorld, (address, change)) =>
+        change match {
+          case UpdateBalance(balanceIncrease) =>
+            val accountWithBalanceIncrease = recWorld.getAccount(address).getOrElse(Account.empty()).increaseBalance(balanceIncrease)
+            recWorld.saveAccount(address, accountWithBalanceIncrease)
+          case IncreaseNonce =>
+            val accountWithNonceIncrease = recWorld.getAccount(address).getOrElse(Account.empty()).increaseNonce()
+            recWorld.saveAccount(address, accountWithNonceIncrease)
+          case DeleteAccount =>
+            recWorld.deleteAccount(address)
+        }
     }
     InMemoryWorldStateProxy.persistState(newWorld).stateRootHash
   }
@@ -206,17 +203,17 @@ class LedgerSpec extends FlatSpec with PropertyChecks with Matchers with MockFac
       val txsExecResult = ledger.executeBlockTransactions(block)
 
       txsExecResult.isRight shouldBe txValidAccordingToValidators
-      if (txsExecResult.isRight) {
+      if(txsExecResult.isRight){
         val BlockResult(resultingWorldState, resultingGasUsed, resultingReceipts) = txsExecResult.right.get
 
         //Check valid world
         val minerPaymentForTxs = UInt256(stx.tx.gasLimit * stx.tx.gasPrice)
         val changes = Seq(
           originAddress -> IncreaseNonce,
-          originAddress -> UpdateBalance(-minerPaymentForTxs), //Origin payment for tx execution and nonce increase
-          minerAddress -> UpdateBalance(minerPaymentForTxs), //Miner reward for tx execution
-          originAddress -> UpdateBalance(-UInt256(stx.tx.value)), //Discount tx.value from originAddress
-          receiverAddress -> UpdateBalance(UInt256(stx.tx.value)) //Increase tx.value to recevierAddress
+          originAddress -> UpdateBalance(-minerPaymentForTxs),          //Origin payment for tx execution and nonce increase
+          minerAddress -> UpdateBalance(minerPaymentForTxs),            //Miner reward for tx execution
+          originAddress -> UpdateBalance(-UInt256(stx.tx.value)),       //Discount tx.value from originAddress
+          receiverAddress -> UpdateBalance(UInt256(stx.tx.value))       //Increase tx.value to recevierAddress
         ) ++ addressesToDelete.map(address => address -> DeleteAccount) //Delete all accounts to be deleted
         val expectedStateRoot = applyChanges(validBlockParentHeader.header.stateRoot, blockchainStorages, changes)
         expectedStateRoot shouldBe InMemoryWorldStateProxy.persistState(resultingWorldState).stateRootHash
@@ -279,7 +276,8 @@ class LedgerSpec extends FlatSpec with PropertyChecks with Matchers with MockFac
 
   }
 
-  it should "correctly run executeBlock for a valid block without txs" in new BlockchainSetup {
+  // FIXME: This test doesn't have sense anymore, remove this test when ommers dissapear.
+  /*it should "correctly run executeBlock for a valid block without txs" in new BlockchainSetup {
 
     val table = Table[Int, BigInt](
       ("ommersSize", "ommersBlockDifference"),
@@ -288,7 +286,7 @@ class LedgerSpec extends FlatSpec with PropertyChecks with Matchers with MockFac
       (1, 3)
     )
 
-    forAll(table) { (ommersSize, ommersBlockDifference) =>
+    forAll(table){ (ommersSize, ommersBlockDifference) =>
 
       val ledger = new LedgerImpl(new MockVM(c => createResult(
         context = c,
@@ -327,10 +325,9 @@ class LedgerSpec extends FlatSpec with PropertyChecks with Matchers with MockFac
       val blockExecResult = ledger.executeBlock(block)
       assert(blockExecResult.isRight)
     }
-  }
+  }*/
 
   it should "fail to run executeBlock if a block is invalid before executing it" in new BlockchainSetup {
-
     object validatorsOnlyFailsBlockValidator extends Mocks.MockValidatorsAlwaysSucceed {
       override val blockValidator = Mocks.MockValidatorsAlwaysFail.blockValidator
     }
@@ -379,7 +376,6 @@ class LedgerSpec extends FlatSpec with PropertyChecks with Matchers with MockFac
     object validatorsFailsBlockValidatorWithReceipts extends Mocks.MockValidatorsAlwaysSucceed {
       override val blockValidator = new BlockValidator {
         override def validateHeaderAndBody(blockHeader: SignedBlockHeader, blockBody: BlockBody) = Right(BlockValid)
-
         override def validateBlockAndReceipts(blockHeader: SignedBlockHeader, receipts: Seq[Receipt]) = Left(BlockTransactionsHashError)
       }
     }
@@ -409,7 +405,7 @@ class LedgerSpec extends FlatSpec with PropertyChecks with Matchers with MockFac
       (correctStateRoot, correctGasUsed, validatorsFailsBlockValidatorWithReceipts)
     )
 
-    forAll(table) { (stateRootHash, cumulativeGasUsedBlock, validators) =>
+    forAll(table){ (stateRootHash, cumulativeGasUsedBlock, validators) =>
       val ledger = createLedger(validators)
 
       val blockHeader: BlockHeader = validBlockHeader.header.copy(gasUsed = cumulativeGasUsedBlock, stateRoot = stateRootHash)
@@ -436,11 +432,11 @@ class LedgerSpec extends FlatSpec with PropertyChecks with Matchers with MockFac
 
     forAll(table) { (origin1Address, receiver1Address, origin2Address, receiver2Address) =>
 
-      def keyPair(address: Address): AsymmetricCipherKeyPair = if (address == originAddress) originKeyPair else receiverKeyPair
+      def keyPair(address: Address): AsymmetricCipherKeyPair = if(address == originAddress) originKeyPair else receiverKeyPair
 
       val tx1 = validTx.copy(value = 100, receivingAddress = Some(receiver1Address), gasLimit = defaultGasLimit)
       val tx2 = validTx.copy(value = 50, receivingAddress = Some(receiver2Address), gasLimit = defaultGasLimit * 2,
-        nonce = validTx.nonce + (if (origin1Address == origin2Address) 1 else 0)
+        nonce = validTx.nonce + (if(origin1Address == origin2Address) 1 else 0)
       )
       val stx1 = SignedTransaction.sign(tx1, keyPair(origin1Address), Some(blockchainConfig.chainId))
       val stx2 = SignedTransaction.sign(tx2, keyPair(origin2Address), Some(blockchainConfig.chainId))
@@ -471,8 +467,8 @@ class LedgerSpec extends FlatSpec with PropertyChecks with Matchers with MockFac
       val minerPaymentForTx1 = UInt256(stx1.tx.gasLimit * stx1.tx.gasPrice)
       val changesTx1 = Seq(
         origin1Address -> IncreaseNonce,
-        origin1Address -> UpdateBalance(-minerPaymentForTx1), //Origin payment for tx execution and nonce increase
-        minerAddress -> UpdateBalance(minerPaymentForTx1), //Miner reward for tx execution
+        origin1Address -> UpdateBalance(-minerPaymentForTx1),     //Origin payment for tx execution and nonce increase
+        minerAddress -> UpdateBalance(minerPaymentForTx1),        //Miner reward for tx execution
         origin1Address -> UpdateBalance(-UInt256(stx1.tx.value)), //Discount tx.value from originAddress
         receiver1Address -> UpdateBalance(UInt256(stx1.tx.value)) //Increase tx.value to recevierAddress
       )
@@ -488,8 +484,8 @@ class LedgerSpec extends FlatSpec with PropertyChecks with Matchers with MockFac
       val minerPaymentForTx2 = UInt256(stx2.tx.gasLimit * stx2.tx.gasPrice)
       val changesTx2 = Seq(
         origin2Address -> IncreaseNonce,
-        origin2Address -> UpdateBalance(-minerPaymentForTx2), //Origin payment for tx execution and nonce increase
-        minerAddress -> UpdateBalance(minerPaymentForTx2), //Miner reward for tx execution
+        origin2Address -> UpdateBalance(-minerPaymentForTx2),     //Origin payment for tx execution and nonce increase
+        minerAddress -> UpdateBalance(minerPaymentForTx2),        //Miner reward for tx execution
         origin2Address -> UpdateBalance(-UInt256(stx2.tx.value)), //Discount tx.value from originAddress
         receiver2Address -> UpdateBalance(UInt256(stx2.tx.value)) //Increase tx.value to recevierAddress
       )
@@ -731,9 +727,7 @@ class LedgerSpec extends FlatSpec with PropertyChecks with Matchers with MockFac
       initialWorld,
       defaultBlockHeader)
 
-    result match {
-      case (_, executedTxs) => executedTxs shouldBe Seq(stx1, stx4)
-    }
+    result match { case (_, executedTxs) => executedTxs shouldBe Seq(stx1, stx4) }
   }
 
   it should "produce empty block if all txs fail" in new TestSetup {
@@ -763,9 +757,7 @@ class LedgerSpec extends FlatSpec with PropertyChecks with Matchers with MockFac
       initialWorld,
       defaultBlockHeader)
 
-    result match {
-      case (_, executedTxs) => executedTxs shouldBe Seq.empty
-    }
+    result match { case (_, executedTxs) => executedTxs shouldBe Seq.empty }
   }
 
   it should "drain DAO accounts and send the funds to refund address if Pro DAO Fork was configured" in new DaoForkTestSetup {
@@ -892,7 +884,7 @@ class LedgerSpec extends FlatSpec with PropertyChecks with Matchers with MockFac
       .saveAccount(minerAddress, Account(balance = initialMinerBalance)))
 
     val initialWorld = InMemoryWorldStateProxy.persistState(
-      defaultAddressesToDelete.foldLeft(worldWithMinerAndOriginAccounts) {
+      defaultAddressesToDelete.foldLeft(worldWithMinerAndOriginAccounts){
         (recWorld, address) => recWorld.saveAccount(address, Account.empty())
       }
     )
@@ -969,13 +961,11 @@ class LedgerSpec extends FlatSpec with PropertyChecks with Matchers with MockFac
   }
 
   trait BinarySimulationChopSetup {
-
     sealed trait TxError
-
     case object TxError extends TxError
 
-    val minimalGas: BigInt = 20000
-    val maximalGas: BigInt = 100000
+    val minimalGas:BigInt = 20000
+    val maximalGas:BigInt = 100000
     val stepGas: BigInt = 625
 
     val testGasValues = minimalGas.to(maximalGas, stepGas).toList
@@ -984,5 +974,4 @@ class LedgerSpec extends FlatSpec with PropertyChecks with Matchers with MockFac
       minimalWorkingGas => gasLimit => if (gasLimit >= minimalWorkingGas) None else Some(TxError)
 
   }
-
 }

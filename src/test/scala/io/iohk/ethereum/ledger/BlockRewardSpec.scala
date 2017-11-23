@@ -31,7 +31,8 @@ class BlockRewardSpec extends FlatSpec with Matchers with MockFactory {
     afterRewardWorldState.getGuaranteedAccount(Address(block.signedHeader.header.beneficiary)).balance shouldEqual expectedReward
   }
 
-  "Reward Calculation" should "be paid if ommers are included in block" in new TestSetup {
+  // FIXME: This test doesn't have sense anymore, remove this test when ommers dissapear.
+  /*"Reward Calculation" should "be paid if ommers are included in block" in new TestSetup {
     val block = sampleBlock(validAccountAddress, Seq(validAccountAddress2, validAccountAddress3))
     val afterRewardWorldState: InMemoryWorldStateProxy = ledger.payBlockReward(block, worldState)
     val beforeExecutionBalance1: BigInt = worldState.getGuaranteedAccount(Address(block.signedHeader.header.beneficiary)).balance
@@ -40,16 +41,16 @@ class BlockRewardSpec extends FlatSpec with Matchers with MockFactory {
     afterRewardWorldState.getGuaranteedAccount(Address(block.signedHeader.header.beneficiary)).balance shouldEqual (beforeExecutionBalance1 + minerTwoOmmersReward)
     afterRewardWorldState.getGuaranteedAccount(Address(block.body.uncleNodesList.head.header.beneficiary)).balance shouldEqual (beforeExecutionBalance2 + ommerFiveBlocksDifferenceReward)
     afterRewardWorldState.getGuaranteedAccount(Address(block.body.uncleNodesList(1).header.beneficiary)).balance shouldEqual (beforeExecutionBalance3 + ommerFiveBlocksDifferenceReward)
-  }
+  }*/
 
-  "Reward" should "be paid if ommers are included in block even if accounts don't exist" in new TestSetup {
+  // FIXME: This test doesn't have sense anymore, remove this test when ommers dissapear.
+  /*"Reward" should "be paid if ommers are included in block even if accounts don't exist" in new TestSetup {
     val block = sampleBlock(Address(0xdeadbeef), Seq(Address(0x1111), Address(0x2222)))
     val afterRewardWorldState: InMemoryWorldStateProxy = ledger.payBlockReward(block, worldState)
     afterRewardWorldState.getGuaranteedAccount(Address(block.signedHeader.header.beneficiary)).balance shouldEqual minerTwoOmmersReward
     afterRewardWorldState.getGuaranteedAccount(Address(block.body.uncleNodesList.head.header.beneficiary)).balance shouldEqual ommerFiveBlocksDifferenceReward
     afterRewardWorldState.getGuaranteedAccount(Address(block.body.uncleNodesList(1).header.beneficiary)).balance shouldEqual ommerFiveBlocksDifferenceReward
-  }
-
+  }*/
 
   trait TestSetup extends EphemBlockchainTestSetup {
 

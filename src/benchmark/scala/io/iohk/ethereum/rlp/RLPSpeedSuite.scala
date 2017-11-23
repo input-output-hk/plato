@@ -6,6 +6,7 @@ import io.iohk.ethereum.domain.Block._
 import io.iohk.ethereum.domain._
 import io.iohk.ethereum.network.p2p.messages.CommonMessages.SignedTransactions._
 import io.iohk.ethereum.network.p2p.messages.PV62.BlockBody
+import io.iohk.ethereum.nodebuilder.SecureRandomBuilder
 import io.iohk.ethereum.utils.Logger
 import org.scalacheck.Gen
 import org.scalatest.FunSuite
@@ -21,7 +22,8 @@ class RLPSpeedSuite extends FunSuite
     with PropertyChecks
     with GeneratorDrivenPropertyChecks
     with ObjectGenerators
-    with Logger {
+    with Logger
+    with SecureRandomBuilder {
 
   val rounds = 10000
 
@@ -89,6 +91,6 @@ class RLPSpeedSuite extends FunSuite
   ).get
 
   lazy val blockGen: Gen[Block] = for {
-    header <- blockHeaderGen
+    header <- signedBlockHeaderGen(secureRandom)
   } yield Block(signedHeader = header, BlockBody(transactionList = List.fill(10)(validTransaction), uncleNodesList = Nil))
 }

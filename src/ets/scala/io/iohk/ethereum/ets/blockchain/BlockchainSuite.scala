@@ -70,7 +70,7 @@ class BlockchainSuite extends FreeSpec with Matchers with Logger {
 
     lastBlock.get.signedHeader.hash shouldEqual scenario.lastblockhash
     resultState should contain theSameElementsAs expectedState
-    lastBlock.get.signedHeader.stateRoot shouldEqual expectedWorldStateHash
+    lastBlock.get.signedHeader.header.stateRoot shouldEqual expectedWorldStateHash
   }
 }
 
