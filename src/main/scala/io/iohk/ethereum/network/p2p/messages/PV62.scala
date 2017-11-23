@@ -1,7 +1,8 @@
 package io.iohk.ethereum.network.p2p.messages
 
 import akka.util.ByteString
-import io.iohk.ethereum.domain.{SignedBlockHeader, BlockHeader, SignedTransaction}
+import io.iohk.ethereum.crypto.ECDSASignature
+import io.iohk.ethereum.domain.{BlockHeader, SignedBlockHeader, SignedTransaction}
 import io.iohk.ethereum.network.p2p.{Message, MessageSerializableImplicit}
 import io.iohk.ethereum.rlp.RLPImplicitConversions._
 import io.iohk.ethereum.rlp.RLPImplicits._
@@ -131,13 +132,16 @@ object PV62 {
         case RLPList(parentHash, ommersHash, beneficiary, stateRoot, transactionsRoot, receiptsRoot,
         logsBloom, difficulty, number, gasLimit, gasUsed, unixTimestamp, extraData, mixHash, nonce, slotNumber,
         pointSign, signatureRandom, signature) =>
+          //FIXME: Block signature is not being validated when decoding the blocks, as being done with SignedTransaction
           SignedBlockHeader(
             BlockHeader(parentHash, ommersHash, beneficiary, stateRoot, transactionsRoot, receiptsRoot,
               logsBloom, difficulty, number, gasLimit, gasUsed, unixTimestamp, extraData, mixHash, nonce, slotNumber),
-            (pointSign: Int).toByte,
-            signatureRandom,
-            signature
-          ).getOrElse(throw new Exception("Block header with invalid signature"))
+            ECDSASignature(
+              r = signatureRandom: BigInt,
+              s = signature: BigInt,
+              v = pointSign
+            )
+          )
       }
     }
   }
