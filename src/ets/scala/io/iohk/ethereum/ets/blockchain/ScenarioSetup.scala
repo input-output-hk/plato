@@ -19,6 +19,8 @@ abstract class ScenarioSetup(scenario: BlockchainScenario)
   with ElectionManagerBuilder
   with SlotTimeConverterBuilder
   with ValidatorsBuilder
+  with ClockBuilder
+  with NTPServiceBuilder
   with SyncConfigBuilder
   with BlockchainConfigBuilder
   with OuroborosConfigBuilder {
