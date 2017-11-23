@@ -20,36 +20,37 @@ class BlockRewardSpec extends FlatSpec with Matchers with MockFactory {
   "Reward Calculation" should "pay to the miner if no ommers included" in new TestSetup {
     val block = sampleBlock(validAccountAddress, Seq(validAccountAddress2, validAccountAddress3))
     val afterRewardWorldState: InMemoryWorldStateProxy = ledger.payBlockReward(block, worldState)
-    val beforeExecutionBalance: BigInt = worldState.getGuaranteedAccount(Address(block.header.beneficiary)).balance
-    afterRewardWorldState.getGuaranteedAccount(Address(block.header.beneficiary)).balance shouldEqual (beforeExecutionBalance + minerTwoOmmersReward)
+    val beforeExecutionBalance: BigInt = worldState.getGuaranteedAccount(Address(block.signedHeader.header.beneficiary)).balance
+    afterRewardWorldState.getGuaranteedAccount(Address(block.signedHeader.header.beneficiary)).balance shouldEqual (beforeExecutionBalance + minerTwoOmmersReward)
   }
 
   "Reward" should "be paid to the miner even if the account doesn't exist" in new TestSetup {
     val block = sampleBlock(Address(0xdeadbeef))
     val afterRewardWorldState: InMemoryWorldStateProxy = ledger.payBlockReward(block, worldState)
-    val expectedReward = UInt256(ledger.blockRewardCalculator.calcBlockMinerReward(block.header.number, 0))
-    afterRewardWorldState.getGuaranteedAccount(Address(block.header.beneficiary)).balance shouldEqual expectedReward
+    val expectedReward = UInt256(ledger.blockRewardCalculator.calcBlockMinerReward(block.signedHeader.header.number, 0))
+    afterRewardWorldState.getGuaranteedAccount(Address(block.signedHeader.header.beneficiary)).balance shouldEqual expectedReward
   }
 
-  "Reward Calculation" should "be paid if ommers are included in block" in new TestSetup {
+  // FIXME: This test doesn't have sense anymore, remove this test when ommers dissapear.
+  /*"Reward Calculation" should "be paid if ommers are included in block" in new TestSetup {
     val block = sampleBlock(validAccountAddress, Seq(validAccountAddress2, validAccountAddress3))
     val afterRewardWorldState: InMemoryWorldStateProxy = ledger.payBlockReward(block, worldState)
-    val beforeExecutionBalance1: BigInt = worldState.getGuaranteedAccount(Address(block.header.beneficiary)).balance
-    val beforeExecutionBalance2: BigInt = worldState.getGuaranteedAccount(Address(block.body.uncleNodesList.head.beneficiary)).balance
-    val beforeExecutionBalance3: BigInt = worldState.getGuaranteedAccount(Address(block.body.uncleNodesList(1).beneficiary)).balance
-    afterRewardWorldState.getGuaranteedAccount(Address(block.header.beneficiary)).balance shouldEqual (beforeExecutionBalance1 + minerTwoOmmersReward)
-    afterRewardWorldState.getGuaranteedAccount(Address(block.body.uncleNodesList.head.beneficiary)).balance shouldEqual (beforeExecutionBalance2 + ommerFiveBlocksDifferenceReward)
-    afterRewardWorldState.getGuaranteedAccount(Address(block.body.uncleNodesList(1).beneficiary)).balance shouldEqual (beforeExecutionBalance3 + ommerFiveBlocksDifferenceReward)
-  }
+    val beforeExecutionBalance1: BigInt = worldState.getGuaranteedAccount(Address(block.signedHeader.header.beneficiary)).balance
+    val beforeExecutionBalance2: BigInt = worldState.getGuaranteedAccount(Address(block.body.uncleNodesList.head.header.beneficiary)).balance
+    val beforeExecutionBalance3: BigInt = worldState.getGuaranteedAccount(Address(block.body.uncleNodesList(1).header.beneficiary)).balance
+    afterRewardWorldState.getGuaranteedAccount(Address(block.signedHeader.header.beneficiary)).balance shouldEqual (beforeExecutionBalance1 + minerTwoOmmersReward)
+    afterRewardWorldState.getGuaranteedAccount(Address(block.body.uncleNodesList.head.header.beneficiary)).balance shouldEqual (beforeExecutionBalance2 + ommerFiveBlocksDifferenceReward)
+    afterRewardWorldState.getGuaranteedAccount(Address(block.body.uncleNodesList(1).header.beneficiary)).balance shouldEqual (beforeExecutionBalance3 + ommerFiveBlocksDifferenceReward)
+  }*/
 
-  "Reward" should "be paid if ommers are included in block even if accounts don't exist" in new TestSetup {
+  // FIXME: This test doesn't have sense anymore, remove this test when ommers dissapear.
+  /*"Reward" should "be paid if ommers are included in block even if accounts don't exist" in new TestSetup {
     val block = sampleBlock(Address(0xdeadbeef), Seq(Address(0x1111), Address(0x2222)))
     val afterRewardWorldState: InMemoryWorldStateProxy = ledger.payBlockReward(block, worldState)
-    afterRewardWorldState.getGuaranteedAccount(Address(block.header.beneficiary)).balance shouldEqual minerTwoOmmersReward
-    afterRewardWorldState.getGuaranteedAccount(Address(block.body.uncleNodesList.head.beneficiary)).balance shouldEqual ommerFiveBlocksDifferenceReward
-    afterRewardWorldState.getGuaranteedAccount(Address(block.body.uncleNodesList(1).beneficiary)).balance shouldEqual ommerFiveBlocksDifferenceReward
-  }
-
+    afterRewardWorldState.getGuaranteedAccount(Address(block.signedHeader.header.beneficiary)).balance shouldEqual minerTwoOmmersReward
+    afterRewardWorldState.getGuaranteedAccount(Address(block.body.uncleNodesList.head.header.beneficiary)).balance shouldEqual ommerFiveBlocksDifferenceReward
+    afterRewardWorldState.getGuaranteedAccount(Address(block.body.uncleNodesList(1).header.beneficiary)).balance shouldEqual ommerFiveBlocksDifferenceReward
+  }*/
 
   trait TestSetup extends EphemBlockchainTestSetup {
 
@@ -68,9 +69,9 @@ class BlockRewardSpec extends FlatSpec with Matchers with MockFactory {
     // We don't care for this tests if block is not valid
     def sampleBlock(minerAddress: Address, ommerMiners: Seq[Address] = Nil): Block = {
       Block(
-        header = Fixtures.Blocks.Genesis.header.copy(beneficiary = minerAddress.bytes, number = 10),
-        body = Fixtures.Blocks.Genesis.body.copy(
-          uncleNodesList = ommerMiners.map(a => Fixtures.Blocks.Genesis.header.copy(beneficiary = a.bytes, number = 5))
+        Fixtures.Blocks.Genesis.signedHeader.copy(Fixtures.Blocks.Genesis.signedHeader.header.copy(beneficiary = minerAddress.bytes, number = 10)),
+        Fixtures.Blocks.Genesis.body.copy(
+          uncleNodesList = ommerMiners.map(a => Fixtures.Blocks.Genesis.signedHeader.copy(Fixtures.Blocks.Genesis.signedHeader.header.copy(beneficiary = a.bytes, number = 5)))
         )
       )
     }

@@ -5,7 +5,7 @@ import java.net.InetSocketAddress
 import akka.actor.ActorSystem
 import akka.testkit.TestProbe
 import io.iohk.ethereum.Fixtures
-import io.iohk.ethereum.domain.{Block, BlockHeader}
+import io.iohk.ethereum.domain.{Block, SignedBlockHeader}
 import io.iohk.ethereum.network.{EtcPeerManagerActor, Peer}
 import io.iohk.ethereum.network.EtcPeerManagerActor.PeerInfo
 import io.iohk.ethereum.network.p2p.messages.CommonMessages.{NewBlock, Status}
@@ -18,9 +18,9 @@ class BlockBroadcastSpec extends FlatSpec with Matchers  {
   it should "send a new block when it is not known by the peer (known by comparing total difficulties)" in new TestSetup {
     //given
     //Block that should be sent as it's total difficulty is higher than known by peer
-    val blockHeader: BlockHeader = baseBlockHeader.copy(number = initialPeerInfo.maxBlockNumber - 3)
-    val newBlockNewHashes = NewBlockHashes(Seq(PV62.BlockHash(blockHeader.hash, blockHeader.number)))
-    val newBlock = NewBlock(Block(blockHeader, BlockBody(Nil, Nil)), initialPeerInfo.totalDifficulty + 2)
+    val signedBlockHeader: SignedBlockHeader = baseBlockHeader.copy(baseBlockHeader.header.copy(number = initialPeerInfo.maxBlockNumber - 3))
+    val newBlockNewHashes = NewBlockHashes(Seq(PV62.BlockHash(signedBlockHeader.hash, signedBlockHeader.header.number)))
+    val newBlock = NewBlock(Block(signedBlockHeader, BlockBody(Nil, Nil)), initialPeerInfo.totalDifficulty + 2)
 
     //when
     blockBroadcast.broadcastBlock(newBlock, Map(peer -> initialPeerInfo))
@@ -34,8 +34,8 @@ class BlockBroadcastSpec extends FlatSpec with Matchers  {
   it should "not send a new block when it is known by the peer (known by comparing total difficulties)" in new TestSetup {
     //given
     //Block that shouldn't be sent as it's number and total difficulty is lower than known by peer
-    val blockHeader: BlockHeader = baseBlockHeader.copy(number = initialPeerInfo.maxBlockNumber - 2)
-    val newBlock = NewBlock(Block(blockHeader, BlockBody(Nil, Nil)), initialPeerInfo.totalDifficulty - 2)
+    val signedBlockHeader: SignedBlockHeader = baseBlockHeader.copy(baseBlockHeader.header.copy(number = initialPeerInfo.maxBlockNumber - 2))
+    val newBlock = NewBlock(Block(signedBlockHeader, BlockBody(Nil, Nil)), initialPeerInfo.totalDifficulty - 2)
 
     //when
     blockBroadcast.broadcastBlock(newBlock, Map(peer -> initialPeerInfo))
@@ -46,9 +46,9 @@ class BlockBroadcastSpec extends FlatSpec with Matchers  {
 
   it should "send a new block when it is not known by the peer (known by comparing max block number)" in new TestSetup {
     //given
-    val blockHeader: BlockHeader = baseBlockHeader.copy(number = initialPeerInfo.maxBlockNumber + 4)
-    val newBlockNewHashes = NewBlockHashes(Seq(PV62.BlockHash(blockHeader.hash, blockHeader.number)))
-    val newBlock = NewBlock(Block(blockHeader, BlockBody(Nil, Nil)), initialPeerInfo.totalDifficulty - 2)
+    val signedBlockHeader: SignedBlockHeader = baseBlockHeader.copy(baseBlockHeader.header.copy(number = initialPeerInfo.maxBlockNumber + 4))
+    val newBlockNewHashes = NewBlockHashes(Seq(PV62.BlockHash(signedBlockHeader.hash, signedBlockHeader.header.number)))
+    val newBlock = NewBlock(Block(signedBlockHeader, BlockBody(Nil, Nil)), initialPeerInfo.totalDifficulty - 2)
 
     //when
     blockBroadcast.broadcastBlock(newBlock, Map(peer -> initialPeerInfo))
@@ -62,8 +62,8 @@ class BlockBroadcastSpec extends FlatSpec with Matchers  {
   it should "not send a new block only when it is known by the peer (known by comparing max block number)" in new TestSetup {
     //given
     //Block should already be known by the peer due to max block known
-    val blockHeader: BlockHeader = baseBlockHeader.copy(number = initialPeerInfo.maxBlockNumber - 2)
-    val newBlock = NewBlock(Block(blockHeader, BlockBody(Nil, Nil)), initialPeerInfo.totalDifficulty - 2)
+    val signedBlockHeader: SignedBlockHeader = baseBlockHeader.copy(baseBlockHeader.header.copy(number = initialPeerInfo.maxBlockNumber - 2))
+    val newBlock = NewBlock(Block(signedBlockHeader, BlockBody(Nil, Nil)), initialPeerInfo.totalDifficulty - 2)
 
     //when
     blockBroadcast.broadcastBlock(newBlock, Map(peer -> initialPeerInfo))
@@ -74,9 +74,9 @@ class BlockBroadcastSpec extends FlatSpec with Matchers  {
 
   it should "send block hashes to all peers while the blocks only to sqrt of them" in new TestSetup {
     //given
-    val firstHeader: BlockHeader = baseBlockHeader.copy(number = initialPeerInfo.maxBlockNumber + 4)
-    val firstBlockNewHashes = NewBlockHashes(Seq(PV62.BlockHash(firstHeader.hash, firstHeader.number)))
-    val firstBlock = NewBlock(Block(firstHeader, BlockBody(Nil, Nil)), initialPeerInfo.totalDifficulty - 2)
+    val firstSignedHeader: SignedBlockHeader = baseBlockHeader.copy(baseBlockHeader.header.copy(number = initialPeerInfo.maxBlockNumber + 4))
+    val firstBlockNewHashes = NewBlockHashes(Seq(PV62.BlockHash(firstSignedHeader.hash, firstSignedHeader.header.number)))
+    val firstBlock = NewBlock(Block(firstSignedHeader, BlockBody(Nil, Nil)), initialPeerInfo.totalDifficulty - 2)
 
     val peer2Probe = TestProbe()
     val peer2 = Peer(new InetSocketAddress("127.0.0.1", 0), peer2Probe.ref, false)
@@ -111,20 +111,20 @@ class BlockBroadcastSpec extends FlatSpec with Matchers  {
 
     val blockBroadcast = new BlockBroadcast(etcPeerManagerProbe.ref)
 
-    val baseBlockHeader = Fixtures.Blocks.Block3125369.header
+    val baseBlockHeader = Fixtures.Blocks.Block3125369.signedHeader
 
     val peerStatus = Status(
       protocolVersion = Versions.PV63,
       networkId = 1,
       totalDifficulty = BigInt(10000),
-      bestHash = Fixtures.Blocks.Block3125369.header.hash,
-      genesisHash = Fixtures.Blocks.Genesis.header.hash
+      bestHash = Fixtures.Blocks.Block3125369.signedHeader.hash,
+      genesisHash = Fixtures.Blocks.Genesis.signedHeader.hash
     )
     val initialPeerInfo = PeerInfo(
       remoteStatus = peerStatus,
       totalDifficulty = peerStatus.totalDifficulty,
       forkAccepted = false,
-      maxBlockNumber = Fixtures.Blocks.Block3125369.header.number
+      maxBlockNumber = Fixtures.Blocks.Block3125369.signedHeader.header.number
     )
 
     val peerProbe = TestProbe()

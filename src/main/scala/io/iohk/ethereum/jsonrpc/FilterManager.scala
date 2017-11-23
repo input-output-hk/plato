@@ -115,13 +115,13 @@ class FilterManager(
       if (currentBlockNumber > toBlockNumber) {
         logsSoFar
       } else {
-        blockchain.getBlockHeaderByNumber(currentBlockNumber) match {
-          case Some(header) if bytesToCheckInBloomFilter.isEmpty || BloomFilter.containsAnyOf(header.logsBloom, bytesToCheckInBloomFilter) =>
-            blockchain.getReceiptsByHash(header.hash) match {
+        blockchain.getSignedBlockHeaderByNumber(currentBlockNumber) match {
+          case Some(signedHeader) if bytesToCheckInBloomFilter.isEmpty || BloomFilter.containsAnyOf(signedHeader.header.logsBloom, bytesToCheckInBloomFilter) =>
+            blockchain.getReceiptsByHash(signedHeader.hash) match {
               case Some(receipts) => recur(
                 currentBlockNumber + 1,
                 toBlockNumber,
-                logsSoFar ++ getLogsFromBlock(filter, Block(header, blockchain.getBlockBodyByHash(header.hash).get), receipts)
+                logsSoFar ++ getLogsFromBlock(filter, Block(signedHeader, blockchain.getBlockBodyByHash(signedHeader.hash).get), receipts)
               )
               case None => logsSoFar
             }
@@ -189,8 +189,8 @@ class FilterManager(
             logIndex = logIndex,
             transactionIndex = txIndex,
             transactionHash = tx.hash,
-            blockHash = block.header.hash,
-            blockNumber = block.header.number,
+            blockHash = block.signedHeader.hash,
+            blockNumber = block.signedHeader.header.number,
             address = log.loggerAddress,
             data = log.data,
             topics = log.logTopics)
@@ -211,7 +211,7 @@ class FilterManager(
     def recur(currentBlockNumber: BigInt, hashesSoFar: Seq[ByteString]): Seq[ByteString] = {
       if (currentBlockNumber > bestBlock) {
         hashesSoFar
-      } else blockchain.getBlockHeaderByNumber(currentBlockNumber) match {
+      } else blockchain.getSignedBlockHeaderByNumber(currentBlockNumber) match {
         case Some(header) => recur(currentBlockNumber + 1, hashesSoFar :+ header.hash)
         case None => hashesSoFar
       }

@@ -10,7 +10,7 @@ import io.iohk.ethereum.db.components.Storages.PruningModeComponent
 import io.iohk.ethereum.db.components.{DataSourcesComponent, SharedLevelDBDataSources, Storages, StoragesComponent}
 import io.iohk.ethereum.db.storage.AppStateStorage
 import io.iohk.ethereum.db.storage.pruning.PruningMode
-import io.iohk.ethereum.domain.{Blockchain, BlockchainImpl, SlotTimeConverter}
+import io.iohk.ethereum.domain._
 import io.iohk.ethereum.jsonrpc.server.JsonRpcServer.JsonRpcServerConfig
 import io.iohk.ethereum.jsonrpc.NetService.NetServiceConfig
 import io.iohk.ethereum.ledger.{Ledger, LedgerImpl}
@@ -138,7 +138,7 @@ trait BlockchainBuilder {
 
   lazy val blockchain: BlockchainImpl = BlockchainImpl(storagesInstance.storages)
 
-  lazy val genesisTimestamp: Long = blockchain.genesisHeader.unixTimestamp
+  lazy val genesisTimestamp: Long = blockchain.genesisSignedHeader.header.unixTimestamp
 }
 
 trait ForkResolverBuilder {
@@ -291,9 +291,17 @@ trait BlockGeneratorBuilder {
     ValidatorsBuilder with
     LedgerBuilder with
     MiningConfigBuilder with
-    BlockchainBuilder =>
+    BlockchainBuilder with
+    PersonalServiceBuilder =>
 
-  lazy val blockGenerator = new BlockGenerator(blockchain, blockchainConfig, miningConfig, ledger, validators)
+  lazy val blockGenerator = new BlockGenerator(
+    blockchain,
+    blockchainConfig,
+    miningConfig,
+    ledger,
+    validators,
+    blockHeaderSigner = personalService.signBlockHeader
+  )
 }
 
 trait EthServiceBuilder {

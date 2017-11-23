@@ -2,7 +2,6 @@ package io.iohk.ethereum
 
 import java.math.BigInteger
 import java.security.SecureRandom
-
 import akka.util.ByteString
 import io.iohk.ethereum.mpt.HexPrefix.bytesToNibbles
 import org.scalacheck.{Arbitrary, Gen}
@@ -10,7 +9,6 @@ import io.iohk.ethereum.mpt.{BranchNode, ExtensionNode, LeafNode, MptNode}
 import io.iohk.ethereum.domain._
 import io.iohk.ethereum.network.p2p.messages.CommonMessages.NewBlock
 import io.iohk.ethereum.network.p2p.messages.PV62.BlockBody
-
 
 trait ObjectGenerators {
 
@@ -109,13 +107,15 @@ trait ObjectGenerators {
     }
   }
 
-  def newBlockGen(secureRandom: SecureRandom, chainId: Option[Byte]): Gen[NewBlock] = for {
-    blockHeader <- blockHeaderGen
-    stxs <- signedTxSeqGen(10, secureRandom, chainId)
-    uncles <- seqBlockHeaderGen
-    td <- bigIntGen
-  } yield NewBlock(Block(blockHeader, BlockBody(stxs, uncles)), td)
-
+  def newBlockGen(secureRandom: SecureRandom, chainId: Option[Byte]): Gen[NewBlock] = {
+    for {
+      signedBlockHeader <- signedBlockHeaderGen(secureRandom)
+      stxs <- signedTxSeqGen(10, secureRandom, chainId)
+      uncles <- signedBlockHeaderSeqGen(secureRandom)
+      td <- bigIntGen
+    } yield NewBlock(Block(signedBlockHeader, BlockBody(stxs, uncles)), td)
+  }
+  
   def blockHeaderGen: Gen[BlockHeader] = for {
     parentHash <- byteStringOfLengthNGen(32)
     ommersHash <- byteStringOfLengthNGen(32)
@@ -153,6 +153,12 @@ trait ObjectGenerators {
 
   def seqBlockHeaderGen: Gen[Seq[BlockHeader]] = Gen.listOf(blockHeaderGen)
 
-}
+  def signedBlockHeaderGen(secureRandom: SecureRandom): Gen[SignedBlockHeader] = {
+    val signerKeys = crypto.generateKeyPair(secureRandom)
+    blockHeaderGen.map(blockHeader => SignedBlockHeader.sign(blockHeader, signerKeys))
+  }
 
+  def signedBlockHeaderSeqGen(secureRandom: SecureRandom): Gen[Seq[SignedBlockHeader]] =
+    Gen.listOf(signedBlockHeaderGen(secureRandom))
+}
 object ObjectGenerators extends ObjectGenerators
