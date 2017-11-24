@@ -47,6 +47,7 @@ class BlockHeaderValidatorImpl(blockchainConfig: BlockchainConfig,
       _ <- validateNumber(signedBlockHeader.header, parentHeader)
       _ <- validateIsLeader(signedBlockHeader.header)
       _ <- validateSlotNumber(signedBlockHeader.header, parentHeader)
+      _ <- validateSignedBlockHeaderSignature(signedBlockHeader)
     } yield BlockHeaderValid
   }
 
@@ -62,6 +63,20 @@ class BlockHeaderValidatorImpl(blockchainConfig: BlockchainConfig,
       blockHeaderParent <- getSignedBlockHeaderByHash(signedBlockHeader.header.parentHash).map(Right(_)).getOrElse(Left(HeaderParentNotFoundError))
       _ <- validate(signedBlockHeader, blockHeaderParent.header)
     } yield BlockHeaderValid
+  }
+
+  /**
+    * This method allows validate the blockHeader signature
+    *
+    * @param signedBlockHeader BlockHeader to validate.
+    */
+  def validateSignedBlockHeaderSignature(signedBlockHeader: SignedBlockHeader): Either[BlockHeaderError, BlockHeaderValid] = {
+    val blockHeader = signedBlockHeader.header
+    val signature = signedBlockHeader.signature
+    (for {
+      coinbase <- SignedBlockHeader.getSender(blockHeader, signature)
+      if coinbase == Address(blockHeader.beneficiary)
+    } yield BlockHeaderValid).toRight(SignedHeaderSignatureError)
   }
 
   /**
@@ -198,6 +213,7 @@ class BlockHeaderValidatorImpl(blockchainConfig: BlockchainConfig,
 sealed trait BlockHeaderError
 
 object BlockHeaderError {
+  case object SignedHeaderSignatureError extends BlockHeaderError
   case object HeaderParentNotFoundError extends BlockHeaderError
   case object HeaderExtraDataError extends BlockHeaderError
   case object DaoHeaderExtraDataError extends BlockHeaderError
