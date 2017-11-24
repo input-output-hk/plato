@@ -46,7 +46,7 @@ class ProofOfStakeMiner(
               case Success(PendingBlock(block, _)) =>
                 syncController ! RegularSync.MinedBlock(block)
               case Failure(ex) =>
-                log.error(ex, "Unable to get block for mining")
+                log.error(s"Unable to get block for mining, error: ${ex.getMessage()}")
             }
           case _ =>
             log.info("No leader selected")

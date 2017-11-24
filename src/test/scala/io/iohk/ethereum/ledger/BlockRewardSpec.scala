@@ -17,11 +17,11 @@ class BlockRewardSpec extends FlatSpec with Matchers with MockFactory {
 
   val ledger = new LedgerImpl(new Mocks.MockVM(), blockchain, blockchainConfig, syncConfig, Mocks.MockValidatorsAlwaysSucceed)
 
-  "Reward Calculation" should "pay to the miner if no ommers included" in new TestSetup {
-    val block = sampleBlock(validAccountAddress, Seq(validAccountAddress2, validAccountAddress3))
+  "Reward Calculation" should "pay to the miner" in new TestSetup {
+    val block = sampleBlock(validAccountAddress, Nil)
     val afterRewardWorldState: InMemoryWorldStateProxy = ledger.payBlockReward(block, worldState)
     val beforeExecutionBalance: BigInt = worldState.getGuaranteedAccount(Address(block.signedHeader.header.beneficiary)).balance
-    afterRewardWorldState.getGuaranteedAccount(Address(block.signedHeader.header.beneficiary)).balance shouldEqual (beforeExecutionBalance + minerTwoOmmersReward)
+    afterRewardWorldState.getGuaranteedAccount(Address(block.signedHeader.header.beneficiary)).balance shouldEqual (beforeExecutionBalance + minerReward)
   }
 
   "Reward" should "be paid to the miner even if the account doesn't exist" in new TestSetup {
@@ -58,7 +58,7 @@ class BlockRewardSpec extends FlatSpec with Matchers with MockFactory {
     val validAccountAddress2 = Address(0xcdcdcd)
     val validAccountAddress3 = Address(0xefefef)
 
-    val minerTwoOmmersReward = BigInt("5312500000000000000")
+    val minerReward = BigInt("5000000000000000000")
     val ommerFiveBlocksDifferenceReward = BigInt("1875000000000000000")
 
     val worldState: InMemoryWorldStateProxy = BlockchainImpl(storagesInstance.storages).getWorldStateProxy(-1, UInt256.Zero, None)

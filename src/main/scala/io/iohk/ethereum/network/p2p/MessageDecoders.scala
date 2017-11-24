@@ -49,7 +49,7 @@ object EthereumMessageDecoder extends MessageDecoder {
 
     case (PV62 | PV63, pv62.NewBlockHashes.code) => payload.toNewBlockHashes
     case (PV62 | PV63, pv62.GetSignedBlockHeaders.code) => payload.toGetBlockHeaders
-    case (PV62 | PV63, pv62.SignedBlockHeaders.code) => payload.toBlockHeaders
+    case (PV62 | PV63, pv62.SignedBlockHeaders.code) => payload.toSignedBlockHeaders
     case (PV62 | PV63, pv62.GetBlockBodies.code) => payload.toGetBlockBodies
     case (PV62 | PV63, pv62.BlockBodies.code) => payload.toBlockBodies
 

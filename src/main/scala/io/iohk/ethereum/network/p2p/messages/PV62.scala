@@ -150,7 +150,7 @@ object PV62 {
 
     val code: Int = Versions.SubProtocolOffset + 0x04
 
-    implicit class BlockHeadersEnc(val underlyingMsg: SignedBlockHeaders) extends
+    implicit class SignedBlockHeadersEnc(val underlyingMsg: SignedBlockHeaders) extends
       MessageSerializableImplicit[SignedBlockHeaders](underlyingMsg) with RLPSerializable {
       import SignedBlockHeaderImplicits._
 
@@ -159,10 +159,10 @@ object PV62 {
       override def toRLPEncodable: RLPEncodeable = RLPList(msg.headers.map(_.toRLPEncodable): _*)
     }
 
-    implicit class BlockHeadersDec(val bytes: Array[Byte]) extends AnyVal {
+    implicit class SignedBlockHeadersDec(val bytes: Array[Byte]) extends AnyVal {
       import SignedBlockHeaderImplicits._
 
-      def toBlockHeaders: SignedBlockHeaders = rawDecode(bytes) match {
+      def toSignedBlockHeaders: SignedBlockHeaders = rawDecode(bytes) match {
         case rlpList: RLPList => SignedBlockHeaders(rlpList.items.map(_.toSignedBlockHeader))
         case _ => throw new RuntimeException("Cannot decode SignedBlockHeaders")
       }

@@ -590,7 +590,7 @@ class LedgerImpl(
 
     val minerAddress = Address(block.signedHeader.header.beneficiary)
     val minerAccount = getAccountToPay(minerAddress, worldStateProxy)
-    val minerReward = blockRewardCalculator.calcBlockMinerReward(block.signedHeader.header.number, block.body.uncleNodesList.size)
+    val minerReward = blockRewardCalculator.calcBlockMinerReward(block.signedHeader.header.number, 0)
     log.debug(s"Paying block ${block.signedHeader.header.number} reward of $minerReward to miner with account address $minerAddress")
     worldStateProxy.saveAccount(minerAddress, minerAccount.increaseBalance(UInt256(minerReward)))
     // TODO: Remove it when ommer functionality dissapear

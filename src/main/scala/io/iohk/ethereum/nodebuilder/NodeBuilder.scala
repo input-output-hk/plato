@@ -299,7 +299,7 @@ trait BlockGeneratorBuilder {
     miningConfig,
     ledger,
     validators,
-    blockHeaderSigner = personalService.signBlockHeader
+    blockHeaderSignerFn = personalService.signBlockHeader
   )
 }
 

@@ -21,8 +21,7 @@ import io.iohk.ethereum.validators.Validators
 import io.iohk.ethereum.crypto._
 
 class BlockGenerator(blockchain: Blockchain, blockchainConfig: BlockchainConfig, miningConfig: MiningConfig,
-  ledger: Ledger, validators: Validators, blockTimestampProvider: BlockTimestampProvider = DefaultBlockTimestampProvider,
-  blockHeaderSigner: (BlockHeader, Address) => Option[SignedBlockHeader]) {
+                     ledger: Ledger, validators: Validators, blockTimestampProvider: BlockTimestampProvider = DefaultBlockTimestampProvider, blockHeaderSignerFn: (BlockHeader, Address) => Option[SignedBlockHeader]) {
 
   val difficulty = new DifficultyCalculator(blockchainConfig)
 
@@ -49,7 +48,7 @@ class BlockGenerator(blockchain: Blockchain, blockchainConfig: BlockchainConfig,
           receiptsRoot = buildMpt(receipts, Receipt.byteArraySerializable),
           logsBloom = bloomFilter,
           gasUsed = gasUsed)
-        blockHeaderSigner(header, beneficiary).toRight(InvalidBlockHeaderSignature).map(
+          blockHeaderSignerFn(header, beneficiary).toRight(InvalidBlockHeaderSignature).map(
           signedBlockHeader => PendingBlock(Block(signedBlockHeader, prepareBlock.body), receipts)
         )
     }
