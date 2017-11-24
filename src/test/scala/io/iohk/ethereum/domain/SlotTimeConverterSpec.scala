@@ -11,10 +11,10 @@ class SlotTimeConverterSpec extends FlatSpec with Matchers with PropertyChecks {
   it should "correctly obtain the slot beginning timestamp for each slot greater than 0" in {
 
     val ouroborosConfig = new OuroborosConfig {
-      val slotDuration: FiniteDuration = 2.seconds
+      override val slotDuration: FiniteDuration = 2.seconds
 
       //unused
-      val knownStakeholders: Seq[Address] = Nil
+      override val slotMinerStakeholdersMapping: Map[BigInt, Seq[Address]] = Map.empty
     }
     val slot1StartingTime = 1.seconds
 
