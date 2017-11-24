@@ -115,7 +115,7 @@ trait ObjectGenerators {
       td <- bigIntGen
     } yield NewBlock(Block(signedBlockHeader, BlockBody(stxs, uncles)), td)
   }
-  
+
   def blockHeaderGen: Gen[BlockHeader] = for {
     parentHash <- byteStringOfLengthNGen(32)
     ommersHash <- byteStringOfLengthNGen(32)
