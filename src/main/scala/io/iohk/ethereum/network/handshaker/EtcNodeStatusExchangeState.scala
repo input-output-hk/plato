@@ -34,7 +34,7 @@ case class EtcNodeStatusExchangeState(handshakerConfiguration: EtcHandshakerConf
 
   private def getBestBlockHeader() = {
     val bestBlockNumber = appStateStorage.getBestBlockNumber()
-    blockchain.getBlockHeaderByNumber(bestBlockNumber).getOrElse(blockchain.genesisHeader)
+    blockchain.getSignedBlockHeaderByNumber(bestBlockNumber).getOrElse(blockchain.genesisSignedHeader)
   }
 
   private def createStatusMsg(): Status = {
@@ -42,9 +42,9 @@ case class EtcNodeStatusExchangeState(handshakerConfiguration: EtcHandshakerConf
     val status = Status(
       protocolVersion = Versions.PV63,
       networkId = peerConfiguration.networkId,
-      totalDifficulty = bestBlockHeader.difficulty,
+      totalDifficulty = bestBlockHeader.header.difficulty,
       bestHash = bestBlockHeader.hash,
-      genesisHash = blockchain.genesisHeader.hash)
+      genesisHash = blockchain.genesisSignedHeader.hash)
     log.debug(s"sending status $status")
     status
   }

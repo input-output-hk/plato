@@ -6,7 +6,7 @@ import io.iohk.ethereum.db.storage.BlockBodiesStorage.BlockBodyHash
 import io.iohk.ethereum.domain.{Address, SignedTransaction, Transaction}
 import io.iohk.ethereum.network.p2p.messages.PV62.BlockBody
 import io.iohk.ethereum.rlp._
-import io.iohk.ethereum.network.p2p.messages.PV62.BlockHeaderImplicits._
+import io.iohk.ethereum.network.p2p.messages.PV62.SignedBlockHeaderImplicits._
 
 /**
   * This class is used to store the BlockBody, by using:
@@ -57,7 +57,7 @@ object BlockBodiesStorage {
     encode(BlockBody.blockBodyToRlpEncodable(
       blockBody,
       signedTransactionToBytes,
-      header => BlockHeaderEnc(header).toRLPEncodable
+      header => SignedBlockHeaderEnc(header).toRLPEncodable
     ))
   }
 
@@ -65,7 +65,7 @@ object BlockBodiesStorage {
     BlockBody.rlpEncodableToBlockBody(
       rawDecode(bytes),
       signedTransactionFromEncodable,
-      rlp => BlockheaderEncodableDec(rlp).toBlockHeader
+      rlp => SignedBlockHeaderEncodableDec(rlp).toSignedBlockHeader
     )
   }
 }

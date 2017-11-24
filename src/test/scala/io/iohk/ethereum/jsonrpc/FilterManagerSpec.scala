@@ -22,7 +22,7 @@ import io.iohk.ethereum.transactions.PendingTransactionsManager
 import io.iohk.ethereum.transactions.PendingTransactionsManager.PendingTransaction
 import io.iohk.ethereum.utils.{FilterConfig, TxPoolConfig}
 import org.scalatest.concurrent.ScalaFutures
-
+import io.iohk.ethereum.Fixtures.FakeSignature
 import scala.concurrent.duration._
 
 class FilterManagerSpec extends FlatSpec with Matchers with ScalaFutures with NormalPatience {
@@ -39,23 +39,23 @@ class FilterManagerSpec extends FlatSpec with Matchers with ScalaFutures with No
         .mapTo[FilterManager.NewFilterResponse].futureValue
 
     val logs1 = Seq(TxLogEntry(Address("0x4567"), Nil, ByteString()))
-    val bh1 = blockHeader.copy(
+    val bh1 = blockHeader.copy(blockHeader.header.copy(
       number = 1,
-      logsBloom = BloomFilter.create(logs1))
+      logsBloom = BloomFilter.create(logs1)))
 
     val logs2 = Seq(TxLogEntry(Address("0x1234"), Seq(ByteString("can be any"), ByteString(Hex.decode("4567"))), ByteString(Hex.decode("99aaff"))))
-    val bh2 = blockHeader.copy(
+    val bh2 = blockHeader.copy(blockHeader.header.copy(
       number = 2,
-      logsBloom = BloomFilter.create(logs2))
+      logsBloom = BloomFilter.create(logs2)))
 
-    val bh3 = blockHeader.copy(
+    val bh3 = blockHeader.copy(blockHeader.header.copy(
       number = 3,
-      logsBloom = BloomFilter.create(Nil))
+      logsBloom = BloomFilter.create(Nil)))
 
     (appStateStorage.getBestBlockNumber _).expects().returning(3).twice()
-    (blockchain.getBlockHeaderByNumber _).expects(bh1.number).returning(Some(bh1))
-    (blockchain.getBlockHeaderByNumber _).expects(bh2.number).returning(Some(bh2))
-    (blockchain.getBlockHeaderByNumber _).expects(bh3.number).returning(Some(bh3))
+    (blockchain.getSignedBlockHeaderByNumber _).expects(bh1.header.number).returning(Some(bh1))
+    (blockchain.getSignedBlockHeaderByNumber _).expects(bh2.header.number).returning(Some(bh2))
+    (blockchain.getSignedBlockHeaderByNumber _).expects(bh3.header.number).returning(Some(bh3))
 
     val bb2 = BlockBody(
       transactionList = Seq(SignedTransaction(
@@ -87,7 +87,7 @@ class FilterManagerSpec extends FlatSpec with Matchers with ScalaFutures with No
       transactionIndex = 0,
       transactionHash = bb2.transactionList.head.hash,
       blockHash = bh2.hash,
-      blockNumber = bh2.number,
+      blockNumber = bh2.header.number,
       address = Address(0x1234),
       data = ByteString(Hex.decode("99aaff")),
       topics = logs2.head.logTopics)
@@ -107,11 +107,11 @@ class FilterManagerSpec extends FlatSpec with Matchers with ScalaFutures with No
     val log4_1 = TxLogEntry(Address("0x1234"), Seq(ByteString("can be any"), ByteString(Hex.decode("4567"))), ByteString(Hex.decode("99aaff")))
     val log4_2 = TxLogEntry(Address("0x123456"), Seq(ByteString("can be any"), ByteString(Hex.decode("4567"))), ByteString(Hex.decode("99aaff"))) // address doesn't match
 
-    val bh4 = blockHeader.copy(
+    val bh4 = blockHeader.copy(blockHeader.header.copy(
       number = 4,
-      logsBloom = BloomFilter.create(Seq(log4_1, log4_2)))
+      logsBloom = BloomFilter.create(Seq(log4_1, log4_2))))
 
-    (blockchain.getBlockHeaderByNumber _).expects(BigInt(4)).returning(Some(bh4))
+    (blockchain.getSignedBlockHeaderByNumber _).expects(BigInt(4)).returning(Some(bh4))
 
     val bb4 = BlockBody(
       transactionList = Seq(
@@ -169,12 +169,12 @@ class FilterManagerSpec extends FlatSpec with Matchers with ScalaFutures with No
         .mapTo[FilterManager.NewFilterResponse].futureValue
 
     val logs = Seq(TxLogEntry(Address("0x1234"), Seq(ByteString("can be any"), ByteString(Hex.decode("4567"))), ByteString(Hex.decode("99aaff"))))
-    val bh = blockHeader.copy(
+    val bh = blockHeader.copy(blockHeader.header.copy(
       number = 1,
-      logsBloom = BloomFilter.create(logs))
+      logsBloom = BloomFilter.create(logs)))
 
     (appStateStorage.getBestBlockNumber _).expects().returning(1).anyNumberOfTimes()
-    (blockchain.getBlockHeaderByNumber _).expects(bh.number).returning(Some(bh))
+    (blockchain.getSignedBlockHeaderByNumber _).expects(bh.header.number).returning(Some(bh))
     val bb = BlockBody(
       transactionList = Seq(SignedTransaction(
         tx = Transaction(
@@ -198,9 +198,9 @@ class FilterManagerSpec extends FlatSpec with Matchers with ScalaFutures with No
 
 
     val logs2 = Seq(TxLogEntry(Address("0x1234"), Seq(ByteString("another log"), ByteString(Hex.decode("4567"))), ByteString(Hex.decode("99aaff"))))
-    val bh2 = blockHeader.copy(
+    val bh2 = blockHeader.copy(blockHeader.header.copy(
       number = 2,
-      logsBloom = BloomFilter.create(logs2))
+      logsBloom = BloomFilter.create(logs2)))
     val blockTransactions2 = Seq(SignedTransaction(
       tx = Transaction(
         nonce = 0,
@@ -236,7 +236,7 @@ class FilterManagerSpec extends FlatSpec with Matchers with ScalaFutures with No
       transactionIndex = 0,
       transactionHash = bb.transactionList.head.hash,
       blockHash = bh.hash,
-      blockNumber = bh.number,
+      blockNumber = bh.header.number,
       address = Address(0x1234),
       data = ByteString(Hex.decode("99aaff")),
       topics = logs.head.logTopics)
@@ -245,8 +245,8 @@ class FilterManagerSpec extends FlatSpec with Matchers with ScalaFutures with No
       logIndex = 0,
       transactionIndex = 0,
       transactionHash = block2.body.transactionList.head.hash,
-      blockHash = block2.header.hash,
-      blockNumber = block2.header.number,
+      blockHash = block2.signedHeader.hash,
+      blockNumber = block2.signedHeader.header.number,
       address = Address(0x1234),
       data = ByteString(Hex.decode("99aaff")),
       topics = logs2.head.logTopics)
@@ -270,13 +270,13 @@ class FilterManagerSpec extends FlatSpec with Matchers with ScalaFutures with No
 
     (appStateStorage.getBestBlockNumber _).expects().returning(6)
 
-    val bh4 = blockHeader.copy(number = 4)
-    val bh5 = blockHeader.copy(number = 5)
-    val bh6 = blockHeader.copy(number = 6)
+    val bh4 = blockHeader.copy(blockHeader.header.copy(number = 4))
+    val bh5 = blockHeader.copy(blockHeader.header.copy(number = 5))
+    val bh6 = blockHeader.copy(blockHeader.header.copy(number = 6))
 
-    (blockchain.getBlockHeaderByNumber _).expects(BigInt(4)).returning(Some(bh4))
-    (blockchain.getBlockHeaderByNumber _).expects(BigInt(5)).returning(Some(bh5))
-    (blockchain.getBlockHeaderByNumber _).expects(BigInt(6)).returning(Some(bh6))
+    (blockchain.getSignedBlockHeaderByNumber _).expects(BigInt(4)).returning(Some(bh4))
+    (blockchain.getSignedBlockHeaderByNumber _).expects(BigInt(5)).returning(Some(bh5))
+    (blockchain.getSignedBlockHeaderByNumber _).expects(BigInt(6)).returning(Some(bh6))
 
     val getChangesRes =
       (filterManager ? FilterManager.GetFilterChanges(createResp.id))
@@ -393,7 +393,7 @@ class FilterManagerSpec extends FlatSpec with Matchers with ScalaFutures with No
     val blockGenerator = mock[BlockGenerator]
     val pendingTransactionsManager = TestProbe()
 
-    val blockHeader = BlockHeader(
+    val blockHeader = SignedBlockHeader(BlockHeader(
       parentHash = ByteString(Hex.decode("fd07e36cfaf327801e5696134b36678f6a89fb1e8f017f2411a29d0ae810ab8b")),
       ommersHash = ByteString(Hex.decode("7766c4251396a6833ccbe4be86fbda3a200dccbe6a15d80ae3de5378b1540e04")),
       beneficiary = ByteString(Hex.decode("1b7047b4338acf65be94c1a3e8c5c9338ad7d67c")),
@@ -410,7 +410,7 @@ class FilterManagerSpec extends FlatSpec with Matchers with ScalaFutures with No
       mixHash = ByteString(Hex.decode("c6d695926546d3d679199303a6d1fc983fe3f09f44396619a24c4271830a7b95")),
       nonce = ByteString(Hex.decode("62bc3dca012c1b27")),
       slotNumber = 1
-    )
+    ), FakeSignature)
 
     val filterManager = TestActorRef[FilterManager](Props(
       new FilterManager(

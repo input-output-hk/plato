@@ -37,7 +37,7 @@ class RegularSync(
   import RegularSync._
   import syncConfig._
 
-  private var headersQueue: Seq[BlockHeader] = Nil
+  private var headersQueue: Seq[SignedBlockHeader] = Nil
   private var waitingForActor: Option[ActorRef] = None
   var resolvingBranches: Boolean = false
   var topOfTheChain: Boolean = false
@@ -104,26 +104,26 @@ class RegularSync(
           case BlockImportedToTop(newBlocks, newTds) =>
             broadcastBlocks(newBlocks, newTds)
             updateTxAndOmmerPools(newBlocks, Nil)
-            log.debug(s"Added new block ${newBlock.header.number} to the top of the chain received from $peerId")
+            log.debug(s"Added new block ${newBlock.signedHeader.header.number} to the top of the chain received from $peerId")
 
           case BlockEnqueued =>
-            ommersPool ! AddOmmers(newBlock.header)
-            log.debug(s"Block ${newBlock.header.number} (${Hex.toHexString(newBlock.header.hash.toArray)}) from $peerId " +
+            ommersPool ! AddOmmers(newBlock.signedHeader)
+            log.debug(s"Block ${newBlock.signedHeader.header.number} (${Hex.toHexString(newBlock.signedHeader.hash.toArray)}) from $peerId " +
             s"added to queue")
 
           case DuplicateBlock =>
-            log.debug(s"Ignoring duplicate block ${newBlock.header.number} (${Hex.toHexString(newBlock.header.hash.toArray)}) from $peerId")
+            log.debug(s"Ignoring duplicate block ${newBlock.signedHeader.header.number} (${Hex.toHexString(newBlock.signedHeader.hash.toArray)}) from $peerId")
 
           case UnknownParent =>
             // This is normal when receiving broadcasted blocks
-            log.debug(s"Ignoring orphaned block ${newBlock.header.number} (${Hex.toHexString(newBlock.header.hash.toArray)}) from $peerId")
+            log.debug(s"Ignoring orphaned block ${newBlock.signedHeader.header.number} (${Hex.toHexString(newBlock.signedHeader.hash.toArray)}) from $peerId")
 
           case ChainReorganised(oldBranch, newBranch, totalDifficulties) =>
             updateTxAndOmmerPools(newBranch, oldBranch)
             broadcastBlocks(newBranch, totalDifficulties)
-            log.debug(s"Imported block ${newBlock.header.number} (${Hex.toHexString(newBlock.header.hash.toArray)}) from $peerId, " +
+            log.debug(s"Imported block ${newBlock.signedHeader.header.number} (${Hex.toHexString(newBlock.signedHeader.hash.toArray)}) from $peerId, " +
               s"resulting in chain reorganisation: new branch of length ${newBranch.size} with head at block " +
-              s"${newBranch.last.header.number} (${Hex.toHexString(newBranch.last.header.hash.toArray)})")
+              s"${newBranch.last.signedHeader.header.number} (${Hex.toHexString(newBranch.last.signedHeader.hash.toArray)})")
 
           case BlockImportFailed(error) =>
             blacklist(peerId, blacklistDuration, error)
@@ -147,7 +147,7 @@ class RegularSync(
           val filteredHashes = getValidHashes(hashesToCheck)
 
           if (filteredHashes.nonEmpty) {
-            val request = GetBlockHeaders(Right(filteredHashes.head.hash), filteredHashes.length, BigInt(0), reverse = false)
+            val request = GetSignedBlockHeaders(Right(filteredHashes.head.hash), filteredHashes.length, BigInt(0), reverse = false)
             requestBlockHeaders(peer, request)
             cancelScheduledResume()
           } else {
@@ -182,11 +182,11 @@ class RegularSync(
     currentBestBlockNumber > blockHash.number && currentBestBlockNumber - blockHash.number > syncConfig.maxNewBlockHashAge
 
   def handleResponseToRequest: Receive = {
-    case ResponseReceived(peer: Peer, BlockHeaders(headers), timeTaken) =>
-      log.info("Received {} block headers in {} ms", headers.size, timeTaken)
+    case ResponseReceived(peer: Peer, SignedBlockHeaders(signedHeaders), timeTaken) =>
+      log.info("Received {} block headers in {} ms", signedHeaders.size, timeTaken)
       waitingForActor = None
-      if (resolvingBranches) handleBlockBranchResolution(peer, headers.reverse)
-      else handleDownload(peer, headers)
+      if (resolvingBranches) handleBlockBranchResolution(peer, signedHeaders.reverse)
+      else handleDownload(peer, signedHeaders)
 
     case ResponseReceived(peer, BlockBodies(blockBodies), timeTaken) =>
       log.info("Received {} block bodies in {} ms", blockBodies.size, timeTaken)
@@ -211,12 +211,12 @@ class RegularSync(
 
         importResult match {
           case BlockImportedToTop(blocks, totalDifficulties) =>
-            log.debug(s"Added new mined block ${block.header.number} to top of the chain")
+            log.debug(s"Added new mined block ${block.signedHeader.header.number} to top of the chain")
             broadcastBlocks(blocks, totalDifficulties)
             updateTxAndOmmerPools(blocks, Nil)
 
           case ChainReorganised(oldBranch, newBranch, totalDifficulties) =>
-            log.debug(s"Added new mined block ${block.header.number} resulting in chain reorganization")
+            log.debug(s"Added new mined block ${block.signedHeader.header.number} resulting in chain reorganization")
             broadcastBlocks(newBranch, totalDifficulties)
             updateTxAndOmmerPools(newBranch, oldBranch)
 
@@ -224,8 +224,8 @@ class RegularSync(
             log.warning(s"Mined block is a duplicate, this should never happen")
 
           case BlockEnqueued =>
-            log.debug(s"Mined block ${block.header.number} was added to the queue")
-            ommersPool ! AddOmmers(block.header)
+            log.debug(s"Mined block ${block.signedHeader.header.number} was added to the queue")
+            ommersPool ! AddOmmers(block.signedHeader)
 
           case UnknownParent =>
             log.warning(s"Mined block has no parent on the main chain")
@@ -235,7 +235,7 @@ class RegularSync(
         }
 
       } else {
-        ommersPool ! AddOmmers(block.header)
+        ommersPool ! AddOmmers(block.signedHeader)
       }
   }
 
@@ -243,7 +243,7 @@ class RegularSync(
     bestPeer match {
       case Some(peer) =>
         val blockNumber = appStateStorage.getBestBlockNumber()
-        requestBlockHeaders(peer, GetBlockHeaders(Left(blockNumber + 1), blockHeadersPerRequest, skip = 0, reverse = false))
+        requestBlockHeaders(peer, GetSignedBlockHeaders(Left(blockNumber + 1), blockHeadersPerRequest, skip = 0, reverse = false))
         resolvingBranches = false
 
       case None =>
@@ -252,8 +252,8 @@ class RegularSync(
     }
   }
 
-  private def handleBlockBranchResolution(peer: Peer, message: Seq[BlockHeader]) = {
-    if (message.nonEmpty && message.last.hash == headersQueue.head.parentHash) {
+  private def handleBlockBranchResolution(peer: Peer, message: Seq[SignedBlockHeader]) = {
+    if (message.nonEmpty && message.last.hash == headersQueue.head.header.parentHash) {
       headersQueue = message ++ headersQueue
       processBlockHeaders(peer, headersQueue)
     } else {
@@ -262,7 +262,7 @@ class RegularSync(
     }
   }
 
-  private def handleDownload(peer: Peer, message: Seq[BlockHeader]) = if (message.nonEmpty) {
+  private def handleDownload(peer: Peer, message: Seq[SignedBlockHeader]) = if (message.nonEmpty) {
     headersQueue = message
     processBlockHeaders(peer, message)
   } else {
@@ -271,19 +271,19 @@ class RegularSync(
     scheduleResume()
   }
 
-  private def processBlockHeaders(peer: Peer, headers: Seq[BlockHeader]) = ledger.resolveBranch(headers) match {
+  private def processBlockHeaders(peer: Peer, signedHeaders: Seq[SignedBlockHeader]) = ledger.resolveBranch(signedHeaders) match {
     case NewBetterBranch(oldBranch) =>
       val transactionsToAdd = oldBranch.flatMap(_.body.transactionList)
       pendingTransactionsManager ! PendingTransactionsManager.AddTransactions(transactionsToAdd.toList)
-      val hashes = headers.take(blockBodiesPerRequest).map(_.hash)
+      val hashes = signedHeaders.take(blockBodiesPerRequest).map(_.hash)
       requestBlockBodies(peer, GetBlockBodies(hashes))
 
       //add first block from branch as ommer
-      oldBranch.headOption.foreach { h => ommersPool ! AddOmmers(h.header) }
+      oldBranch.headOption.foreach { sbh => ommersPool ! AddOmmers(sbh.signedHeader) }
 
     case NoChainSwitch =>
       //add first block from branch as ommer
-      headersQueue.headOption.foreach { h => ommersPool ! AddOmmers(h) }
+      headersQueue.headOption.foreach { sbh => ommersPool ! AddOmmers(sbh) }
       scheduleResume()
 
     case UnknownBranch =>
@@ -291,7 +291,7 @@ class RegularSync(
         log.debug("fail to resolve branch, branch too long, it may indicate malicious peer")
         resumeWithDifferentPeer(peer)
       } else {
-        val request = GetBlockHeaders(Right(headersQueue.head.parentHash), branchResolutionBatchSize, skip = 0, reverse = true)
+        val request = GetSignedBlockHeaders(Right(headersQueue.head.header.parentHash), branchResolutionBatchSize, skip = 0, reverse = true)
         requestBlockHeaders(peer, request)
         resolvingBranches = true
       }
@@ -301,12 +301,12 @@ class RegularSync(
       resumeWithDifferentPeer(peer)
   }
 
-  private def requestBlockHeaders(peer: Peer, msg: GetBlockHeaders): Unit = {
+  private def requestBlockHeaders(peer: Peer, msg: GetSignedBlockHeaders): Unit = {
     waitingForActor = Some(context.actorOf(
-      PeerRequestHandler.props[GetBlockHeaders, BlockHeaders](
+      PeerRequestHandler.props[GetSignedBlockHeaders, SignedBlockHeaders](
         peer, peerResponseTimeout, etcPeerManager, peerEventBus,
         requestMsg = msg,
-        responseMsgCode = BlockHeaders.code)))
+        responseMsgCode = SignedBlockHeaders.code)))
   }
 
   private def requestBlockBodies(peer: Peer, msg: GetBlockBodies): Unit = {
@@ -346,8 +346,8 @@ class RegularSync(
       val (importedBlocks, errorOpt) = importBlocks(blocks.toList)
 
       if (importedBlocks.nonEmpty) {
-        log.debug(s"got new blocks up till block: ${importedBlocks.last.header.number} " +
-          s"with hash ${Hex.toHexString(importedBlocks.last.header.hash.toArray[Byte])}")
+        log.debug(s"got new blocks up till block: ${importedBlocks.last.signedHeader.header.number} " +
+          s"with hash ${Hex.toHexString(importedBlocks.last.signedHeader.hash.toArray[Byte])}")
       }
       errorOpt match {
         case Some(error) =>
@@ -390,11 +390,11 @@ class RegularSync(
   }
 
   private def updateTxAndOmmerPools(blocksAdded: Seq[Block], blocksRemoved: Seq[Block]): Unit = {
-    blocksRemoved.headOption.foreach(block => ommersPool ! AddOmmers(block.header))
+    blocksRemoved.headOption.foreach(block => ommersPool ! AddOmmers(block.signedHeader))
     blocksRemoved.foreach(block => pendingTransactionsManager ! AddTransactions(block.body.transactionList.toList))
 
     blocksAdded.foreach { block =>
-      ommersPool ! RemoveOmmers(block.header :: block.body.uncleNodesList.toList)
+      ommersPool ! RemoveOmmers(block.signedHeader :: block.body.uncleNodesList.toList)
       pendingTransactionsManager ! RemoveTransactions(block.body.transactionList)
     }
   }

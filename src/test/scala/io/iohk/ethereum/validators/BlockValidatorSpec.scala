@@ -7,6 +7,7 @@ import io.iohk.ethereum.network.p2p.messages.PV62._
 import io.iohk.ethereum.validators.BlockValidator.{BlockLogBloomError, BlockOmmersHashError, BlockReceiptsHashError, BlockTransactionsHashError}
 import org.scalatest.{FlatSpec, Matchers}
 import org.spongycastle.util.encoders.Hex
+import io.iohk.ethereum.Fixtures.FakeSignature
 
 class BlockValidatorSpec extends FlatSpec with Matchers {
 
@@ -68,7 +69,7 @@ class BlockValidatorSpec extends FlatSpec with Matchers {
     }
   }
 
-  val validBlockHeader = BlockHeader(
+  val validBlockHeader = SignedBlockHeader(BlockHeader(
     parentHash = ByteString(Hex.decode("8345d132564b3660aa5f27c9415310634b50dbc92579c65a0825d9a255227a71")),
     ommersHash = ByteString(Hex.decode("1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347")),
     beneficiary = ByteString(Hex.decode("df7d7e053933b5cc24372f878c90e62dadad5d42")),
@@ -85,7 +86,7 @@ class BlockValidatorSpec extends FlatSpec with Matchers {
     mixHash = ByteString(Hex.decode("be90ac33b3f6d0316e60eef505ff5ec7333c9f3c85c1a36fc2523cd6b75ddb8a")),
     nonce = ByteString(Hex.decode("2b0fb0c002946392")),
     slotNumber = 3125369
-  )
+  ), FakeSignature)
 
   val validBlockBody = BlockBody(
     transactionList = Seq[SignedTransaction](
@@ -143,7 +144,7 @@ class BlockValidatorSpec extends FlatSpec with Matchers {
         chainId = 0x3d.toByte
       ).get
     ),
-    uncleNodesList = Seq[BlockHeader]()
+    uncleNodesList = Seq[SignedBlockHeader]()
   )
 
 
@@ -174,25 +175,24 @@ class BlockValidatorSpec extends FlatSpec with Matchers {
     )
   )
 
-  val wrongTransactionsRootHeader = validBlockHeader.copy(
+  val wrongTransactionsRootHeader = validBlockHeader.copy(validBlockHeader.header.copy(
     transactionsRoot = ByteString(Hex.decode("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b420"))
-  )
+  ))
 
-  val wrongOmmersHashHeader = validBlockHeader.copy(
+  val wrongOmmersHashHeader = validBlockHeader.copy(validBlockHeader.header.copy(
     ommersHash = ByteString(Hex.decode("1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d4934a"))
-  )
+  ))
 
-  val wrongReceiptsHeader = validBlockHeader.copy(
+  val wrongReceiptsHeader = validBlockHeader.copy(validBlockHeader.header.copy(
     receiptsRoot = ByteString(Hex.decode("8b472d8d4d39bae6a5570c2a42276ed2d6a56ac51a1a356d5b17c5564d01fd5a"))
-  )
+  ))
 
-  val wrongLogBloomBlockHeader = validBlockHeader.copy(
+  val wrongLogBloomBlockHeader = validBlockHeader.copy(validBlockHeader.header.copy(
     logsBloom = ByteString(Hex.decode("1" * 512))
-  )
+  ))
 
   val blockWithOutReceipts = Block(
-    validBlockHeader.copy(receiptsRoot = Account.EmptyStorageRootHash, logsBloom = BloomFilter.EmptyBloomFilter),
+    validBlockHeader.copy(validBlockHeader.header.copy(receiptsRoot = Account.EmptyStorageRootHash, logsBloom = BloomFilter.EmptyBloomFilter)),
     validBlockBody
   )
-
 }

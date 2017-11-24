@@ -72,21 +72,21 @@ class FastSync(
   }
 
   def waitingForTargetBlock: Receive = handleCommonMessages orElse {
-    case FastSyncTargetBlockSelector.Result(targetBlockHeader) =>
-      if (targetBlockHeader.number < 1) {
+    case FastSyncTargetBlockSelector.Result(targetSignedHeader) =>
+      if (targetSignedHeader.header.number < 1) {
         log.info("Unable to start block synchronization in fast mode: target block is less than 1")
         appStateStorage.fastSyncDone()
         context become idle
         syncController ! Done
       } else {
-        val initialSyncState = SyncState(targetBlockHeader, pendingMptNodes = Seq(StateMptNodeHash(targetBlockHeader.stateRoot)))
+        val initialSyncState = SyncState(targetSignedHeader.header, pendingMptNodes = Seq(StateMptNodeHash(targetSignedHeader.header.stateRoot)))
         startWithState(initialSyncState)
       }
   }
 
   private class SyncingHandler(initialSyncState: SyncState) {
 
-    private val BlockHeadersHandlerName = "block-headers-request-handler"
+    private val SignedBlockHeadersHandlerName = "signed-block-headers-request-handler"
 
     private var syncState = initialSyncState
 
@@ -114,10 +114,10 @@ class FastSync(
       case PrintStatus => printStatus()
       case PersistSyncState => persistSyncState()
 
-      case ResponseReceived(peer, BlockHeaders(blockHeaders), timeTaken) =>
-        log.info("Received {} block headers in {} ms", blockHeaders.size, timeTaken)
+      case ResponseReceived(peer, SignedBlockHeaders(signedHeaders), timeTaken) =>
+        log.info("Received {} block headers in {} ms", signedHeaders.size, timeTaken)
         removeRequestHandler(sender())
-        handleBlockHeaders(peer, blockHeaders)
+        handleSignedBlockHeaders(peer, signedHeaders)
 
       case ResponseReceived(peer, BlockBodies(blockBodies), timeTaken) =>
         log.info("Received {} block bodies in {} ms", blockBodies.size, timeTaken)
@@ -153,8 +153,8 @@ class FastSync(
       assignedHandlers -= handler
     }
 
-    private def handleBlockHeaders(peer: Peer, headers: Seq[BlockHeader]) = {
-      if (checkHeadersChain(headers)) insertHeaders(headers)
+    private def handleSignedBlockHeaders(peer: Peer, signedHeaders: Seq[SignedBlockHeader]) = {
+      if (checkHeadersChain(signedHeaders)) insertSignedHeaders(signedHeaders)
       else blacklist(peer.id, blacklistDuration, "error in block headers response")
 
       processSyncing()
@@ -384,23 +384,23 @@ class FastSync(
       }
     }
 
-    private def insertHeaders(headers: Seq[BlockHeader]): Unit = {
-      val blockHeadersObtained = headers.takeWhile { header =>
-        val parentTd: Option[BigInt] = blockchain.getTotalDifficultyByHash(header.parentHash)
+    private def insertSignedHeaders(signedHeaders: Seq[SignedBlockHeader]): Unit = {
+      val signedBlockHeadersObtained = signedHeaders.takeWhile { signedHeader =>
+        val parentTd: Option[BigInt] = blockchain.getTotalDifficultyByHash(signedHeader.header.parentHash)
         parentTd foreach { parentTotalDifficulty =>
-          blockchain.save(header)
-          blockchain.save(header.hash, parentTotalDifficulty + header.difficulty)
+          blockchain.save(signedHeader)
+          blockchain.save(signedHeader.hash, parentTotalDifficulty + signedHeader.header.difficulty)
         }
         parentTd.isDefined
       }
 
-      blockHeadersObtained.lastOption.foreach { lastHeader =>
-        if (lastHeader.number > syncState.bestBlockHeaderNumber) {
-          syncState = syncState.copy(bestBlockHeaderNumber = lastHeader.number)
+      signedBlockHeadersObtained.lastOption.foreach { lastSignedHeader =>
+        if (lastSignedHeader.header.number > syncState.bestBlockHeaderNumber) {
+          syncState = syncState.copy(bestBlockHeaderNumber = lastSignedHeader.header.number)
         }
       }
 
-      val blockHashes = blockHeadersObtained.map(_.hash)
+      val blockHashes = signedBlockHeadersObtained.map(_.hash)
       syncState = syncState
         .enqueueBlockBodies(blockHashes)
         .enqueueReceipts(blockHashes)
@@ -471,7 +471,7 @@ class FastSync(
         requestReceipts(peer)
       } else if (syncState.blockBodiesQueue.nonEmpty) {
         requestBlockBodies(peer)
-      } else if (context.child(BlockHeadersHandlerName).isEmpty &&
+      } else if (context.child(SignedBlockHeadersHandlerName).isEmpty &&
         initialSyncState.targetBlock.number > syncState.bestBlockHeaderNumber) {
         requestBlockHeaders(peer)
       }
@@ -516,10 +516,10 @@ class FastSync(
         initialSyncState.targetBlock.number - syncState.bestBlockHeaderNumber
 
       val handler = context.actorOf(
-        PeerRequestHandler.props[GetBlockHeaders, BlockHeaders](
+        PeerRequestHandler.props[GetSignedBlockHeaders, SignedBlockHeaders](
           peer, peerResponseTimeout, etcPeerManager, peerEventBus,
-          requestMsg = GetBlockHeaders(Left(syncState.bestBlockHeaderNumber + 1), limit, skip = 0, reverse = false),
-          responseMsgCode = BlockHeaders.code), BlockHeadersHandlerName)
+          requestMsg = GetSignedBlockHeaders(Left(syncState.bestBlockHeaderNumber + 1), limit, skip = 0, reverse = false),
+          responseMsgCode = SignedBlockHeaders.code), SignedBlockHeadersHandlerName)
 
       context watch handler
       assignedHandlers += (handler -> peer)
@@ -562,16 +562,16 @@ class FastSync(
   private def updateBestBlockIfNeeded(receivedHashes: Seq[ByteString]): Unit = {
     val fullBlocks = receivedHashes.flatMap { hash =>
       for {
-        header <- blockchain.getBlockHeaderByHash(hash)
+        header <- blockchain.getSignedBlockHeaderByHash(hash)
         _ <- blockchain.getBlockBodyByHash(hash)
         _ <- blockchain.getReceiptsByHash(hash)
       } yield header
     }
 
     if (fullBlocks.nonEmpty) {
-      val bestReceivedBlock = fullBlocks.maxBy(_.number)
-      if (appStateStorage.getBestBlockNumber() < bestReceivedBlock.number) {
-        appStateStorage.putBestBlockNumber(bestReceivedBlock.number)
+      val bestReceivedBlock = fullBlocks.maxBy(_.header.number)
+      if (appStateStorage.getBestBlockNumber() < bestReceivedBlock.header.number) {
+        appStateStorage.putBestBlockNumber(bestReceivedBlock.header.number)
       }
     }
 

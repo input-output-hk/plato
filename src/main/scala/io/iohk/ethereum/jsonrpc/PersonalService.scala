@@ -8,7 +8,7 @@ import akka.util.{ByteString, Timeout}
 import io.iohk.ethereum.crypto
 import io.iohk.ethereum.crypto.ECDSASignature
 import io.iohk.ethereum.db.storage.AppStateStorage
-import io.iohk.ethereum.domain.{Account, Address, Blockchain}
+import io.iohk.ethereum.domain._
 import io.iohk.ethereum.jsonrpc.PersonalService._
 import io.iohk.ethereum.keystore.{KeyStore, Wallet}
 import io.iohk.ethereum.jsonrpc.JsonRpcErrors._
@@ -126,6 +126,18 @@ class PersonalService(
         SignResponse(ECDSASignature.sign(getMessageToSign(message), wallet.keyPair))
       }
   }
+
+  /**
+    * FIXME: This is a bad design because breaks the semantic of the object. This method
+    * should be in another abstraction that manage the "mining" accounts(MinerService). For doing these,
+    * we should refactor PersonalService, in order to separate unlockedWallet and move it
+    * to a different place (keyStorage?). Then PersonalService and MinerService
+    * should use the unlockedWallets from that source.
+    */
+  def signBlockHeader(blockHeader: BlockHeader, address: Address): Option[SignedBlockHeader] =
+    unlockedWallets.get(address) map { wallet =>
+      SignedBlockHeader.sign(blockHeader, wallet.keyPair)
+    }
 
   def ecRecover(req: EcRecoverRequest): ServiceResponse[EcRecoverResponse] = Future {
     import req._

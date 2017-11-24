@@ -164,7 +164,7 @@ class LedgerSpec extends FlatSpec with PropertyChecks with Matchers with MockFac
     val BlockResult(resultingWorldState, resultingGasUsed, resultingReceipts) = txsExecResult.right.get
     resultingGasUsed shouldBe 0
     resultingReceipts shouldBe Nil
-    InMemoryWorldStateProxy.persistState(resultingWorldState).stateRootHash shouldBe validBlockHeader.stateRoot
+    InMemoryWorldStateProxy.persistState(resultingWorldState).stateRootHash shouldBe validBlockHeader.header.stateRoot
   }
 
   it should "correctly run executeBlockTransactions for a block with one tx (that produces no errors)" in new BlockchainSetup {
@@ -183,7 +183,7 @@ class LedgerSpec extends FlatSpec with PropertyChecks with Matchers with MockFac
       val tx = validTx.copy(gasLimit = gasLimit)
       val stx = SignedTransaction.sign(tx, originKeyPair, Some(blockchainConfig.chainId))
 
-      val blockHeader: BlockHeader = validBlockHeader.copy(gasLimit = gasLimit)
+      val blockHeader: SignedBlockHeader = validBlockHeader.copy(header = validBlockHeader.header.copy(gasLimit = gasLimit))
       val blockBodyWithTxs: BlockBody = validBlockBodyWithNoTxs.copy(transactionList = Seq(stx))
       val block = Block(blockHeader, blockBodyWithTxs)
 
@@ -215,7 +215,7 @@ class LedgerSpec extends FlatSpec with PropertyChecks with Matchers with MockFac
           originAddress -> UpdateBalance(-UInt256(stx.tx.value)),       //Discount tx.value from originAddress
           receiverAddress -> UpdateBalance(UInt256(stx.tx.value))       //Increase tx.value to recevierAddress
         ) ++ addressesToDelete.map(address => address -> DeleteAccount) //Delete all accounts to be deleted
-        val expectedStateRoot = applyChanges(validBlockParentHeader.stateRoot, blockchainStorages, changes)
+        val expectedStateRoot = applyChanges(validBlockParentHeader.header.stateRoot, blockchainStorages, changes)
         expectedStateRoot shouldBe InMemoryWorldStateProxy.persistState(resultingWorldState).stateRootHash
 
         //Check valid gasUsed
@@ -257,10 +257,10 @@ class LedgerSpec extends FlatSpec with PropertyChecks with Matchers with MockFac
     val minerPaymentForTxs = UInt256(validStxSignedByOrigin.tx.gasLimit * validStxSignedByOrigin.tx.gasPrice)
     val changes = Seq(
       originAddress -> IncreaseNonce,
-      originAddress -> UpdateBalance(-minerPaymentForTxs),  //Origin payment for tx execution and nonce increase
-      minerAddress -> UpdateBalance(minerPaymentForTxs)     //Miner reward for tx execution
+      originAddress -> UpdateBalance(-minerPaymentForTxs), //Origin payment for tx execution and nonce increase
+      minerAddress -> UpdateBalance(minerPaymentForTxs) //Miner reward for tx execution
     )
-    val expectedStateRoot = applyChanges(validBlockParentHeader.stateRoot, blockchainStorages, changes)
+    val expectedStateRoot = applyChanges(validBlockParentHeader.header.stateRoot, blockchainStorages, changes)
     expectedStateRoot shouldBe InMemoryWorldStateProxy.persistState(resultingWorldState).stateRootHash
 
     //Check valid gasUsed
@@ -276,7 +276,8 @@ class LedgerSpec extends FlatSpec with PropertyChecks with Matchers with MockFac
 
   }
 
-  it should "correctly run executeBlock for a valid block without txs" in new BlockchainSetup {
+  // FIXME: This test doesn't have sense anymore, remove this test when ommers dissapear.
+  /*it should "correctly run executeBlock for a valid block without txs" in new BlockchainSetup {
 
     val table = Table[Int, BigInt](
       ("ommersSize", "ommersBlockDifference"),
@@ -299,23 +300,24 @@ class LedgerSpec extends FlatSpec with PropertyChecks with Matchers with MockFac
 
       val ommersAddresses = (0 until ommersSize).map(i => Address(i.toByte +: Hex.decode("10")))
 
-      val blockReward = ledger.blockRewardCalculator.calcBlockMinerReward(validBlockHeader.number, ommersSize)
+      val blockReward = ledger.blockRewardCalculator.calcBlockMinerReward(validBlockHeader.header.number, ommersSize)
 
 
       val changes = Seq(
         minerAddress -> UpdateBalance(UInt256(blockReward))
       ) ++ ommersAddresses.map { ommerAddress =>
-        val ommerReward = ledger.blockRewardCalculator.calcOmmerMinerReward(validBlockHeader.number, validBlockHeader.number - ommersBlockDifference)
+        val ommerReward = ledger.blockRewardCalculator.calcOmmerMinerReward(
+          validBlockHeader.header.number, validBlockHeader.header.number - ommersBlockDifference)
         ommerAddress -> UpdateBalance(UInt256(ommerReward))
       }
 
-      val expectedStateRoot = applyChanges(validBlockParentHeader.stateRoot, blockchainStorages, changes)
+      val expectedStateRoot = applyChanges(validBlockParentHeader.header.stateRoot, blockchainStorages, changes)
 
-      val blockHeader: BlockHeader = validBlockHeader.copy(stateRoot = expectedStateRoot)
+      val blockHeader: SignedBlockHeader = validBlockHeader.copy(header = validBlockHeader.header.copy(stateRoot = expectedStateRoot))
       val blockBodyWithOmmers = validBlockBodyWithNoTxs.copy(
         uncleNodesList = ommersAddresses.map(ommerAddress =>
-          defaultBlockHeader.copy(number = blockHeader.number - ommersBlockDifference, beneficiary = ommerAddress.bytes)
-        )
+          SignedBlockHeader(defaultBlockHeader.copy(number = blockHeader.header.number - ommersBlockDifference, beneficiary = ommerAddress.bytes),
+            Fixtures.FakeSignature))
       )
       val block = Block(blockHeader, blockBodyWithOmmers)
 
@@ -323,7 +325,7 @@ class LedgerSpec extends FlatSpec with PropertyChecks with Matchers with MockFac
       val blockExecResult = ledger.executeBlock(block)
       assert(blockExecResult.isRight)
     }
-  }
+  }*/
 
   it should "fail to run executeBlock if a block is invalid before executing it" in new BlockchainSetup {
     object validatorsOnlyFailsBlockValidator extends Mocks.MockValidatorsAlwaysSucceed {
@@ -334,11 +336,7 @@ class LedgerSpec extends FlatSpec with PropertyChecks with Matchers with MockFac
       override val blockHeaderValidator = Mocks.MockValidatorsAlwaysFail.blockHeaderValidator
     }
 
-    object validatorsOnlyFailsOmmersValidator extends Mocks.MockValidatorsAlwaysSucceed {
-      override val ommersValidator = Mocks.MockValidatorsAlwaysFail.ommersValidator
-    }
-
-    val seqFailingValidators = Seq(validatorsOnlyFailsBlockHeaderValidator, validatorsOnlyFailsBlockValidator, validatorsOnlyFailsOmmersValidator)
+    val seqFailingValidators = Seq(validatorsOnlyFailsBlockHeaderValidator, validatorsOnlyFailsBlockValidator)
 
     def createLedger(validators: Validators) = new LedgerImpl(new MockVM(c => createResult(
       context = c,
@@ -352,13 +350,13 @@ class LedgerSpec extends FlatSpec with PropertyChecks with Matchers with MockFac
 
 
     val blockReward = new BlockRewardCalculator(blockchainConfig.monetaryPolicyConfig)
-      .calcBlockMinerReward(validBlockHeader.number, 0)
+      .calcBlockMinerReward(validBlockHeader.header.number, 0)
 
     val changes = Seq(
       minerAddress -> UpdateBalance(UInt256(blockReward)) //Paying miner for block processing
     )
-    val expectedStateRoot = applyChanges(validBlockParentHeader.stateRoot, blockchainStorages, changes)
-    val blockHeader: BlockHeader = validBlockHeader.copy(stateRoot = expectedStateRoot)
+    val expectedStateRoot = applyChanges(validBlockParentHeader.header.stateRoot, blockchainStorages, changes)
+    val blockHeader: SignedBlockHeader = validBlockHeader.copy(header = validBlockHeader.header.copy(stateRoot = expectedStateRoot))
     val block = Block(blockHeader, validBlockBodyWithNoTxs)
 
 
@@ -377,8 +375,8 @@ class LedgerSpec extends FlatSpec with PropertyChecks with Matchers with MockFac
 
     object validatorsFailsBlockValidatorWithReceipts extends Mocks.MockValidatorsAlwaysSucceed {
       override val blockValidator = new BlockValidator {
-        override def validateHeaderAndBody(blockHeader: BlockHeader, blockBody: BlockBody) = Right(BlockValid)
-        override def validateBlockAndReceipts(blockHeader: BlockHeader, receipts: Seq[Receipt]) = Left(BlockTransactionsHashError)
+        override def validateHeaderAndBody(blockHeader: SignedBlockHeader, blockBody: BlockBody) = Right(BlockValid)
+        override def validateBlockAndReceipts(blockHeader: SignedBlockHeader, receipts: Seq[Receipt]) = Left(BlockTransactionsHashError)
       }
     }
 
@@ -393,10 +391,10 @@ class LedgerSpec extends FlatSpec with PropertyChecks with Matchers with MockFac
     )), blockchain, blockchainConfig, syncConfig, validators)
 
     val blockReward = new BlockRewardCalculator(blockchainConfig.monetaryPolicyConfig)
-      .calcBlockMinerReward(validBlockHeader.number, 0)
+      .calcBlockMinerReward(validBlockHeader.header.number, 0)
 
     val changes = Seq(minerAddress -> UpdateBalance(UInt256(blockReward))) //Paying miner for block processing
-    val correctStateRoot: ByteString = applyChanges(validBlockParentHeader.stateRoot, blockchainStorages, changes)
+    val correctStateRoot: ByteString = applyChanges(validBlockParentHeader.header.stateRoot, blockchainStorages, changes)
 
     val correctGasUsed: BigInt = 0
     val incorrectStateRoot: ByteString = ((correctStateRoot.head + 1) & 0xFF).toByte +: correctStateRoot.tail
@@ -410,8 +408,9 @@ class LedgerSpec extends FlatSpec with PropertyChecks with Matchers with MockFac
     forAll(table){ (stateRootHash, cumulativeGasUsedBlock, validators) =>
       val ledger = createLedger(validators)
 
-      val blockHeader: BlockHeader = validBlockHeader.copy(gasUsed = cumulativeGasUsedBlock, stateRoot = stateRootHash)
-      val block = Block(blockHeader, validBlockBodyWithNoTxs)
+      val blockHeader: BlockHeader = validBlockHeader.header.copy(gasUsed = cumulativeGasUsedBlock, stateRoot = stateRootHash)
+      val signedBlockHeader = validBlockHeader.copy(header = blockHeader)
+      val block = Block(signedBlockHeader, validBlockBodyWithNoTxs)
 
       val blockExecResult = ledger.executeBlock(block)
 
@@ -473,7 +472,7 @@ class LedgerSpec extends FlatSpec with PropertyChecks with Matchers with MockFac
         origin1Address -> UpdateBalance(-UInt256(stx1.tx.value)), //Discount tx.value from originAddress
         receiver1Address -> UpdateBalance(UInt256(stx1.tx.value)) //Increase tx.value to recevierAddress
       )
-      val expectedStateRootTx1 = applyChanges(validBlockParentHeader.stateRoot, blockchainStorages, changesTx1)
+      val expectedStateRootTx1 = applyChanges(validBlockParentHeader.header.stateRoot, blockchainStorages, changesTx1)
 
       val Receipt(rootHashReceipt1, gasUsedReceipt1, logsBloomFilterReceipt1, logsReceipt1) = receipt1
       rootHashReceipt1 shouldBe expectedStateRootTx1
@@ -501,14 +500,15 @@ class LedgerSpec extends FlatSpec with PropertyChecks with Matchers with MockFac
       //Check world
       InMemoryWorldStateProxy.persistState(resultingWorldState).stateRootHash shouldBe expectedStateRootTx2
 
-      val blockReward = ledger.blockRewardCalculator.calcBlockMinerReward(block.header.number, 0)
+      val blockReward = ledger.blockRewardCalculator.calcBlockMinerReward(block.signedHeader.header.number, 0)
       val changes = Seq(
         minerAddress -> UpdateBalance(UInt256(blockReward))
       )
       val blockExpectedStateRoot = applyChanges(expectedStateRootTx2, blockchainStorages, changes)
 
+      val blockHeaderWithCorrectStateAndGasUsed = block.signedHeader.header.copy(stateRoot = blockExpectedStateRoot, gasUsed = gasUsedReceipt2)
       val blockWithCorrectStateAndGasUsed = block.copy(
-        header = block.header.copy(stateRoot = blockExpectedStateRoot, gasUsed = gasUsedReceipt2)
+        signedHeader = block.signedHeader.copy(header = blockHeaderWithCorrectStateAndGasUsed)
       )
       assert(ledger.executeBlock(blockWithCorrectStateAndGasUsed).isRight)
     }
@@ -796,9 +796,9 @@ class LedgerSpec extends FlatSpec with PropertyChecks with Matchers with MockFac
   }
 
   it should "correctly determine current block status" in new BlockchainSetup {
-    val testHash = validBlockParentHeader.copy(number = validBlockParentHeader.number + 5).hash
+    val testHash = validBlockParentHeader.copy(validBlockParentHeader.header.copy(number = validBlockParentHeader.header.number + 5)).hash
 
-    val validBlockHeaderNoParent = validBlockHeader.copy(parentHash = testHash)
+    val validBlockHeaderNoParent = validBlockHeader.copy(validBlockHeader.header.copy(parentHash = testHash))
 
 
     val ledger = new LedgerImpl(
@@ -893,10 +893,10 @@ class LedgerSpec extends FlatSpec with PropertyChecks with Matchers with MockFac
   trait BlockchainSetup extends TestSetup {
     val blockchainStorages = storagesInstance.storages
 
-    val validBlockParentHeader: BlockHeader = defaultBlockHeader.copy(
+    val validBlockParentHeader: SignedBlockHeader = SignedBlockHeader(defaultBlockHeader.copy(
       stateRoot = initialWorld.stateRootHash
-    )
-    val validBlockHeader: BlockHeader = defaultBlockHeader.copy(
+    ), Fixtures.FakeSignature)
+    val validBlockHeader: SignedBlockHeader = SignedBlockHeader(defaultBlockHeader.copy(
       stateRoot = initialWorld.stateRootHash,
       parentHash = validBlockParentHeader.hash,
       beneficiary = minerAddress.bytes,
@@ -904,12 +904,12 @@ class LedgerSpec extends FlatSpec with PropertyChecks with Matchers with MockFac
       logsBloom = BloomFilter.EmptyBloomFilter,
       gasLimit = defaultGasLimit,
       gasUsed = 0
-    )
+    ), Fixtures.FakeSignature)
     val validBlockBodyWithNoTxs: BlockBody = BlockBody(Nil, Nil)
 
     blockchain.save(validBlockParentHeader)
     blockchain.save(validBlockParentHeader.hash, validBlockBodyWithNoTxs)
-    storagesInstance.storages.appStateStorage.putBestBlockNumber(validBlockParentHeader.number)
+    storagesInstance.storages.appStateStorage.putBestBlockNumber(validBlockParentHeader.header.number)
     storagesInstance.storages.totalDifficultyStorage.put(validBlockParentHeader.hash, 0)
 
     val validTx: Transaction = defaultTx.copy(
@@ -930,8 +930,8 @@ class LedgerSpec extends FlatSpec with PropertyChecks with Matchers with MockFac
       override val blockExtraData: Option[ByteString] = Some(ByteString("refund extra data"))
       override val range: Int = 10
       override val drainList: Seq[Address] = Seq(Address(1), Address(2), Address(3))
-      override val forkBlockHash: ByteString = proDaoBlock.header.hash
-      override val forkBlockNumber: BigInt = proDaoBlock.header.number
+      override val forkBlockHash: ByteString = proDaoBlock.signedHeader.hash
+      override val forkBlockNumber: BigInt = proDaoBlock.signedHeader.header.number
       override val refundContract: Option[Address] = Some(Address(4))
     }
 
@@ -954,9 +954,9 @@ class LedgerSpec extends FlatSpec with PropertyChecks with Matchers with MockFac
       val gasTieBreaker: Boolean = false
     }
 
-    (testBlockchain.getBlockHeaderByHash _).expects(proDaoBlock.header.parentHash).returning(Some(Fixtures.Blocks.DaoParentBlock.header))
+    (testBlockchain.getSignedBlockHeaderByHash _).expects(proDaoBlock.signedHeader.header.parentHash).returning(Some(Fixtures.Blocks.DaoParentBlock.signedHeader))
     (testBlockchain.getWorldStateProxy _)
-      .expects(proDaoBlock.header.number, proDaoBlockchainConfig.accountStartNonce, Some(Fixtures.Blocks.DaoParentBlock.header.stateRoot), false)
+      .expects(proDaoBlock.signedHeader.header.number, proDaoBlockchainConfig.accountStartNonce, Some(Fixtures.Blocks.DaoParentBlock.signedHeader.header.stateRoot), false)
       .returning(worldState)
   }
 

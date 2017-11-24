@@ -105,7 +105,7 @@ object CommonMessages {
 
     implicit class NewBlockEnc(val underlyingMsg: NewBlock) extends MessageSerializableImplicit[NewBlock](underlyingMsg) with RLPSerializable {
       import io.iohk.ethereum.network.p2p.messages.CommonMessages.SignedTransactions._
-      import io.iohk.ethereum.network.p2p.messages.PV62.BlockHeaderImplicits._
+      import io.iohk.ethereum.network.p2p.messages.PV62.SignedBlockHeaderImplicits._
 
       override def code: Int = NewBlock.code
 
@@ -113,7 +113,7 @@ object CommonMessages {
         import msg._
         RLPList(
           RLPList(
-            block.header.toRLPEncodable,
+            block.signedHeader.toRLPEncodable,
             RLPList(block.body.transactionList.map(_.toRLPEncodable): _*),
             RLPList(block.body.uncleNodesList.map(_.toRLPEncodable): _*)
           ),
@@ -124,17 +124,17 @@ object CommonMessages {
 
     implicit class NewBlockDec(val bytes: Array[Byte]) extends AnyVal {
       import io.iohk.ethereum.network.p2p.messages.PV62._
-      import BlockHeaderImplicits._
+      import SignedBlockHeaderImplicits._
       import SignedTransactions._
 
       def toNewBlock: NewBlock = rawDecode(bytes) match {
-        case RLPList(RLPList(blockHeader, (transactionList: RLPList), (uncleNodesList: RLPList)), totalDifficulty) =>
+        case RLPList(RLPList(signedBlockHeader, (transactionList: RLPList), (uncleNodesList: RLPList)), totalDifficulty) =>
           NewBlock(
             Block(
-              blockHeader.toBlockHeader,
+              signedBlockHeader.toSignedBlockHeader,
               BlockBody(
                 transactionList.items.map(_.toSignedTransaction),
-                uncleNodesList.items.map(_.toBlockHeader))
+                uncleNodesList.items.map(_.toSignedBlockHeader))
             ),
             totalDifficulty
           )

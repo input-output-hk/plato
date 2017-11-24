@@ -24,6 +24,7 @@ import io.iohk.ethereum.utils.Config.SyncConfig
 import org.scalamock.scalatest.MockFactory
 import org.scalatest.{BeforeAndAfterAll, Matchers, WordSpecLike}
 import org.spongycastle.crypto.AsymmetricCipherKeyPair
+import io.iohk.ethereum.Fixtures.FakeSignature
 
 import scala.concurrent.duration.{FiniteDuration, _}
 
@@ -45,12 +46,12 @@ class RegularSyncSpec extends TestKit(ActorSystem("RegularSync_system")) with Wo
         (ledger.importBlock _).expects(block).returning(BlockImportedToTop(List(block), List(defaultTd)))
         (broadcaster.broadcastBlock _).expects(NewBlock(block, defaultTd), handshakedPeers)
 
-        sendBlockHeaders(Seq.empty)
+        sendSignedBlockHeaders(Seq.empty)
         regularSync.underlyingActor.topOfTheChain shouldEqual true
 
         sendNewBlockMsg(block)
 
-        ommersPool.expectMsg(RemoveOmmers(block.header :: block.body.uncleNodesList.toList))
+        ommersPool.expectMsg(RemoveOmmers(block.signedHeader :: block.body.uncleNodesList.toList))
         txPool.expectMsg(RemoveTransactions(block.body.transactionList.toList))
       }
 
@@ -62,15 +63,15 @@ class RegularSyncSpec extends TestKit(ActorSystem("RegularSync_system")) with Wo
           .returning(ChainReorganised(List(oldBlock), List(newBlock), List(defaultTd)))
         (broadcaster.broadcastBlock _).expects(NewBlock(newBlock, defaultTd), handshakedPeers)
 
-        sendBlockHeaders(Seq.empty)
+        sendSignedBlockHeaders(Seq.empty)
         regularSync.underlyingActor.topOfTheChain shouldEqual true
 
         sendNewBlockMsg(newBlock)
 
-        ommersPool.expectMsg(AddOmmers(List(oldBlock.header)))
+        ommersPool.expectMsg(AddOmmers(List(oldBlock.signedHeader)))
         txPool.expectMsg(AddTransactions(oldBlock.body.transactionList.toList))
 
-        ommersPool.expectMsg(RemoveOmmers(newBlock.header :: newBlock.body.uncleNodesList.toList))
+        ommersPool.expectMsg(RemoveOmmers(newBlock.signedHeader :: newBlock.body.uncleNodesList.toList))
         txPool.expectMsg(RemoveTransactions(newBlock.body.transactionList.toList))
       }
 
@@ -80,7 +81,7 @@ class RegularSyncSpec extends TestKit(ActorSystem("RegularSync_system")) with Wo
         (ledger.importBlock _).expects(block).returning(DuplicateBlock)
         (broadcaster.broadcastBlock _).expects(*, *).never()
 
-        sendBlockHeaders(Seq.empty)
+        sendSignedBlockHeaders(Seq.empty)
         regularSync.underlyingActor.topOfTheChain shouldEqual true
 
         sendNewBlockMsg(block)
@@ -95,12 +96,12 @@ class RegularSyncSpec extends TestKit(ActorSystem("RegularSync_system")) with Wo
         (ledger.importBlock _).expects(block).returning(BlockEnqueued)
         (broadcaster.broadcastBlock _).expects(*, *).never()
 
-        sendBlockHeaders(Seq.empty)
+        sendSignedBlockHeaders(Seq.empty)
         regularSync.underlyingActor.topOfTheChain shouldEqual true
 
         sendNewBlockMsg(block)
 
-        ommersPool.expectMsg(AddOmmers(List(block.header)))
+        ommersPool.expectMsg(AddOmmers(List(block.signedHeader)))
         txPool.expectNoMsg()
       }
 
@@ -110,7 +111,7 @@ class RegularSyncSpec extends TestKit(ActorSystem("RegularSync_system")) with Wo
         (ledger.importBlock _).expects(block).returning(BlockImportFailed("error"))
         (broadcaster.broadcastBlock _).expects(*, *).never()
 
-        sendBlockHeaders(Seq.empty)
+        sendSignedBlockHeaders(Seq.empty)
         regularSync.underlyingActor.topOfTheChain shouldEqual true
 
         sendNewBlockMsg(block)
@@ -128,12 +129,12 @@ class RegularSyncSpec extends TestKit(ActorSystem("RegularSync_system")) with Wo
         val blockHash = randomBlockHash()
 
         (ledger.checkBlockStatus _).expects(blockHash.hash).returning(UnknownBlock)
-        sendBlockHeaders(Seq.empty)
+        sendSignedBlockHeaders(Seq.empty)
         regularSync.underlyingActor.topOfTheChain shouldEqual true
         sendNewBlockHashMsg(Seq(blockHash))
 
         etcPeerManager.expectMsg(EtcPeerManagerActor.GetHandshakedPeers)
-        etcPeerManager.expectMsg(EtcPeerManagerActor.SendMessage(GetBlockHeaders(Right(blockHash.hash), 1, 0, false), peer1.id))
+        etcPeerManager.expectMsg(EtcPeerManagerActor.SendMessage(GetSignedBlockHeaders(Right(blockHash.hash), 1, 0, false), peer1.id))
       }
 
       "filter out hashes that are already in chain or queue" in new TestSetup {
@@ -148,20 +149,20 @@ class RegularSyncSpec extends TestKit(ActorSystem("RegularSync_system")) with Wo
             (ledger.checkBlockStatus _).expects(blockHash.hash).returning(UnknownBlock)
         )
 
-        sendBlockHeaders(Seq.empty)
+        sendSignedBlockHeaders(Seq.empty)
         regularSync.underlyingActor.topOfTheChain shouldEqual true
         sendNewBlockHashMsg(blockHashes)
 
         val hashesRequested = blockHashes.takeRight(2)
 
         etcPeerManager.expectMsg(EtcPeerManagerActor.GetHandshakedPeers)
-        etcPeerManager.expectMsg(EtcPeerManagerActor.SendMessage(GetBlockHeaders(Right(hashesRequested.head.hash), hashesRequested.length, 0, false), peer1.id))
+        etcPeerManager.expectMsg(EtcPeerManagerActor.SendMessage(GetSignedBlockHeaders(Right(hashesRequested.head.hash), hashesRequested.length, 0, false), peer1.id))
       }
 
       "blacklist peer sending ancient blockhashes" in new TestSetup {
         val blockHash = randomBlockHash()
         storagesInstance.storages.appStateStorage.putBestBlockNumber(blockHash.number + syncConfig.maxNewBlockHashAge + 1)
-        sendBlockHeaders(Seq.empty)
+        sendSignedBlockHeaders(Seq.empty)
         regularSync.underlyingActor.topOfTheChain shouldEqual true
         sendNewBlockHashMsg(Seq(blockHash))
 
@@ -174,12 +175,12 @@ class RegularSyncSpec extends TestKit(ActorSystem("RegularSync_system")) with Wo
         blockHashes.take(syncConfig.maxNewHashes).foreach(blockHash =>
           (ledger.checkBlockStatus _).expects(blockHash.hash).returning(UnknownBlock)
         )
-        sendBlockHeaders(Seq.empty)
+        sendSignedBlockHeaders(Seq.empty)
         regularSync.underlyingActor.topOfTheChain shouldEqual true
         sendNewBlockHashMsg(blockHashes)
 
         etcPeerManager.expectMsg(EtcPeerManagerActor.GetHandshakedPeers)
-        etcPeerManager.expectMsg(EtcPeerManagerActor.SendMessage(GetBlockHeaders(Right(blockHashes.head.hash), syncConfig.maxNewHashes, 0, false), peer1.id))
+        etcPeerManager.expectMsg(EtcPeerManagerActor.SendMessage(GetSignedBlockHeaders(Right(blockHashes.head.hash), syncConfig.maxNewHashes, 0, false), peer1.id))
       }
 
     }
@@ -207,10 +208,10 @@ class RegularSyncSpec extends TestKit(ActorSystem("RegularSync_system")) with Wo
 
         sendMinedBlockMsg(newBlock)
 
-        ommersPool.expectMsg(AddOmmers(List(oldBlock.header)))
+        ommersPool.expectMsg(AddOmmers(List(oldBlock.signedHeader)))
         txPool.expectMsg(AddTransactions(oldBlock.body.transactionList.toList))
 
-        ommersPool.expectMsg(RemoveOmmers(newBlock.header :: newBlock.body.uncleNodesList.toList))
+        ommersPool.expectMsg(RemoveOmmers(newBlock.signedHeader :: newBlock.body.uncleNodesList.toList))
         txPool.expectMsg(RemoveTransactions(newBlock.body.transactionList.toList))
       }
 
@@ -234,7 +235,7 @@ class RegularSyncSpec extends TestKit(ActorSystem("RegularSync_system")) with Wo
 
         sendMinedBlockMsg(block)
 
-        ommersPool.expectMsg(AddOmmers(List(block.header)))
+        ommersPool.expectMsg(AddOmmers(List(block.signedHeader)))
         txPool.expectNoMsg()
       }
 
@@ -251,39 +252,39 @@ class RegularSyncSpec extends TestKit(ActorSystem("RegularSync_system")) with Wo
       }
     }
 
-    "receiving BlockHeaders msg" should {
+    "receiving SignedBlockHeaders msg" should {
 
       "handle a new better branch" in new TestSetup {
         val oldBlocks = (1 to 2).map(_ => getBlock())
         val newBlocks = (1 to 2).map(_ => getBlock())
 
-        (ledger.resolveBranch _).expects(newBlocks.map(_.header)).returning(NewBetterBranch(oldBlocks))
+        (ledger.resolveBranch _).expects(newBlocks.map(_.signedHeader)).returning(NewBetterBranch(oldBlocks))
 
-        sendBlockHeaders(newBlocks)
+        sendSignedBlockHeaders(newBlocks)
 
         etcPeerManager.expectMsg(EtcPeerManagerActor.GetHandshakedPeers)
-        etcPeerManager.expectMsg(EtcPeerManagerActor.SendMessage(GetBlockBodies(newBlocks.map(_.header.hash)), peer1.id))
+        etcPeerManager.expectMsg(EtcPeerManagerActor.SendMessage(GetBlockBodies(newBlocks.map(_.signedHeader.hash)), peer1.id))
         txPool.expectMsg(AddTransactions(oldBlocks.flatMap(_.body.transactionList).toList))
-        ommersPool.expectMsg(AddOmmers(oldBlocks.head.header))
+        ommersPool.expectMsg(AddOmmers(oldBlocks.head.signedHeader))
       }
 
       "handle no branch change" in new TestSetup {
         val newBlocks = (1 to 2).map(_ => getBlock())
 
-        (ledger.resolveBranch _).expects(newBlocks.map(_.header)).returning(NoChainSwitch)
+        (ledger.resolveBranch _).expects(newBlocks.map(_.signedHeader)).returning(NoChainSwitch)
 
-        sendBlockHeaders(newBlocks)
+        sendSignedBlockHeaders(newBlocks)
 
-        ommersPool.expectMsg(AddOmmers(newBlocks.head.header))
+        ommersPool.expectMsg(AddOmmers(newBlocks.head.signedHeader))
       }
 
       // TODO: the following 3 tests are very poor, but fixing that requires re-designing much of the sync actors, with testing in mind
       "handle unknown branch about to be resolved" in new TestSetup {
         val newBlocks = (1 to 2).map(_ => getBlock())
 
-        (ledger.resolveBranch _).expects(newBlocks.map(_.header)).returning(UnknownBranch)
+        (ledger.resolveBranch _).expects(newBlocks.map(_.signedHeader)).returning(UnknownBranch)
 
-        sendBlockHeaders(newBlocks)
+        sendSignedBlockHeaders(newBlocks)
 
         Thread.sleep(1000)
 
@@ -293,9 +294,9 @@ class RegularSyncSpec extends TestKit(ActorSystem("RegularSync_system")) with Wo
       "handle unknown branch about that can't be resolved" in new TestSetup {
         val newBlocks = (1 to 6).map(_ => getBlock())
 
-        (ledger.resolveBranch _).expects(newBlocks.map(_.header)).returning(UnknownBranch)
+        (ledger.resolveBranch _).expects(newBlocks.map(_.signedHeader)).returning(UnknownBranch)
 
-        sendBlockHeaders(newBlocks)
+        sendSignedBlockHeaders(newBlocks)
 
         Thread.sleep(1000)
 
@@ -306,9 +307,9 @@ class RegularSyncSpec extends TestKit(ActorSystem("RegularSync_system")) with Wo
       "handle invalid branch" in new TestSetup {
         val newBlocks = (1 to 2).map(_ => getBlock())
 
-        (ledger.resolveBranch _).expects(newBlocks.map(_.header)).returning(InvalidBranch)
+        (ledger.resolveBranch _).expects(newBlocks.map(_.signedHeader)).returning(InvalidBranch)
 
-        sendBlockHeaders(newBlocks)
+        sendSignedBlockHeaders(newBlocks)
 
         Thread.sleep(1000)
 
@@ -376,7 +377,8 @@ class RegularSyncSpec extends TestKit(ActorSystem("RegularSync_system")) with Wo
     regularSync ! HandshakedPeers(handshakedPeers)
     regularSync ! RegularSync.StartIdle
 
-    val defaultHeader = BlockHeader(
+    val defaultHeader = SignedBlockHeader(
+      BlockHeader(
       parentHash = bEmpty,
       ommersHash = bEmpty,
       beneficiary = bEmpty,
@@ -392,7 +394,8 @@ class RegularSyncSpec extends TestKit(ActorSystem("RegularSync_system")) with Wo
       extraData = bEmpty,
       mixHash = bEmpty,
       nonce = bEmpty,
-      slotNumber = 1
+      slotNumber = 1),
+      FakeSignature
     )
 
     val defaultTx = Transaction(
@@ -411,12 +414,14 @@ class RegularSyncSpec extends TestKit(ActorSystem("RegularSync_system")) with Wo
       ObjectGenerators.byteStringOfLengthNGen(32).sample.get
 
     def getBlock(): Block = {
-      val header = defaultHeader.copy(extraData = randomHash())
-      val ommer = defaultHeader.copy(extraData = randomHash())
+      val newHeader = defaultHeader.header.copy(extraData = randomHash())
+      val signedHeader = defaultHeader.copy(header = newHeader)
+      val newOmmerHeader = defaultHeader.header.copy(extraData = randomHash())
+      val signedOmmerHeader = defaultHeader.copy(header = newOmmerHeader)
       val tx = defaultTx.copy(payload = randomHash())
       val stx = SignedTransaction.sign(tx, keyPair, None)
 
-      Block(header, BlockBody(List(stx), List(ommer)))
+      Block(signedHeader, BlockBody(List(stx), List(signedOmmerHeader)))
     }
 
 
@@ -435,8 +440,8 @@ class RegularSyncSpec extends TestKit(ActorSystem("RegularSync_system")) with Wo
       regularSync ! MinedBlock(block)
     }
 
-    def sendBlockHeaders(blocks: Seq[Block]): Unit = {
-      regularSync ! ResponseReceived(peer1, BlockHeaders(blocks.map(_.header)), 0)
+    def sendSignedBlockHeaders(blocks: Seq[Block]): Unit = {
+      regularSync ! ResponseReceived(peer1, SignedBlockHeaders(blocks.map(_.signedHeader)), 0)
     }
   }
 }

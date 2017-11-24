@@ -13,7 +13,7 @@ import io.iohk.ethereum.network.EtcPeerManagerActor.PeerInfo
 import io.iohk.ethereum.network.handshaker.Handshaker.HandshakeComplete.{HandshakeFailure, HandshakeSuccess}
 import io.iohk.ethereum.network.p2p.messages.CommonMessages.Status
 import io.iohk.ethereum.network.p2p.messages.CommonMessages.Status.StatusEnc
-import io.iohk.ethereum.network.p2p.messages.PV62.GetBlockHeaders
+import io.iohk.ethereum.network.p2p.messages.PV62.GetSignedBlockHeaders
 import io.iohk.ethereum.network.p2p.messages.Versions
 import io.iohk.ethereum.network.p2p.messages.WireProtocol.Hello.HelloEnc
 import io.iohk.ethereum.network.p2p.messages.WireProtocol.{Capability, Disconnect, Hello}
@@ -67,11 +67,11 @@ class EtcHandshakerSpec extends FlatSpec with Matchers  {
   trait TestSetup extends SecureRandomBuilder with EphemBlockchainTestSetup {
 
     val genesisBlock = Block(
-      Fixtures.Blocks.Genesis.header,
+      Fixtures.Blocks.Genesis.signedHeader,
       Fixtures.Blocks.Genesis.body
     )
 
-    val forkBlockHeader = Fixtures.Blocks.DaoForkBlock.header
+    val forkBlockHeader = Fixtures.Blocks.DaoForkBlock.signedHeader
 
     blockchain.save(genesisBlock)
 
@@ -133,12 +133,12 @@ class EtcHandshakerSpec extends FlatSpec with Matchers  {
     val localStatus = Status(
       protocolVersion = Versions.PV63,
       networkId = Config.Network.peer.networkId,
-      totalDifficulty = genesisBlock.header.difficulty,
-      bestHash = genesisBlock.header.hash,
-      genesisHash = genesisBlock.header.hash
+      totalDifficulty = genesisBlock.signedHeader.header.difficulty,
+      bestHash = genesisBlock.signedHeader.hash,
+      genesisHash = genesisBlock.signedHeader.hash
     )
 
-    val localGetBlockHeadersRequest = GetBlockHeaders(Left(forkBlockHeader.number), maxHeaders = 1, skip = 0, reverse = false)
+    val localGetSignedBlockHeadersRequest = GetSignedBlockHeaders(Left(forkBlockHeader.header.number), maxHeaders = 1, skip = 0, reverse = false)
   }
 
   trait RemotePeerSetup extends TestSetup {
@@ -159,7 +159,7 @@ class EtcHandshakerSpec extends FlatSpec with Matchers  {
         networkId = 1,
         totalDifficulty = 0,
         bestHash = ByteString.empty,
-        genesisHash = genesisBlock.header.hash
+        genesisHash = genesisBlock.signedHeader.hash
       )
   }
 }
