@@ -34,6 +34,7 @@ import io.iohk.ethereum.validators._
 import io.iohk.ethereum.vm.VM
 import io.iohk.ethereum.ommers.OmmersPool
 import io.iohk.ethereum.pos.ElectionManagerImpl
+import io.iohk.ethereum.timing.{BeaconActor, Clock, NTPClock}
 import io.iohk.ethereum.utils.Config.SyncConfig
 
 import scala.concurrent.duration._
@@ -366,11 +367,12 @@ trait OmmersPoolBuilder {
 trait ValidatorsBuilder {
   self: BlockchainConfigBuilder
     with ElectionManagerBuilder
-    with SlotTimeConverterBuilder =>
+    with SlotTimeConverterBuilder
+    with ClockBuilder =>
 
   lazy val validators = new Validators {
     val blockValidator: BlockValidator = BlockValidator
-    val blockHeaderValidator: BlockHeaderValidator = new BlockHeaderValidatorImpl(blockchainConfig, electionManager, slotTimeConverter)
+    val blockHeaderValidator: BlockHeaderValidator = new BlockHeaderValidatorImpl(blockchainConfig, electionManager, slotTimeConverter, clock)
     val ommersValidator: OmmersValidator = new OmmersValidatorImpl(blockchainConfig, blockHeaderValidator)
     val signedTransactionValidator: SignedTransactionValidator = new SignedTransactionValidatorImpl(blockchainConfig)
   }
@@ -475,6 +477,36 @@ trait SlotTimeConverterBuilder {
   lazy val slotTimeConverter: SlotTimeConverter = SlotTimeConverter(ouroborosConfig, slot1StartingTime)
 }
 
+trait ClockBuilder {
+  self: NTPServiceBuilder =>
+
+  lazy val clock: Clock = NTPClock(ntpService)
+}
+
+trait BeaconActorBuilder {
+  self: ActorSystemBuilder
+    with BlockchainBuilder
+    with ProofOfStakeMinerBuilder
+    with OuroborosConfigBuilder
+    with ClockBuilder =>
+
+  private lazy val systemStartTime: FiniteDuration = genesisTimestamp.seconds
+
+  lazy val beacon: ActorRef = actorSystem.actorOf(BeaconActor.props(
+    miner,
+    ouroborosConfig.slotDuration,
+    systemStartTime,
+    clock), "beacon")
+}
+
+trait NTPServiceBuilder {
+
+  private lazy val ntpServiceConfig = NTPServiceConfig(Config.config)
+
+  lazy val ntpService = new NTPService(ntpServiceConfig)
+
+}
+
 trait Node extends NodeKeyBuilder
   with ActorSystemBuilder
   with StorageBuilder
@@ -519,3 +551,6 @@ trait Node extends NodeKeyBuilder
   with ElectionManagerBuilder
   with ProofOfStakeMinerBuilder
   with SlotTimeConverterBuilder
+  with BeaconActorBuilder
+  with NTPServiceBuilder
+  with ClockBuilder

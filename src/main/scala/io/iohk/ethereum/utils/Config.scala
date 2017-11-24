@@ -416,3 +416,18 @@ object OuroborosConfig {
     }
   }
 }
+
+trait NTPServiceConfig {
+  val ntpServer: String
+  val updateOffsetInterval: FiniteDuration
+}
+
+object NTPServiceConfig {
+  def apply(etcClientConfig: com.typesafe.config.Config): NTPServiceConfig = {
+    val ntpConfig = etcClientConfig.getConfig("ntp")
+    new NTPServiceConfig {
+      override val ntpServer: String = ntpConfig.getString("ntp-server")
+      override val updateOffsetInterval: FiniteDuration = ntpConfig.getDuration("update-offset-interval").toMillis.millis
+    }
+  }
+}
