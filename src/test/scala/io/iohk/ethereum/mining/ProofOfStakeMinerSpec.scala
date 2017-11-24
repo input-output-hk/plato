@@ -15,12 +15,16 @@ import io.iohk.ethereum.validators.BlockHeaderValid
 import org.scalamock.scalatest.MockFactory
 import org.scalatest.{FlatSpec, Matchers, Tag}
 import org.spongycastle.util.encoders.Hex
-
+import io.iohk.ethereum.Fixtures.FakeSignature
 import scala.concurrent.duration._
 
 object ProofOfStakeMinerSpec {
   val ProofOfStakeMinerSpecTag = Tag("ProofOfStakeMinerSpec")
 }
+
+/*
+  FIXME: Update tests with a real signature for the blocks
+ */
 
 // scalastyle:off magic.number
 class ProofOfStakeMinerSpec extends FlatSpec with Matchers {
@@ -29,10 +33,10 @@ class ProofOfStakeMinerSpec extends FlatSpec with Matchers {
 
   "Miner" should "mine valid block" taggedAs(ProofOfStakeMinerSpecTag) in new TestSetup {
     val parent = origin
-    val bfm = blockForMining(parent.header)
+    val bfm = blockForMining(parent.signedHeader)
 
     (blockchain.getBestBlock _).expects().returns(parent).anyNumberOfTimes()
-    (blockchain.getBlockHeaderByHash _).expects(parent.header.hash).returns(Some(parent.header))
+    (blockchain.getSignedBlockHeaderByHash _).expects(parent.signedHeader.hash).returns(Some(parent.signedHeader))
     (blockGenerator.generateBlockForMining _).expects(
       parent, Nil, Nil, stakeholder, currentSlotNumber
     ).returning(Right(PendingBlock(bfm, Nil))).anyNumberOfTimes()
@@ -57,12 +61,12 @@ class ProofOfStakeMinerSpec extends FlatSpec with Matchers {
     miner ! ProofOfStakeMiner.StartMining(currentSlotNumber)
     val block = waitForMinedBlock()
     block.body.transactionList shouldBe Seq(txToMine)
-    blockHeaderValidator.validate(block.header, blockchain) shouldBe Right(BlockHeaderValid)
+    blockHeaderValidator.validate(block.signedHeader, blockchain) shouldBe Right(BlockHeaderValid)
   }
 
   "Miner" should "not mine a block if there isn't a stakeholder leader selected" taggedAs(ProofOfStakeMinerSpecTag) in new TestSetup {
     val parent = origin
-    val bfm = blockForMining(parent.header)
+    val bfm = blockForMining(parent.signedHeader)
 
     (blockchain.getBestBlock _).expects().returns(parent).anyNumberOfTimes()
     (blockGenerator.generateBlockForMining _).expects(
@@ -98,7 +102,7 @@ class ProofOfStakeMinerSpec extends FlatSpec with Matchers {
     val currentSlotNumber = BigInt(2)
 
     val origin = Block(
-      BlockHeader(
+      SignedBlockHeader(BlockHeader(
         parentHash = ByteString(Hex.decode("0000000000000000000000000000000000000000000000000000000000000000")),
         ommersHash = ByteString(Hex.decode("1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347")),
         beneficiary = ByteString(Hex.decode("0000000000000000000000000000000000000000")),
@@ -115,7 +119,7 @@ class ProofOfStakeMinerSpec extends FlatSpec with Matchers {
         mixHash = ByteString.empty,
         nonce = ByteString.empty,
         slotNumber = previousSlotNumber
-      ),
+      ), FakeSignature),
       BlockBody(Seq(), Seq())
     )
 
@@ -148,25 +152,26 @@ class ProofOfStakeMinerSpec extends FlatSpec with Matchers {
     val stakeholder = Address("0x01")
     val anotherStakeholder = Address("0x10")
 
-    def blockForMining(parent: BlockHeader): Block = {
-      Block(BlockHeader(
+    def blockForMining(parent: SignedBlockHeader): Block = {
+      Block(SignedBlockHeader(BlockHeader(
         parentHash = parent.hash,
         ommersHash = ByteString(Hex.decode("1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347")),
         beneficiary = stakeholder.bytes,
-        stateRoot = parent.stateRoot,
-        transactionsRoot = parent.transactionsRoot,
-        receiptsRoot = parent.receiptsRoot,
-        logsBloom = parent.logsBloom,
-        difficulty = difficultyCalc.calculateDifficulty(1, blockForMiningTimestamp, parent),
+        stateRoot = parent.header.stateRoot,
+        transactionsRoot = parent.header.transactionsRoot,
+        receiptsRoot = parent.header.receiptsRoot,
+        logsBloom = parent.header.logsBloom,
+        difficulty = difficultyCalc.calculateDifficulty(1, blockForMiningTimestamp, parent.header),
         number = currentSlotNumber,
-        gasLimit = calculateGasLimit(parent.gasLimit),
+        gasLimit = calculateGasLimit(parent.header.gasLimit),
         gasUsed = BigInt(0),
         unixTimestamp = blockForMiningTimestamp,
         extraData = miningConfig.headerExtraData,
         mixHash = ByteString.empty,
         nonce = ByteString.empty,
         slotNumber = currentSlotNumber
-      ), BlockBody(Seq(txToMine), Nil))
+      ), FakeSignature),
+      BlockBody(Seq(txToMine), Nil))
     }
 
     implicit val system = ActorSystem("ProofOfStakeMinerSpec_System")

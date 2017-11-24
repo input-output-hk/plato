@@ -10,7 +10,7 @@ trait StoragesComponent {
 
   trait Storages extends BlockchainStorages {
 
-    val blockHeadersStorage: BlockHeadersStorage
+    val blockHeadersStorage: SignedBlockHeadersStorage
 
     val blockBodiesStorage: BlockBodiesStorage
 

@@ -46,7 +46,7 @@ class ProofOfStakeMiner(
               case Success(PendingBlock(block, _)) =>
                 syncController ! RegularSync.MinedBlock(block)
               case Failure(ex) =>
-                log.error(ex, "Unable to get block for mining")
+                log.error(s"Unable to get block for mining, error: ${ex.getMessage()}")
             }
           case _ =>
             log.info("No leader selected")
@@ -57,9 +57,9 @@ class ProofOfStakeMiner(
   }
 
   private def getBlockForMining(parentBlock: Block, slotNumber: BigInt, blockLeader: Address): Future[PendingBlock] = {
-    getOmmersFromPool(parentBlock.header.number + 1).zip(getTransactionsFromPool).flatMap { case (ommers, pendingTxs) =>
+    getOmmersFromPool(parentBlock.signedHeader.header.number + 1).zip(getTransactionsFromPool).flatMap { case (ommers, pendingTxs) =>
       blockGenerator.generateBlockForMining(parentBlock, pendingTxs.pendingTransactions.map(_.stx), ommers.headers, blockLeader, slotNumber) match {
-        case Right(pb) => Future.successful(pb)
+        case Right(pendingBlock) => Future.successful(pendingBlock)
         case Left(err) => Future.failed(new RuntimeException(s"Error while generating block for mining: $err"))
       }
     }

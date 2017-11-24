@@ -17,7 +17,7 @@ object Storages {
 
     class DefaultStorages(override val pruningMode: PruningMode) extends Storages {
 
-      override val blockHeadersStorage: BlockHeadersStorage = new BlockHeadersStorage(dataSources.blockHeadersDataSource)
+      override val blockHeadersStorage: SignedBlockHeadersStorage = new SignedBlockHeadersStorage(dataSources.blockHeadersDataSource)
 
       override val blockBodiesStorage: BlockBodiesStorage = new BlockBodiesStorage(dataSources.blockBodiesDataSource)
 
@@ -55,7 +55,7 @@ object Storages {
 
     class DefaultBlockchainStorages(override val pruningMode: PruningMode) extends Storages {
 
-      override val blockHeadersStorage: BlockHeadersStorage = new BlockHeadersStorage(dataSources.blockHeadersDataSource)
+      override val blockHeadersStorage: SignedBlockHeadersStorage = new SignedBlockHeadersStorage(dataSources.blockHeadersDataSource)
 
       override val blockBodiesStorage: BlockBodiesStorage = new BlockBodiesStorage(dataSources.blockBodiesDataSource)
 

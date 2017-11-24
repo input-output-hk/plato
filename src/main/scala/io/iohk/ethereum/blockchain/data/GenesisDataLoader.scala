@@ -4,6 +4,7 @@ import java.io.FileNotFoundException
 
 import akka.util.ByteString
 import io.iohk.ethereum.blockchain.data.GenesisDataLoader.JsonSerializers.ByteStringJsonSerializer
+import io.iohk.ethereum.crypto.ECDSASignature
 import io.iohk.ethereum.rlp.RLPList
 import io.iohk.ethereum.utils.BlockchainConfig
 import io.iohk.ethereum.utils.Logger
@@ -102,12 +103,12 @@ class GenesisDataLoader(
       ).getRootHash
     }
 
-    val header: BlockHeader = prepareHeader(genesisData, stateMptRootHash)
+    val signedHeader: SignedBlockHeader = prepareSignedHeader(genesisData, stateMptRootHash)
 
-    log.debug(s"prepared genesis header: $header")
+    log.debug(s"prepared genesis header: $signedHeader")
 
-    blockchain.getBlockHeaderByNumber(0) match {
-      case Some(existingGenesisHeader) if existingGenesisHeader.hash == header.hash =>
+    blockchain.getSignedBlockHeaderByNumber(0) match {
+      case Some(existingSignedGenesisHeader) if existingSignedGenesisHeader.hash == signedHeader.hash =>
         log.debug("Genesis data already in the database")
         Success(())
       case Some(_) =>
@@ -116,13 +117,13 @@ class GenesisDataLoader(
       case None =>
         ephemDataSource.getAll(nodeStorage.namespace)
           .foreach { case (key, value) => blockchain.saveNode(ByteString(key.toArray[Byte]), value.toArray[Byte], 0) }
-        blockchain.save(Block(header, BlockBody(Nil, Nil)), Nil, header.difficulty, saveAsBestBlock = true)
+        blockchain.save(Block(signedHeader, BlockBody(Nil, Nil)), Nil, signedHeader.header.difficulty, saveAsBestBlock = true)
         Success(())
     }
   }
 
-  private def prepareHeader(genesisData: GenesisData, stateMptRootHash: Array[Byte]) =
-    BlockHeader(
+  private def prepareSignedHeader(genesisData: GenesisData, stateMptRootHash: Array[Byte]) = {
+    val genesisHeader = BlockHeader(
       parentHash = zeros(hashLength),
       ommersHash = ByteString(crypto.kec256(rlp.encode(RLPList()))),
       beneficiary = genesisData.coinbase,
@@ -139,6 +140,13 @@ class GenesisDataLoader(
       mixHash = genesisData.mixHash.getOrElse(zeros(hashLength)),
       nonce = genesisData.nonce,
       slotNumber = 0)
+    // Fake genesis signature, containg only zeroes
+    val genesisSignature = ECDSASignature(
+      s = zeros(ECDSASignature.SLength),
+      r = zeros(ECDSASignature.SLength),
+      v = 0.toByte)
+    SignedBlockHeader(genesisHeader, genesisSignature)
+  }
 
   private def zeros(length: Int) =
     ByteString(Hex.decode(List.fill(length)("0").mkString))

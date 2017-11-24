@@ -1,6 +1,7 @@
 package io.iohk.ethereum.ets.blockchain
 
 import akka.util.ByteString
+import io.iohk.ethereum.Fixtures
 import io.iohk.ethereum.domain._
 import io.iohk.ethereum.ets.common.AccountState
 
@@ -56,9 +57,12 @@ case class BlockHeaderDef(
   slotNumber: BigInt
 ) {
 
-  def toBlockHeader: BlockHeader =
-    BlockHeader(parentHash, uncleHash, coinbase, stateRoot, transactionsTrie, receiptTrie, bloom, difficulty, number,
-      gasLimit, gasUsed, timestamp, extraData, mixHash, nonce, slotNumber
+  def toSignedHeader: SignedBlockHeader =
+    SignedBlockHeader(
+      BlockHeader(parentHash, uncleHash, coinbase, stateRoot, transactionsTrie, receiptTrie, bloom, difficulty, number,
+        gasLimit, gasUsed, timestamp, extraData, mixHash, nonce, slotNumber
+      ),
+      Fixtures.FakeSignature
     )
 }
 

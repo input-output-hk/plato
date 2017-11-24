@@ -26,12 +26,12 @@ trait Blockchain {
     * @param hash of the block that's being searched
     * @return [[BlockHeader]] if found
     */
-  def getBlockHeaderByHash(hash: ByteString): Option[BlockHeader]
+  def getSignedBlockHeaderByHash(hash: ByteString): Option[SignedBlockHeader]
 
-  def getBlockHeaderByNumber(number: BigInt): Option[BlockHeader] = {
+  def getSignedBlockHeaderByNumber(number: BigInt): Option[SignedBlockHeader] = {
     for {
       hash <- getHashByBlockNumber(number)
-      header <- getBlockHeaderByHash(hash)
+      header <- getSignedBlockHeaderByHash(hash)
     } yield header
   }
 
@@ -51,7 +51,7 @@ trait Blockchain {
     */
   def getBlockByHash(hash: ByteString): Option[Block] =
     for {
-      header <- getBlockHeaderByHash(hash)
+      header <- getSignedBlockHeaderByHash(hash)
       body <- getBlockBodyByHash(hash)
     } yield Block(header, body)
 
@@ -127,12 +127,12 @@ trait Blockchain {
     */
   def save(block: Block, receipts: Seq[Receipt], totalDifficulty: BigInt, saveAsBestBlock: Boolean): Unit = {
     save(block)
-    save(block.header.hash, receipts)
-    save(block.header.hash, totalDifficulty)
+    save(block.signedHeader.hash, receipts)
+    save(block.signedHeader.hash, totalDifficulty)
     if (saveAsBestBlock) {
-      saveBestBlockNumber(block.header.number)
+      saveBestBlockNumber(block.signedHeader.header.number)
     }
-    pruneState(block.header.number)
+    pruneState(block.signedHeader.header.number)
   }
 
   /**
@@ -141,8 +141,8 @@ trait Blockchain {
     * @param block Block to be saved
     */
   def save(block: Block): Unit = {
-    save(block.header)
-    save(block.header.hash, block.body)
+    save(block.signedHeader)
+    save(block.signedHeader.hash, block.body)
   }
 
   def removeBlock(hash: ByteString, saveParentAsBestBlock: Boolean): Unit
@@ -150,9 +150,9 @@ trait Blockchain {
   /**
     * Persists a block header in the underlying Blockchain Database
     *
-    * @param blockHeader Block to be saved
+    * @param signedBlockHeader Block to be saved
     */
-  def save(blockHeader: BlockHeader): Unit
+  def save(signedBlockHeader: SignedBlockHeader): Unit
 
   def save(blockHash: ByteString, blockBody: BlockBody): Unit
 
@@ -174,7 +174,7 @@ trait Blockchain {
     */
   protected def getHashByBlockNumber(number: BigInt): Option[ByteString]
 
-  def genesisHeader: BlockHeader = getBlockHeaderByNumber(0).get
+  def genesisSignedHeader: SignedBlockHeader = getSignedBlockHeaderByNumber(0).get
 
   def genesisBlock: Block = getBlockByNumber(0).get
 
@@ -195,19 +195,19 @@ trait Blockchain {
 // scalastyle:on
 
 class BlockchainImpl(
-    protected val blockHeadersStorage: BlockHeadersStorage,
-    protected val blockBodiesStorage: BlockBodiesStorage,
-    protected val blockNumberMappingStorage: BlockNumberMappingStorage,
-    protected val receiptStorage: ReceiptStorage,
-    protected val evmCodeStorage: EvmCodeStorage,
-    protected val pruningMode: PruningMode,
-    protected val nodeStorage: NodeStorage,
-    protected val totalDifficultyStorage: TotalDifficultyStorage,
-    protected val transactionMappingStorage: TransactionMappingStorage,
-    protected val appStateStorage: AppStateStorage
+                      protected val blockHeadersStorage: SignedBlockHeadersStorage,
+                      protected val blockBodiesStorage: BlockBodiesStorage,
+                      protected val blockNumberMappingStorage: BlockNumberMappingStorage,
+                      protected val receiptStorage: ReceiptStorage,
+                      protected val evmCodeStorage: EvmCodeStorage,
+                      protected val pruningMode: PruningMode,
+                      protected val nodeStorage: NodeStorage,
+                      protected val totalDifficultyStorage: TotalDifficultyStorage,
+                      protected val transactionMappingStorage: TransactionMappingStorage,
+                      protected val appStateStorage: AppStateStorage
 ) extends Blockchain {
 
-  override def getBlockHeaderByHash(hash: ByteString): Option[BlockHeader] =
+  override def getSignedBlockHeaderByHash(hash: ByteString): Option[SignedBlockHeader] =
     blockHeadersStorage.get(hash)
 
   override def getBlockBodyByHash(hash: ByteString): Option[BlockBody] =
@@ -226,9 +226,9 @@ class BlockchainImpl(
     getBlockByNumber(getBestBlockNumber()).get
 
   override def getAccount(address: Address, blockNumber: BigInt): Option[Account] =
-    getBlockHeaderByNumber(blockNumber).flatMap { bh =>
+    getSignedBlockHeaderByNumber(blockNumber).flatMap { sbh =>
       val mpt = MerklePatriciaTrie[Address, Account](
-        bh.stateRoot.toArray,
+        sbh.header.stateRoot.toArray,
         nodesKeyValueStorageFor(Some(blockNumber))
       )
       mpt.get(address)
@@ -241,10 +241,10 @@ class BlockchainImpl(
     ).get(UInt256(position)).getOrElse(UInt256(0)).bytes
   }
 
-  override def save(blockHeader: BlockHeader): Unit = {
-    val hash = blockHeader.hash
-    blockHeadersStorage.put(hash, blockHeader)
-    saveBlockNumberMapping(blockHeader.number, hash)
+  override def save(signedBlockHeader: SignedBlockHeader): Unit = {
+    val hash = signedBlockHeader.hash
+    blockHeadersStorage.put(hash, signedBlockHeader)
+    saveBlockNumberMapping(signedBlockHeader.header.number, hash)
   }
 
   override def getMptNodeByHash(hash: ByteString): Option[MptNode] = nodesKeyValueStorageFor(None).get(hash).map(_.toMptNode)
@@ -280,7 +280,7 @@ class BlockchainImpl(
   }
 
   override def removeBlock(blockHash: ByteString, saveParentAsBestBlock: Boolean): Unit = {
-    val maybeBlockHeader = getBlockHeaderByHash(blockHash)
+    val maybeSignedBlockHeader = getSignedBlockHeaderByHash(blockHash)
     val maybeTxList = getBlockBodyByHash(blockHash).map(_.transactionList)
 
     blockHeadersStorage.remove(blockHash)
@@ -288,13 +288,13 @@ class BlockchainImpl(
     totalDifficultyStorage.remove(blockHash)
     receiptStorage.remove(blockHash)
     maybeTxList.foreach(removeTxsLocations)
-    maybeBlockHeader.foreach{ h =>
-      rollbackStateChangesMadeByBlock(h.number)
-      if (getHashByBlockNumber(h.number).contains(blockHash))
-        removeBlockNumberMapping(h.number)
+    maybeSignedBlockHeader.foreach{ sbh =>
+      rollbackStateChangesMadeByBlock(sbh.header.number)
+      if (getHashByBlockNumber(sbh.header.number).contains(blockHash))
+        removeBlockNumberMapping(sbh.header.number)
 
       if (saveParentAsBestBlock) {
-        appStateStorage.putBestBlockNumber(h.number - 1)
+        appStateStorage.putBestBlockNumber(sbh.header.number - 1)
       }
     }
   }
@@ -318,7 +318,7 @@ class BlockchainImpl(
       evmCodeStorage,
       nodesKeyValueStorageFor(Some(blockNumber)),
       accountStartNonce,
-      (number: BigInt) => getBlockHeaderByNumber(number).map(_.hash),
+      (number: BigInt) => getSignedBlockHeaderByNumber(number).map(_.hash),
       stateRootHash,
       noEmptyAccount
     )
@@ -332,7 +332,7 @@ class BlockchainImpl(
       evmCodeStorage,
       ReadOnlyNodeStorage(nodesKeyValueStorageFor(blockNumber)),
       accountStartNonce,
-      (number: BigInt) => getBlockHeaderByNumber(number).map(_.hash),
+      (number: BigInt) => getSignedBlockHeaderByNumber(number).map(_.hash),
       stateRootHash,
       noEmptyAccounts = false
     )
@@ -346,7 +346,7 @@ class BlockchainImpl(
 }
 
 trait BlockchainStorages {
-  val blockHeadersStorage: BlockHeadersStorage
+  val blockHeadersStorage: SignedBlockHeadersStorage
   val blockBodiesStorage: BlockBodiesStorage
   val blockNumberMappingStorage: BlockNumberMappingStorage
   val receiptStorage: ReceiptStorage

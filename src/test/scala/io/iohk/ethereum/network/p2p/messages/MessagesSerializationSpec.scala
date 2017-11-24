@@ -110,17 +110,17 @@ class MessagesSerializationSpec
       }
     }
 
-    "encoding and decoding BlockHeaders" should {
+    "encoding and decoding SignedBlockHeaders" should {
       "return same result" in {
-        val msg = BlockHeaders(Seq(Fixtures.Blocks.Block3125369.header, Fixtures.Blocks.DaoForkBlock.header))
-        verify(msg, (m: BlockHeaders) => m.toBytes, BlockHeaders.code, version)
+        val msg = SignedBlockHeaders(Seq(Fixtures.Blocks.Block3125369.signedHeader, Fixtures.Blocks.DaoForkBlock.signedHeader))
+        verify(msg, (m: SignedBlockHeaders) => m.toBytes, SignedBlockHeaders.code, version)
       }
     }
 
-    "encoding and decoding GetBlockHeaders" should {
+    "encoding and decoding GetSignedBlockHeaders" should {
       "return same result" in {
-        verify(GetBlockHeaders(Left(1), 1, 1, false), (m: GetBlockHeaders) => m.toBytes, GetBlockHeaders.code, version)
-        verify(GetBlockHeaders(Right(ByteString("1" * 32)), 1, 1, true), (m: GetBlockHeaders) => m.toBytes, GetBlockHeaders.code, version)
+        verify(GetSignedBlockHeaders(Left(1), 1, 1, false), (m: GetSignedBlockHeaders) => m.toBytes, GetSignedBlockHeaders.code, version)
+        verify(GetSignedBlockHeaders(Right(ByteString("1" * 32)), 1, 1, true), (m: GetSignedBlockHeaders) => m.toBytes, GetSignedBlockHeaders.code, version)
       }
     }
   }

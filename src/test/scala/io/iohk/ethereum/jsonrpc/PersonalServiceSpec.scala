@@ -312,7 +312,7 @@ class PersonalServiceSpec extends FlatSpec with Matchers with MockFactory with S
 
     (appStateStorage.getBestBlockNumber _).expects().returning(1234)
     (blockchain.getAccount _).expects(address, BigInt(1234)).returning(Some(Account(nonce, 2 * txValue)))
-    val forkBlock = new Block(Fixtures.Blocks.Block3125369.header, Fixtures.Blocks.Block3125369.body)
+    val forkBlock = new Block(Fixtures.Blocks.Block3125369.signedHeader, Fixtures.Blocks.Block3125369.body)
     (appStateStorage.getBestBlockNumber _).expects().returning(blockchainConfig.eip155BlockNumber)
 
     val req = SendTransactionWithPassphraseRequest(tx, passphrase)

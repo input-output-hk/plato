@@ -1,13 +1,13 @@
 package io.iohk.ethereum.blockchain.sync
 
 import akka.actor.{Actor, ActorLogging, ActorRef, Cancellable, Props, Scheduler}
-import io.iohk.ethereum.domain.BlockHeader
+import io.iohk.ethereum.domain.SignedBlockHeader
 import io.iohk.ethereum.network.{EtcPeerManagerActor, Peer}
 import io.iohk.ethereum.network.EtcPeerManagerActor.PeerInfo
 import io.iohk.ethereum.network.PeerEventBusActor.PeerEvent.MessageFromPeer
 import io.iohk.ethereum.network.PeerEventBusActor.{PeerSelector, Subscribe, Unsubscribe}
 import io.iohk.ethereum.network.PeerEventBusActor.SubscriptionClassifier.MessageClassifier
-import io.iohk.ethereum.network.p2p.messages.PV62.{BlockHeaders, GetBlockHeaders}
+import io.iohk.ethereum.network.p2p.messages.PV62.{GetSignedBlockHeaders, SignedBlockHeaders}
 import io.iohk.ethereum.utils.Config.SyncConfig
 
 import scala.concurrent.duration.FiniteDuration
@@ -35,8 +35,8 @@ class FastSyncTargetBlockSelector(
 
       if (peersUsedToChooseTarget.size >= minPeersToChooseTargetBlock) {
         peersUsedToChooseTarget.foreach { case (peer, PeerInfo(status, _, _, _)) =>
-          peerEventBus ! Subscribe(MessageClassifier(Set(BlockHeaders.code), PeerSelector.WithId(peer.id)))
-          etcPeerManager ! EtcPeerManagerActor.SendMessage(GetBlockHeaders(Right(status.bestHash), 1, 0, reverse = false), peer.id)
+          peerEventBus ! Subscribe(MessageClassifier(Set(SignedBlockHeaders.code), PeerSelector.WithId(peer.id)))
+          etcPeerManager ! EtcPeerManagerActor.SendMessage(GetSignedBlockHeaders(Right(status.bestHash), 1, 0, reverse = false), peer.id)
         }
         log.debug("Asking {} peers for block headers", peersUsedToChooseTarget.size)
         val timeout = scheduler.scheduleOnce(peerResponseTimeout, self, BlockHeadersTimeout)
@@ -49,10 +49,10 @@ class FastSyncTargetBlockSelector(
       }
   }
 
-  def waitingForBlockHeaders(waitingFor: Set[Peer], received: Map[Peer, BlockHeader], timeout: Cancellable): Receive =
+  def waitingForBlockHeaders(waitingFor: Set[Peer], received: Map[Peer, SignedBlockHeader], timeout: Cancellable): Receive =
     handleCommonMessages orElse {
-    case MessageFromPeer(BlockHeaders(Seq(blockHeader)), peerId) =>
-      peerEventBus ! Unsubscribe(MessageClassifier(Set(BlockHeaders.code), PeerSelector.WithId(peerId)))
+    case MessageFromPeer(SignedBlockHeaders(Seq(blockHeader)), peerId) =>
+      peerEventBus ! Unsubscribe(MessageClassifier(Set(SignedBlockHeaders.code), PeerSelector.WithId(peerId)))
 
       val newWaitingFor = waitingFor.filterNot(_.id == peerId)
 
@@ -65,8 +65,8 @@ class FastSyncTargetBlockSelector(
         } else context become waitingForBlockHeaders(newWaitingFor, newReceived, timeout)
       }
 
-    case MessageFromPeer(BlockHeaders(blockHeaders), peerId) =>
-      peerEventBus ! Unsubscribe(MessageClassifier(Set(BlockHeaders.code), PeerSelector.WithId(peerId)))
+    case MessageFromPeer(SignedBlockHeaders(blockHeaders), peerId) =>
+      peerEventBus ! Unsubscribe(MessageClassifier(Set(SignedBlockHeaders.code), PeerSelector.WithId(peerId)))
       blacklist(peerId, blacklistDuration,s"did not respond with 1 header but with ${blockHeaders.size}, blacklisting for $blacklistDuration")
       waitingFor.find(_.id == peerId).foreach { peer =>
         context become waitingForBlockHeaders(waitingFor - peer, received, timeout)
@@ -74,19 +74,19 @@ class FastSyncTargetBlockSelector(
 
     case BlockHeadersTimeout =>
       waitingFor.foreach { peer =>
-        peerEventBus ! Unsubscribe(MessageClassifier(Set(BlockHeaders.code), PeerSelector.WithId(peer.id)))
+        peerEventBus ! Unsubscribe(MessageClassifier(Set(SignedBlockHeaders.code), PeerSelector.WithId(peer.id)))
         blacklist(peer.id, blacklistDuration, s"did not respond within required time with block header, blacklisting for $blacklistDuration")
       }
       tryChooseTargetBlock(received)
   }
 
-  def tryChooseTargetBlock(receivedHeaders: Map[Peer, BlockHeader]): Unit = {
+  def tryChooseTargetBlock(receivedHeaders: Map[Peer, SignedBlockHeader]): Unit = {
     log.debug("Trying to choose fast sync target block. Received {} block headers", receivedHeaders.size)
     if (receivedHeaders.size >= minPeersToChooseTargetBlock) {
-      val (mostUpToDatePeer, mostUpToDateBlockHeader) = receivedHeaders.maxBy(_._2.number)
-      val targetBlock = mostUpToDateBlockHeader.number - syncConfig.targetBlockOffset
-      peerEventBus ! Subscribe(MessageClassifier(Set(BlockHeaders.code), PeerSelector.WithId(mostUpToDatePeer.id)))
-      etcPeerManager ! EtcPeerManagerActor.SendMessage(GetBlockHeaders(Left(targetBlock), 1, 0, reverse = false), mostUpToDatePeer.id)
+      val (mostUpToDatePeer, mostUpToDateBlockHeader) = receivedHeaders.maxBy(_._2.header.number)
+      val targetBlock = mostUpToDateBlockHeader.header.number - syncConfig.targetBlockOffset
+      peerEventBus ! Subscribe(MessageClassifier(Set(SignedBlockHeaders.code), PeerSelector.WithId(mostUpToDatePeer.id)))
+      etcPeerManager ! EtcPeerManagerActor.SendMessage(GetSignedBlockHeaders(Left(targetBlock), 1, 0, reverse = false), mostUpToDatePeer.id)
       val timeout = scheduler.scheduleOnce(peerResponseTimeout, self, TargetBlockTimeout)
       context become waitingForTargetBlock(mostUpToDatePeer, targetBlock, timeout)
 
@@ -100,11 +100,11 @@ class FastSyncTargetBlockSelector(
 
   def waitingForTargetBlock(peer: Peer, targetBlockNumber: BigInt, timeout: Cancellable): Receive =
     handleCommonMessages orElse {
-    case MessageFromPeer(blockHeaders: BlockHeaders, _) =>
+    case MessageFromPeer(signedBlockHeaders: SignedBlockHeaders, _) =>
       timeout.cancel()
-      peerEventBus ! Unsubscribe(MessageClassifier(Set(BlockHeaders.code), PeerSelector.WithId(peer.id)))
+      peerEventBus ! Unsubscribe(MessageClassifier(Set(SignedBlockHeaders.code), PeerSelector.WithId(peer.id)))
 
-      val targetBlockHeaderOpt = blockHeaders.headers.find(header => header.number == targetBlockNumber)
+      val targetBlockHeaderOpt: Option[SignedBlockHeader] = signedBlockHeaders.headers.find(blockHeader => blockHeader.header.number == targetBlockNumber)
       targetBlockHeaderOpt match {
         case Some(targetBlockHeader) =>
           sendResponseAndCleanup(targetBlockHeader)
@@ -118,7 +118,7 @@ class FastSyncTargetBlockSelector(
     case TargetBlockTimeout =>
       blacklist(peer.id, blacklistDuration, s"did not respond with target block header (timeout), blacklisting and scheduling retry in $startRetryInterval")
       log.info("Block synchronization (fast mode) not started. Target block header receive timeout. Retrying in {}", startRetryInterval)
-      peerEventBus ! Unsubscribe(MessageClassifier(Set(BlockHeaders.code), PeerSelector.WithId(peer.id)))
+      peerEventBus ! Unsubscribe(MessageClassifier(Set(SignedBlockHeaders.code), PeerSelector.WithId(peer.id)))
       scheduleRetry(startRetryInterval)
       context become idle
   }
@@ -127,7 +127,7 @@ class FastSyncTargetBlockSelector(
     scheduler.scheduleOnce(interval, self, ChooseTargetBlock)
   }
 
-  def sendResponseAndCleanup(targetBlockHeader: BlockHeader): Unit = {
+  def sendResponseAndCleanup(targetBlockHeader: SignedBlockHeader): Unit = {
     fastSync ! Result(targetBlockHeader)
     peerEventBus ! Unsubscribe()
     context stop self
@@ -140,7 +140,7 @@ object FastSyncTargetBlockSelector {
     Props(new FastSyncTargetBlockSelector(etcPeerManager: ActorRef, peerEventBus, syncConfig, scheduler))
 
   case object ChooseTargetBlock
-  case class Result(targetBlockHeader: BlockHeader)
+  case class Result(targetBlockHeader: SignedBlockHeader)
 
   private case object BlockHeadersTimeout
   private case object TargetBlockTimeout

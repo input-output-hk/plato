@@ -13,17 +13,17 @@ import org.scalatest.{FlatSpec, Matchers}
 import org.spongycastle.util.encoders.Hex
 import io.iohk.ethereum.validators.BlockHeaderValidatorImpl._
 import org.scalamock.scalatest.MockFactory
-
+import io.iohk.ethereum.Fixtures.FakeSignature
 import scala.concurrent.duration._
 
 class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyChecks with ObjectGenerators with MockFactory {
 
-  "BlockHeaderValidator" should "validate correctly formed BlockHeaders" in new TestSetup {
+  "BlockHeaderValidator" should "validate correctly formed SignedBlockHeaders" in new TestSetup {
     (electionManagerMock.verifyIsLeader _).expects(*, *).returning(true).anyNumberOfTimes()
     (slotCalculatorMock.getSlotStartingMillis _).expects(*).returning(CurrentTime.toMillis - 1).anyNumberOfTimes()
     (clockMock.now _).expects().returning(CurrentTime).anyNumberOfTimes()
 
-    blockHeaderValidator.validate(validBlockHeader, validBlockParent) match {
+    blockHeaderValidator.validate(validBlockHeader, validBlockParent.header) match {
       case Right(_) => succeed
       case _ => fail
     }
@@ -38,8 +38,8 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
       MaxExtraDataSize + 1,
       MaxExtraDataSize + ExtraDataSizeLimit)
     ) { wrongExtraData =>
-      val invalidBlockHeader = validBlockHeader.copy(extraData = wrongExtraData)
-      assert(blockHeaderValidator.validate(invalidBlockHeader, validBlockParent) == Left(HeaderExtraDataError))
+      val invalidBlockHeader = validBlockHeader.copy(validBlockHeader.header.copy(extraData = wrongExtraData))
+      assert(blockHeaderValidator.validate(invalidBlockHeader, validBlockParent.header) == Left(HeaderExtraDataError))
     }
   }
 
@@ -51,20 +51,20 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
 
     val cases = Table(
       ("Block", "Parent Block", "Supports Dao Fork", "Valid"),
-      (DaoForkBlock.header, DaoParentBlock.header, false, true),
-      (DaoForkBlock.header, DaoParentBlock.header, true, false),
-      (ProDaoForkBlock.header, DaoParentBlock.header, true, true),
-      (ProDaoForkBlock.header, DaoParentBlock.header, false, true), // We don't care for extra data if no pro dao
-      (ProDaoForkBlock.header.copy(extraData = ByteString("Wrond DAO Extra")), DaoParentBlock.header, true, false),
+      (DaoForkBlock.signedHeader, DaoParentBlock.signedHeader, false, true),
+      (DaoForkBlock.signedHeader, DaoParentBlock.signedHeader, true, false),
+      (ProDaoForkBlock.signedHeader, DaoParentBlock.signedHeader, true, true),
+      (ProDaoForkBlock.signedHeader, DaoParentBlock.signedHeader, false, true), // We don't care for extra data if no pro dao
+      (ProDaoForkBlock.signedHeader.copy(ProDaoForkBlock.signedHeader.header.copy(extraData = ByteString("Wrond DAO Extra"))), DaoParentBlock.signedHeader, true, false),
       // We need to check extradata up to 10 blocks after
       (ProDaoBlock1920009Header, ProDaoBlock1920008Header, true, true),
-      (ProDaoBlock1920009Header.copy(extraData = ByteString("Wrond DAO Extra")), ProDaoBlock1920008Header, true, false),
+      (ProDaoBlock1920009Header.copy(ProDaoBlock1920009Header.header.copy(extraData = ByteString("Wrond DAO Extra"))), ProDaoBlock1920008Header, true, false),
       (ProDaoBlock1920010Header, ProDaoBlock1920009Header, true, true)
     )
 
     forAll(cases) { (block, parentBlock, supportsDaoFork, valid ) =>
       val blockHeaderValidator = new BlockHeaderValidatorImpl(createBlockchainConfig(supportsDaoFork), electionManagerMock, slotCalculatorMock, clockMock)
-      blockHeaderValidator.validate(block, parentBlock) match {
+      blockHeaderValidator.validate(block, parentBlock.header) match {
         case Right(_) => assert(valid)
         case Left(DaoHeaderExtraDataError) => assert(!valid)
         case _ => fail()
@@ -78,10 +78,10 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
     (clockMock.now _).expects().returning(CurrentTime).anyNumberOfTimes()
 
     forAll(longGen) { timestamp =>
-      val blockHeader = validBlockHeader.copy(unixTimestamp = timestamp)
-      val validateResult = blockHeaderValidator.validate(blockHeader, validBlockParent)
+      val blockHeader = validBlockHeader.copy(validBlockHeader.header.copy(unixTimestamp = timestamp))
+      val validateResult = blockHeaderValidator.validate(blockHeader, validBlockParent.header)
       timestamp match {
-        case t if t <= validBlockParent.unixTimestamp => assert(validateResult == Left(HeaderTimestampError))
+        case t if t <= validBlockParent.header.unixTimestamp => assert(validateResult == Left(HeaderTimestampError))
         case _ => assert(validateResult == Right(BlockHeaderValid))
       }
     }
@@ -93,9 +93,9 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
     (clockMock.now _).expects().returning(CurrentTime).anyNumberOfTimes()
 
     forAll(bigIntGen) { difficulty =>
-      val blockHeader = validBlockHeader.copy(difficulty = difficulty)
-      val validateResult = blockHeaderValidator.validate(blockHeader, validBlockParent)
-      if(difficulty != validBlockHeader.difficulty) assert(validateResult == Left(HeaderDifficultyError))
+      val blockHeader = validBlockHeader.copy(validBlockHeader.header.copy(difficulty = difficulty))
+      val validateResult = blockHeaderValidator.validate(blockHeader, validBlockParent.header)
+      if(difficulty != validBlockHeader.header.difficulty) assert(validateResult == Left(HeaderDifficultyError))
       else assert(validateResult == Right(BlockHeaderValid))
     }
   }
@@ -106,9 +106,9 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
     (clockMock.now _).expects().returning(CurrentTime).anyNumberOfTimes()
 
     forAll(bigIntGen) { gasUsed =>
-      val blockHeader = validBlockHeader.copy(gasUsed = gasUsed)
-      val validateResult = blockHeaderValidator.validate(blockHeader, validBlockParent)
-      if(gasUsed > validBlockHeader.gasLimit) assert(validateResult == Left(HeaderGasUsedError))
+      val blockHeader = validBlockHeader.copy(validBlockHeader.header.copy(gasUsed = gasUsed))
+      val validateResult = blockHeaderValidator.validate(blockHeader, validBlockParent.header)
+      if(gasUsed > validBlockHeader.header.gasLimit) assert(validateResult == Left(HeaderGasUsedError))
       else assert(validateResult == Right(BlockHeaderValid))
     }
   }
@@ -119,12 +119,12 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
     (clockMock.now _).expects().returning(CurrentTime).anyNumberOfTimes()
 
     val LowerGasLimit = MinGasLimit.max(
-      validBlockParent.gasLimit - validBlockParent.gasLimit / GasLimitBoundDivisor + 1)
-    val UpperGasLimit = validBlockParent.gasLimit + validBlockParent.gasLimit / GasLimitBoundDivisor - 1
+      validBlockParent.header.gasLimit - validBlockParent.header.gasLimit / GasLimitBoundDivisor + 1)
+    val UpperGasLimit = validBlockParent.header.gasLimit + validBlockParent.header.gasLimit / GasLimitBoundDivisor - 1
 
     forAll(bigIntGen) { gasLimit =>
-      val blockHeader = validBlockHeader.copy(gasLimit = gasLimit)
-      val validateResult = blockHeaderValidator.validate(blockHeader, validBlockParent)
+      val blockHeader = validBlockHeader.copy(validBlockHeader.header.copy(gasLimit = gasLimit))
+      val validateResult = blockHeaderValidator.validate(blockHeader, validBlockParent.header)
       if(gasLimit < LowerGasLimit || gasLimit > UpperGasLimit)
         assert(validateResult == Left(HeaderGasLimitError))
       else assert(validateResult == Right(BlockHeaderValid))
@@ -136,8 +136,8 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
     (slotCalculatorMock.getSlotStartingMillis _).expects(*).returning(CurrentTime.toMillis - 1).anyNumberOfTimes()
     (clockMock.now _).expects().returning(CurrentTime).anyNumberOfTimes()
 
-    val validParent = validBlockParent.copy(gasLimit = Long.MaxValue)
-    val invalidBlockHeader = validBlockHeader.copy(gasLimit = BigInt(Long.MaxValue) + 1)
+    val validParent = validBlockParent.header.copy(gasLimit = Long.MaxValue)
+    val invalidBlockHeader = validBlockHeader.copy(validBlockHeader.header.copy(gasLimit = BigInt(Long.MaxValue) + 1))
     blockHeaderValidator.validate(invalidBlockHeader, validParent) shouldBe Left(HeaderGasLimitError)
   }
 
@@ -147,9 +147,9 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
     (clockMock.now _).expects().returning(CurrentTime).anyNumberOfTimes()
 
     forAll(longGen) { number =>
-      val blockHeader = validBlockHeader.copy(number = number)
-      val validateResult = blockHeaderValidator.validate(blockHeader, validBlockParent)
-      if(number != validBlockParent.number + 1)
+      val blockHeader = validBlockHeader.copy(validBlockHeader.header.copy(number = number))
+      val validateResult = blockHeaderValidator.validate(blockHeader, validBlockParent.header)
+      if(number != validBlockParent.header.number + 1)
         assert(validateResult == Left(HeaderNumberError) || validateResult == Left(HeaderDifficultyError))
       else assert(validateResult == Right(BlockHeaderValid))
     }
@@ -183,8 +183,8 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
     (slotCalculatorMock.getSlotStartingMillis _).expects(*).returning(CurrentTime.toMillis - 1).anyNumberOfTimes()
     (clockMock.now _).expects().returning(CurrentTime).anyNumberOfTimes()
 
-    val invalidBlockHeader = validBlockHeader.copy(slotNumber = validBlockParent.slotNumber - 1)
-    blockHeaderValidator.validate(invalidBlockHeader, validBlockParent) shouldBe Left(HeaderSlotNumberError)
+    val invalidBlockHeader = validBlockHeader.copy(validBlockHeader.header.copy(slotNumber = validBlockParent.header.slotNumber - 1))
+    blockHeaderValidator.validate(invalidBlockHeader, validBlockParent.header) shouldBe Left(HeaderSlotNumberError)
   }
 
   it should "return a failure if the block is from a future slot" in new TestSetup {
@@ -192,7 +192,7 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
     (slotCalculatorMock.getSlotStartingMillis _).expects(*).returning(CurrentTime.toMillis).anyNumberOfTimes()
     (clockMock.now _).expects().returning(CurrentTime - 1.millis).anyNumberOfTimes()
 
-    blockHeaderValidator.validate(validBlockHeader, validBlockParent) shouldBe Left(HeaderSlotNumberError)
+    blockHeaderValidator.validate(validBlockHeader, validBlockParent.header) shouldBe Left(HeaderSlotNumberError)
   }
 
   it should "return a failure if the block beneficiary wasn't the slot leader" in new TestSetup {
@@ -200,8 +200,8 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
     (slotCalculatorMock.getSlotStartingMillis _).expects(*).returning(CurrentTime.toMillis - 1).anyNumberOfTimes()
     (clockMock.now _).expects().returning(CurrentTime).anyNumberOfTimes()
 
-    val invalidBlockHeader = validBlockHeader.copy(slotNumber = validBlockParent.slotNumber - 1)
-    blockHeaderValidator.validate(invalidBlockHeader, validBlockParent) shouldBe Left(HeaderBeneficiaryError)
+    val invalidBlockHeader = validBlockHeader.copy(validBlockHeader.header.copy(slotNumber = validBlockParent.header.slotNumber - 1))
+    blockHeaderValidator.validate(invalidBlockHeader, validBlockParent.header) shouldBe Left(HeaderBeneficiaryError)
   }
 
   trait TestSetup extends EphemBlockchainTestSetup {
@@ -222,7 +222,7 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
     val CurrentTime = 2.millis
   }
 
-  val pausedDifficultyBombBlock = BlockHeader(
+  val pausedDifficultyBombBlock = SignedBlockHeader(BlockHeader(
     parentHash = ByteString(Hex.decode("77af90df2b60071da7f11060747b6590a3bc2f357da4addccb5eef7cb8c2b723")),
     ommersHash = ByteString(Hex.decode("1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347")),
     beneficiary = ByteString(Hex.decode("10807cacf99ac84b7b8f9b4077e3a11ee8880bf9")),
@@ -239,9 +239,9 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
     mixHash = ByteString(Hex.decode("7d2db22c3dfaccb1b6927f5675ec24a41991ee4bcffdc564f940a45c1fce8acb")),
     nonce = ByteString(Hex.decode("81d6a5e8029f9446")),
     slotNumber = 3582022
-  )
+  ), FakeSignature)
 
-  val pausedDifficultyBombBlockParent = BlockHeader(
+  val pausedDifficultyBombBlockParent = SignedBlockHeader(BlockHeader(
     parentHash = ByteString(Hex.decode("e6e90c1ba10df710365a2ae9f899bd787416d98f19874f4cb1a62f09c3b8277d")),
     ommersHash = ByteString(Hex.decode("1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347")),
     beneficiary = ByteString(Hex.decode("4c2b4e716883a2c3f6b980b70b577e54b9441060")),
@@ -258,9 +258,9 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
     mixHash = ByteString(Hex.decode("d10215664192800200eab9ca7b90f9ceb8d8428200c2b4e6aebe2191c2a52c0e")),
     nonce = ByteString(Hex.decode("83e2d9b401cdfa77")),
     slotNumber = 3582021
-  )
+  ), FakeSignature)
 
-  val validBlockParent = BlockHeader(
+  val validBlockParent = SignedBlockHeader(BlockHeader(
     parentHash = ByteString(Hex.decode("677a5fb51d52321b03552e3c667f602cc489d15fc1d7824445aee6d94a9db2e7")),
     ommersHash = ByteString(Hex.decode("1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347")),
     beneficiary = ByteString(Hex.decode("95f484419881c6e9b6de7fb3f8ad03763bd49a89")),
@@ -277,9 +277,9 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
     mixHash = ByteString(Hex.decode("7f9ac1ddeafff0f926ed9887b8cf7d50c3f919d902e618b957022c46c8b404a6")),
     nonce = ByteString(Hex.decode("3fc7bc671f7cee70")),
     slotNumber = 19
-  )
+  ), FakeSignature)
 
-  val validBlockHeader = BlockHeader(
+  val validBlockHeader = SignedBlockHeader(BlockHeader(
     parentHash = validBlockParent.hash,
     ommersHash = ByteString(Hex.decode("1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347")),
     beneficiary = ByteString(Hex.decode("95f484419881c6e9b6de7fb3f8ad03763bd49a89")),
@@ -296,7 +296,7 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
     mixHash = ByteString(Hex.decode("6bc729364c9b682cfa923ba9480367ebdfa2a9bca2a652fe975e8d5958f696dd")),
     nonce = ByteString(Hex.decode("797a8f3a494f937b")),
     slotNumber = 20
-  )
+  ), FakeSignature)
 
   def createBlockchainConfig(supportsDaoFork: Boolean = false): BlockchainConfig =
     new BlockchainConfig {
@@ -309,11 +309,11 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
       override val difficultyBombContinueBlockNumber: BigInt = 5000000
 
       override val daoForkConfig: Option[DaoForkConfig] = Some(new DaoForkConfig {
-        override val blockExtraData: Option[ByteString] = if(supportsDaoFork) Some(ProDaoForkBlock.header.extraData) else None
+        override val blockExtraData: Option[ByteString] = if(supportsDaoFork) Some(ProDaoForkBlock.signedHeader.header.extraData) else None
         override val range: Int = 10
         override val drainList: Seq[Address] = Nil
-        override val forkBlockHash: ByteString = if(supportsDaoFork) ProDaoForkBlock.header.hash else DaoForkBlock.header.hash
-        override val forkBlockNumber: BigInt = DaoForkBlock.header.number
+        override val forkBlockHash: ByteString = if(supportsDaoFork) ProDaoForkBlock.signedHeader.hash else DaoForkBlock.signedHeader.hash
+        override val forkBlockNumber: BigInt = DaoForkBlock.signedHeader.header.number
         override val refundContract: Option[Address] = None
       })
 
@@ -331,7 +331,7 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
       val gasTieBreaker: Boolean = false
     }
 
-  val ProDaoBlock1920008Header = BlockHeader(
+  val ProDaoBlock1920008Header = SignedBlockHeader(BlockHeader(
     parentHash = ByteString(Hex.decode("05c45c9671ee31736b9f37ee98faa72c89e314059ecff3257206e6ab498eb9d1")),
     ommersHash = ByteString(Hex.decode("1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347")),
     beneficiary = ByteString(Hex.decode("2a65aca4d5fc5b5c859090a6c34d164135398226")),
@@ -348,9 +348,9 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
     mixHash = ByteString(Hex.decode("e73421390c1b084a9806754b238715ec333cdccc8d09b90cb6e38a9d1e247d6f")),
     nonce = ByteString(Hex.decode("c207c8381305bef2")),
     slotNumber = 1920008
-  )
+  ), FakeSignature)
 
-  val ProDaoBlock1920009Header = BlockHeader(
+  val ProDaoBlock1920009Header = SignedBlockHeader(BlockHeader(
     parentHash = ProDaoBlock1920008Header.hash,
     ommersHash = ByteString(Hex.decode("808d06176049aecfd504197dde49f46c3dd75f1af055e417d100228162eefdd8")),
     beneficiary = ByteString(Hex.decode("ea674fdde714fd979de3edf0f56aa9716b898ec8")),
@@ -367,9 +367,9 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
     mixHash = ByteString(Hex.decode("5bde79f4dc5be28af2d956e748a0d6ebc1f8eb5c1397e76729269e730611cb99")),
     nonce = ByteString(Hex.decode("2b4b464c0a4da82a")),
     slotNumber = 1920009
-  )
+  ), FakeSignature)
 
-  val ProDaoBlock1920010Header = BlockHeader(
+  val ProDaoBlock1920010Header = SignedBlockHeader(BlockHeader(
     parentHash = ProDaoBlock1920009Header.hash,
     ommersHash = ByteString(Hex.decode("1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347")),
     beneficiary = ByteString(Hex.decode("4bb96091ee9d802ed039c4d1a5f6216f90f81b01")),
@@ -386,7 +386,6 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
     mixHash = ByteString(Hex.decode("8f86617d6422c26a89b8b349b160973ca44f90326e758f1ef669c4046741dd06")),
     nonce = ByteString(Hex.decode("c7de19e00a8c3e32")),
     slotNumber = 1920010
-  )
-
+  ), FakeSignature)
 
 }

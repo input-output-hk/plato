@@ -2,7 +2,7 @@ package io.iohk.ethereum.validators
 
 import akka.util.ByteString
 import io.iohk.ethereum.crypto._
-import io.iohk.ethereum.domain.{Block, BlockHeader, Receipt, SignedTransaction}
+import io.iohk.ethereum.domain._
 import io.iohk.ethereum.ledger.BloomFilter
 import io.iohk.ethereum.network.p2p.messages.PV62.BlockBody
 import io.iohk.ethereum.utils.ByteUtils.or
@@ -10,21 +10,21 @@ import io.iohk.ethereum.validators.BlockValidator.{BlockError, BlockValid}
 
 trait BlockValidator {
 
-  def validateHeaderAndBody(blockHeader: BlockHeader, blockBody: BlockBody): Either[BlockError, BlockValid]
-  def validateBlockAndReceipts(blockHeader: BlockHeader, receipts: Seq[Receipt]): Either[BlockError, BlockValid]
+  def validateHeaderAndBody(signedBlockHeader: SignedBlockHeader, blockBody: BlockBody): Either[BlockError, BlockValid]
+  def validateBlockAndReceipts(signedBlockHeader: SignedBlockHeader, receipts: Seq[Receipt]): Either[BlockError, BlockValid]
 
 }
 
 object BlockValidator extends BlockValidator {
   /**
-    * Validates [[io.iohk.ethereum.domain.BlockHeader.transactionsRoot]] matches [[BlockBody.transactionList]]
+    * Validates [[io.iohk.ethereum.domain.SignedBlockHeader.header.transactionsRoot]] matches [[BlockBody.transactionList]]
     * based on validations stated in section 4.4.2 of http://paper.gavwood.com/
     *
     * @param block Block to validate
     * @return Block if valid, a Some otherwise
     */
   private def validateTransactionRoot(block: Block): Either[BlockError, BlockValid] = {
-    val isValid = MptListValidator.isValid[SignedTransaction](block.header.transactionsRoot.toArray[Byte],
+    val isValid = MptListValidator.isValid[SignedTransaction](block.signedHeader.header.transactionsRoot.toArray[Byte],
       block.body.transactionList,
       SignedTransaction.byteArraySerializable
     )
@@ -40,9 +40,9 @@ object BlockValidator extends BlockValidator {
     * @return Block if valid, a Some otherwise
     */
   private def validateOmmersHash(block: Block): Either[BlockError, BlockValid] = {
-    import io.iohk.ethereum.network.p2p.messages.PV62.BlockHeaderImplicits._
+    import io.iohk.ethereum.network.p2p.messages.PV62.SignedBlockHeaderImplicits._
     val encodedOmmers: Array[Byte] = block.body.uncleNodesList.toBytes
-    if (kec256(encodedOmmers) sameElements block.header.ommersHash) Right(BlockValid)
+    if (kec256(encodedOmmers) sameElements block.signedHeader.header.ommersHash) Right(BlockValid)
     else Left(BlockOmmersHashError)
   }
 
@@ -50,13 +50,13 @@ object BlockValidator extends BlockValidator {
     * Validates [[Receipt]] against [[io.iohk.ethereum.domain.BlockHeader.receiptsRoot]]
     * based on validations stated in section 4.4.2 of http://paper.gavwood.com/
     *
-    * @param blockHeader    Block header to validate
+    * @param signedBlockHeader    Block header to validate
     * @param receipts Receipts to use
     * @return
     */
-  private def validateReceipts(blockHeader: BlockHeader, receipts: Seq[Receipt]): Either[BlockError, BlockValid] = {
+  private def validateReceipts(signedBlockHeader: SignedBlockHeader, receipts: Seq[Receipt]): Either[BlockError, BlockValid] = {
 
-    val isValid = MptListValidator.isValid[Receipt](blockHeader.receiptsRoot.toArray[Byte],
+    val isValid = MptListValidator.isValid[Receipt](signedBlockHeader.header.receiptsRoot.toArray[Byte],
       receipts,
       Receipt.byteArraySerializable
     )
@@ -68,15 +68,15 @@ object BlockValidator extends BlockValidator {
     * Validates [[io.iohk.ethereum.domain.BlockHeader.logsBloom]] against [[Receipt.logsBloomFilter]]
     * based on validations stated in section 4.4.2 of http://paper.gavwood.com/
     *
-    * @param blockHeader  Block header to validate
+    * @param signedBlockHeader  Block header to validate
     * @param receipts     Receipts to use
     * @return
     */
-  private def validateLogBloom(blockHeader: BlockHeader, receipts: Seq[Receipt]): Either[BlockError, BlockValid] = {
+  private def validateLogBloom(signedBlockHeader: SignedBlockHeader, receipts: Seq[Receipt]): Either[BlockError, BlockValid] = {
     val logsBloomOr =
       if(receipts.isEmpty) BloomFilter.EmptyBloomFilter
       else ByteString(or(receipts.map(_.logsBloomFilter.toArray): _*))
-    if (logsBloomOr == blockHeader.logsBloom) Right(BlockValid)
+    if (logsBloomOr == signedBlockHeader.header.logsBloom) Right(BlockValid)
     else Left(BlockLogBloomError)
   }
 
@@ -94,8 +94,8 @@ object BlockValidator extends BlockValidator {
     */
   def validate(block: Block, receipts: Seq[Receipt]): Either[BlockError, BlockValid] = {
     for {
-      _ <- validateHeaderAndBody(block.header, block.body)
-      _ <- validateBlockAndReceipts(block.header, receipts)
+      _ <- validateHeaderAndBody(block.signedHeader, block.body)
+      _ <- validateBlockAndReceipts(block.signedHeader, receipts)
     } yield BlockValid
   }
 
@@ -105,12 +105,12 @@ object BlockValidator extends BlockValidator {
     *   - BlockValidator.validateTransactionRoot
     *   - BlockValidator.validateOmmersHash
     *
-    * @param blockHeader to validate
+    * @param signedBlockHeader to validate
     * @param blockBody to validate
     * @return The block if the header matched the body, error otherwise
     */
-  def validateHeaderAndBody(blockHeader: BlockHeader, blockBody: BlockBody): Either[BlockError, BlockValid] = {
-    val block = Block(blockHeader, blockBody)
+  def validateHeaderAndBody(signedBlockHeader: SignedBlockHeader, blockBody: BlockBody): Either[BlockError, BlockValid] = {
+    val block = Block(signedBlockHeader, blockBody)
     for {
       _ <- validateTransactionRoot(block)
       _ <- validateOmmersHash(block)
@@ -123,14 +123,14 @@ object BlockValidator extends BlockValidator {
     *   - BlockValidator.validateReceipts
     *   - BlockValidator.validateLogBloom
     *
-    * @param blockHeader    Block header to validate
+    * @param signedBlockHeader    Block header to validate
     * @param receipts Receipts to be in validation process
     * @return The block if validations are ok, error otherwise
     */
-  def validateBlockAndReceipts(blockHeader: BlockHeader, receipts: Seq[Receipt]): Either[BlockError, BlockValid] = {
+  def validateBlockAndReceipts(signedBlockHeader: SignedBlockHeader, receipts: Seq[Receipt]): Either[BlockError, BlockValid] = {
     for {
-      _ <- validateReceipts(blockHeader, receipts)
-      _ <- validateLogBloom(blockHeader, receipts)
+      _ <- validateReceipts(signedBlockHeader, receipts)
+      _ <- validateLogBloom(signedBlockHeader, receipts)
     } yield BlockValid
   }
 

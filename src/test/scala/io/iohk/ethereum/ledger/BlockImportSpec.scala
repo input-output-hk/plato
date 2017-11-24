@@ -4,7 +4,7 @@ import akka.util.ByteString
 import akka.util.ByteString.{empty => bEmpty}
 import io.iohk.ethereum.blockchain.sync.EphemBlockchainTestSetup
 import io.iohk.ethereum.{Mocks, ObjectGenerators}
-import io.iohk.ethereum.domain.{Block, BlockHeader, BlockchainImpl, Receipt}
+import io.iohk.ethereum.domain._
 import io.iohk.ethereum.ledger.BlockExecutionError.ValidationAfterExecError
 import io.iohk.ethereum.ledger.BlockQueue.Leaf
 import io.iohk.ethereum.network.p2p.messages.PV62.BlockBody
@@ -12,11 +12,9 @@ import io.iohk.ethereum.utils.Config.SyncConfig
 import io.iohk.ethereum.utils.{BlockchainConfig, Config}
 import io.iohk.ethereum.validators.BlockHeaderError.{HeaderDifficultyError, HeaderParentNotFoundError}
 import io.iohk.ethereum.validators.BlockHeaderValidator
-//import io.iohk.ethereum.validators.BlockHeaderError.HeaderDifficultyError
-//import io.iohk.ethereum.validators._
 import org.scalamock.scalatest.MockFactory
 import org.scalatest.{FlatSpec, Matchers}
-
+import io.iohk.ethereum.Fixtures.FakeSignature
 import scala.language.reflectiveCalls
 import scala.collection.mutable
 
@@ -35,7 +33,7 @@ class BlockImportSpec extends FlatSpec with Matchers with MockFactory {
   }
 
   it should "import a block to top of the main chain" in new TestSetup with MockBlockchain {
-    val block = getBlock(6, parent = bestBlock.header.hash)
+    val block = getBlock(6, parent = bestBlock.signedHeader.hash)
 
     setBlockExists(block, false, false)
     setBestBlock(bestBlock)
@@ -43,17 +41,17 @@ class BlockImportSpec extends FlatSpec with Matchers with MockFactory {
     ledger.setExecutionResult(block, Right(receipts))
 
     (blockQueue.enqueueBlock _).expects(block, bestNum)
-      .returning(Some(Leaf(block.header.hash, currentTd + block.header.difficulty)))
-    (blockQueue.getBranch _).expects(block.header.hash, true).returning(List(block))
+      .returning(Some(Leaf(block.signedHeader.hash, currentTd + block.signedHeader.header.difficulty)))
+    (blockQueue.getBranch _).expects(block.signedHeader.hash, true).returning(List(block))
 
-    val newTd = currentTd + block.header.difficulty
+    val newTd = currentTd + block.signedHeader.header.difficulty
     expectBlockSaved(block, receipts, newTd, true)
 
     ledger.importBlock(block) shouldEqual BlockImportedToTop(List(block), List(newTd))
   }
 
   it should "handle exec error when importing to top" in new TestSetup with MockBlockchain {
-    val block = getBlock(6, parent = bestBlock.header.hash)
+    val block = getBlock(6, parent = bestBlock.signedHeader.hash)
 
     setBlockExists(block, false, false)
     setBestBlock(bestBlock)
@@ -61,25 +59,25 @@ class BlockImportSpec extends FlatSpec with Matchers with MockFactory {
     ledger.setExecutionResult(block, Left(execError))
 
     (blockQueue.enqueueBlock _).expects(block, bestNum)
-      .returning(Some(Leaf(block.header.hash, currentTd + block.header.difficulty)))
-    (blockQueue.getBranch _).expects(block.header.hash, true).returning(List(block))
-    (blockQueue.removeSubtree _).expects(block.header.hash)
+      .returning(Some(Leaf(block.signedHeader.hash, currentTd + block.signedHeader.header.difficulty)))
+    (blockQueue.getBranch _).expects(block.signedHeader.hash, true).returning(List(block))
+    (blockQueue.removeSubtree _).expects(block.signedHeader.hash)
 
     ledger.importBlock(block) shouldEqual BlockImportFailed(execError.toString)
   }
 
   it should "reorganise chain when a newly enqueued block forms a better branch" in new TestSetup with EphemBlockchain {
     val block1 = getBlock(bestNum - 2, difficulty = 100)
-    val newBlock2 = getBlock(bestNum - 1, difficulty = 101, parent = block1.header.hash)
-    val newBlock3 = getBlock(bestNum, difficulty = 105, parent = newBlock2.header.hash)
-    val oldBlock2 = getBlock(bestNum - 1, difficulty = 102, parent = block1.header.hash)
-    val oldBlock3 = getBlock(bestNum, difficulty = 103, parent = oldBlock2.header.hash)
+    val newBlock2 = getBlock(bestNum - 1, difficulty = 101, parent = block1.signedHeader.hash)
+    val newBlock3 = getBlock(bestNum, difficulty = 105, parent = newBlock2.signedHeader.hash)
+    val oldBlock2 = getBlock(bestNum - 1, difficulty = 102, parent = block1.signedHeader.hash)
+    val oldBlock3 = getBlock(bestNum, difficulty = 103, parent = oldBlock2.signedHeader.hash)
 
-    val td1 = block1.header.difficulty + 999
-    val newTd2 = td1 + newBlock2.header.difficulty
-    val newTd3 = newTd2 + newBlock3.header.difficulty
-    val oldTd2 = td1 + oldBlock2.header.difficulty
-    val oldTd3 = oldTd2 + oldBlock3.header.difficulty
+    val td1 = block1.signedHeader.header.difficulty + 999
+    val newTd2 = td1 + newBlock2.signedHeader.header.difficulty
+    val newTd3 = newTd2 + newBlock3.signedHeader.header.difficulty
+    val oldTd2 = td1 + oldBlock2.signedHeader.header.difficulty
+    val oldTd3 = oldTd2 + oldBlock3.signedHeader.header.difficulty
 
     blockchain.save(block1, Nil, td1, true)
     blockchain.save(oldBlock2, receipts, oldTd2, true)
@@ -96,24 +94,24 @@ class BlockImportSpec extends FlatSpec with Matchers with MockFactory {
       ChainReorganised(List(oldBlock2, oldBlock3), List(newBlock2, newBlock3), List(newTd2, newTd3))
 
     blockchain.getBestBlock() shouldEqual newBlock3
-    blockchain.getTotalDifficultyByHash(newBlock3.header.hash) shouldEqual Some(newTd3)
+    blockchain.getTotalDifficultyByHash(newBlock3.signedHeader.hash) shouldEqual Some(newTd3)
 
-    blockQueue.isQueued(oldBlock2.header.hash) shouldBe true
-    blockQueue.isQueued(oldBlock3.header.hash) shouldBe true
+    blockQueue.isQueued(oldBlock2.signedHeader.hash) shouldBe true
+    blockQueue.isQueued(oldBlock3.signedHeader.hash) shouldBe true
   }
 
   it should "handle error when trying to reorganise chain" in new TestSetup with EphemBlockchain {
     val block1 = getBlock(bestNum - 2, difficulty = 100)
-    val newBlock2 = getBlock(bestNum - 1, difficulty = 101, parent = block1.header.hash)
-    val newBlock3 = getBlock(bestNum, difficulty = 105, parent = newBlock2.header.hash)
-    val oldBlock2 = getBlock(bestNum - 1, difficulty = 102, parent = block1.header.hash)
-    val oldBlock3 = getBlock(bestNum, difficulty = 103, parent = oldBlock2.header.hash)
+    val newBlock2 = getBlock(bestNum - 1, difficulty = 101, parent = block1.signedHeader.hash)
+    val newBlock3 = getBlock(bestNum, difficulty = 105, parent = newBlock2.signedHeader.hash)
+    val oldBlock2 = getBlock(bestNum - 1, difficulty = 102, parent = block1.signedHeader.hash)
+    val oldBlock3 = getBlock(bestNum, difficulty = 103, parent = oldBlock2.signedHeader.hash)
 
-    val td1 = block1.header.difficulty + 999
-    val newTd2 = td1 + newBlock2.header.difficulty
-    val newTd3 = newTd2 + newBlock3.header.difficulty
-    val oldTd2 = td1 + oldBlock2.header.difficulty
-    val oldTd3 = oldTd2 + oldBlock3.header.difficulty
+    val td1 = block1.signedHeader.header.difficulty + 999
+    val newTd2 = td1 + newBlock2.signedHeader.header.difficulty
+    val newTd3 = newTd2 + newBlock3.signedHeader.header.difficulty
+    val oldTd2 = td1 + oldBlock2.signedHeader.header.difficulty
+    val oldTd3 = oldTd2 + oldBlock3.signedHeader.header.difficulty
 
     blockchain.save(block1, Nil, td1, true)
     blockchain.save(oldBlock2, receipts, oldTd2, true)
@@ -129,10 +127,10 @@ class BlockImportSpec extends FlatSpec with Matchers with MockFactory {
     ledger.importBlock(newBlock2) shouldBe a[BlockImportFailed]
 
     blockchain.getBestBlock() shouldEqual oldBlock3
-    blockchain.getTotalDifficultyByHash(oldBlock3.header.hash) shouldEqual Some(oldTd3)
+    blockchain.getTotalDifficultyByHash(oldBlock3.signedHeader.hash) shouldEqual Some(oldTd3)
 
-    blockQueue.isQueued(newBlock2.header.hash) shouldBe true
-    blockQueue.isQueued(newBlock3.header.hash) shouldBe false
+    blockQueue.isQueued(newBlock2.signedHeader.hash) shouldBe true
+    blockQueue.isQueued(newBlock3.signedHeader.hash) shouldBe false
   }
 
   it should "report an orphaned block" in new TestSetup with MockBlockchain {
@@ -143,8 +141,8 @@ class BlockImportSpec extends FlatSpec with Matchers with MockFactory {
 
     val newBlock = getBlock()
 
-    (validators.blockHeaderValidator.validate(_: BlockHeader, _: ByteString => Option[BlockHeader]))
-      .expects(newBlock.header, *).returning(Left(HeaderParentNotFoundError))
+    (validators.blockHeaderValidator.validate(_: SignedBlockHeader, _: ByteString => Option[SignedBlockHeader]))
+      .expects(newBlock.signedHeader, *).returning(Left(HeaderParentNotFoundError))
 
     ledgerWithMockedValidators.importBlock(newBlock) shouldEqual UnknownParent
   }
@@ -157,8 +155,8 @@ class BlockImportSpec extends FlatSpec with Matchers with MockFactory {
 
     val newBlock = getBlock()
 
-    (validators.blockHeaderValidator.validate(_: BlockHeader, _: ByteString => Option[BlockHeader]))
-      .expects(newBlock.header, *).returning(Left(HeaderDifficultyError))
+    (validators.blockHeaderValidator.validate(_: SignedBlockHeader, _: ByteString => Option[SignedBlockHeader]))
+      .expects(newBlock.signedHeader, *).returning(Left(HeaderDifficultyError))
 
     ledgerWithMockedValidators.importBlock(newBlock) shouldEqual BlockImportFailed(HeaderDifficultyError.toString)
   }
@@ -179,7 +177,7 @@ class BlockImportSpec extends FlatSpec with Matchers with MockFactory {
   it should "report an unknown branch in the parent of the first header is unknown" in new TestSetup with MockBlockchain {
     val headers = getChainHeaders(5, 10)
     setBestBlockNumber(10)
-    setHeaderByHash(headers.head.parentHash, None)
+    setHeaderByHash(headers.head.header.parentHash, None)
 
     ledger.resolveBranch(headers) shouldEqual UnknownBranch
   }
@@ -188,10 +186,10 @@ class BlockImportSpec extends FlatSpec with Matchers with MockFactory {
     new TestSetup with MockBlockchain {
       val headers = getChainHeaders(1, 10)
       setBestBlockNumber(10)
-      setHeaderByHash(headers.head.parentHash, Some(getBlock(0).header))
+      setHeaderByHash(headers.head.header.parentHash, Some(getBlock(0).signedHeader))
 
-      val oldBlocks = headers.map(h => getBlock(h.number, h.difficulty - 1))
-      oldBlocks.foreach(b => setBlockByNumber(b.header.number, Some(b)))
+      val oldBlocks = headers.map(h => getBlock(h.header.number, h.header.difficulty - 1))
+      oldBlocks.foreach(b => setBlockByNumber(b.signedHeader.header.number, Some(b)))
 
       ledger.resolveBranch(headers) shouldEqual NewBetterBranch(oldBlocks)
     }
@@ -200,10 +198,10 @@ class BlockImportSpec extends FlatSpec with Matchers with MockFactory {
     new TestSetup with MockBlockchain {
       val headers = getChainHeaders(1, 10)
       setBestBlockNumber(10)
-      setHeaderByHash(headers.head.parentHash, Some(getBlock(0).header))
+      setHeaderByHash(headers.head.header.parentHash, Some(getBlock(0).signedHeader))
 
-      val oldBlocks = headers.map(h => getBlock(h.number, h.difficulty))
-      oldBlocks.foreach(b => setBlockByNumber(b.header.number, Some(b)))
+      val oldBlocks = headers.map(h => getBlock(h.header.number, h.header.difficulty))
+      oldBlocks.foreach(b => setBlockByNumber(b.signedHeader.header.number, Some(b)))
 
       ledger.resolveBranch(headers) shouldEqual NoChainSwitch
     }
@@ -218,16 +216,16 @@ class BlockImportSpec extends FlatSpec with Matchers with MockFactory {
       private val results = mutable.Map[ByteString, Either[BlockExecutionError, Seq[Receipt]]]()
 
       override def executeBlock(block: Block, alreadyValidated: Boolean = false): Either[BlockExecutionError, Seq[Receipt]] =
-        results(block.header.hash)
+        results(block.signedHeader.hash)
 
       def setExecutionResult(block: Block, result: Either[BlockExecutionError, Seq[Receipt]]): Unit =
-        results(block.header.hash) = result
+        results(block.signedHeader.hash) = result
     }
 
     def randomHash(): ByteString =
       ObjectGenerators.byteStringOfLengthNGen(32).sample.get
 
-    val defaultHeader = BlockHeader(
+    val defaultHeader = SignedBlockHeader(BlockHeader(
       parentHash = bEmpty,
       ommersHash = bEmpty,
       beneficiary = bEmpty,
@@ -244,7 +242,7 @@ class BlockImportSpec extends FlatSpec with Matchers with MockFactory {
       mixHash = bEmpty,
       nonce = bEmpty,
       slotNumber = 1
-    )
+    ), FakeSignature)
 
     def getBlock(
       number: BigInt = 1,
@@ -252,11 +250,11 @@ class BlockImportSpec extends FlatSpec with Matchers with MockFactory {
       parent: ByteString = randomHash(),
       salt: ByteString = randomHash()): Block =
       Block(
-        defaultHeader.copy(
+        defaultHeader.copy(defaultHeader.header.copy(
           parentHash = parent,
           difficulty = difficulty,
           number = number,
-          extraData = salt),
+          extraData = salt)),
         BlockBody(Nil, Nil))
 
     def getChain(from: BigInt, to: BigInt, parent: ByteString = randomHash()): List[Block] =
@@ -264,11 +262,11 @@ class BlockImportSpec extends FlatSpec with Matchers with MockFactory {
         Nil
       else {
         val block = getBlock(from, parent = parent)
-        block :: getChain(from + 1, to, block.header.hash)
+        block :: getChain(from + 1, to, block.signedHeader.hash)
       }
 
-    def getChainHeaders(from: BigInt, to: BigInt, parent: ByteString = randomHash()): List[BlockHeader] =
-      getChain(from, to, parent).map(_.header)
+    def getChainHeaders(from: BigInt, to: BigInt, parent: ByteString = randomHash()): List[SignedBlockHeader] =
+      getChain(from, to, parent).map(_.signedHeader)
 
     val receipts = Seq(Receipt(randomHash(), 50000, randomHash(), Nil))
 
@@ -291,28 +289,28 @@ class BlockImportSpec extends FlatSpec with Matchers with MockFactory {
     val blockQueue: BlockQueue = mock[MockBlockQueue]
 
     def setBlockExists(block: Block, inChain: Boolean, inQueue: Boolean) = {
-      (blockchain.getBlockByHash _).expects(block.header.hash).anyNumberOfTimes().returning(Some(block).filter(_ => inChain))
-      (blockQueue.isQueued _).expects(block.header.hash).anyNumberOfTimes().returning(inQueue)
+      (blockchain.getBlockByHash _).expects(block.signedHeader.hash).anyNumberOfTimes().returning(Some(block).filter(_ => inChain))
+      (blockQueue.isQueued _).expects(block.signedHeader.hash).anyNumberOfTimes().returning(inQueue)
     }
 
     def setBestBlock(block: Block) = {
       (blockchain.getBestBlock _).expects().returning(block)
-      (blockchain.getBestBlockNumber _).expects().anyNumberOfTimes().returning(block.header.number)
+      (blockchain.getBestBlockNumber _).expects().anyNumberOfTimes().returning(block.signedHeader.header.number)
     }
 
     def setBestBlockNumber(num: BigInt) =
       (blockchain.getBestBlockNumber _).expects().returning(num)
 
     def setTotalDifficultyForBlock(block: Block, td: BigInt) =
-      (blockchain.getTotalDifficultyByHash _).expects(block.header.hash).returning(Some(td))
+      (blockchain.getTotalDifficultyByHash _).expects(block.signedHeader.hash).returning(Some(td))
 
     def expectBlockSaved(block: Block, receipts: Seq[Receipt], td: BigInt, saveAsBestBlock: Boolean) = {
       (blockchain.save(_: Block, _: Seq[Receipt], _: BigInt, _: Boolean))
         .expects(block, receipts, td, saveAsBestBlock).once()
     }
 
-    def setHeaderByHash(hash: ByteString, header: Option[BlockHeader]) =
-      (blockchain.getBlockHeaderByHash _).expects(hash).returning(header)
+    def setHeaderByHash(hash: ByteString, header: Option[SignedBlockHeader]) =
+      (blockchain.getSignedBlockHeaderByHash _).expects(hash).returning(header)
 
     def setBlockByNumber(number: BigInt, block: Option[Block]) =
       (blockchain.getBlockByNumber _).expects(number).returning(block)
