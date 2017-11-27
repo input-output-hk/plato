@@ -4,7 +4,7 @@ import akka.util.ByteString
 import io.iohk.ethereum.domain._
 import io.iohk.ethereum.pos.ElectionManager
 import io.iohk.ethereum.timing.Clock
-import io.iohk.ethereum.utils.{BlockchainConfig, DaoForkConfig}
+import io.iohk.ethereum.utils.BlockchainConfig
 
 trait BlockHeaderValidator {
   def validate(signedBlockHeader: SignedBlockHeader, getSignedBlockHeaderByHash: ByteString =>
@@ -39,6 +39,7 @@ class BlockHeaderValidatorImpl(blockchainConfig: BlockchainConfig,
     */
   def validate(signedBlockHeader: SignedBlockHeader, parentHeader: BlockHeader): Either[BlockHeaderError, BlockHeaderValid] = {
     for {
+      _ <- validateSignedBlockHeaderSignature(signedBlockHeader)
       _ <- validateExtraData(signedBlockHeader.header)
       _ <- validateTimestamp(signedBlockHeader.header, parentHeader)
       _ <- validateDifficulty(signedBlockHeader.header, parentHeader)
@@ -47,7 +48,6 @@ class BlockHeaderValidatorImpl(blockchainConfig: BlockchainConfig,
       _ <- validateNumber(signedBlockHeader.header, parentHeader)
       _ <- validateIsLeader(signedBlockHeader.header)
       _ <- validateSlotNumber(signedBlockHeader.header, parentHeader)
-      _ <- validateSignedBlockHeaderSignature(signedBlockHeader)
     } yield BlockHeaderValid
   }
 
@@ -87,20 +87,8 @@ class BlockHeaderValidatorImpl(blockchainConfig: BlockchainConfig,
     * @return BlockHeader if valid, an [[HeaderExtraDataError]] otherwise
     */
   private def validateExtraData(blockHeader: BlockHeader): Either[BlockHeaderError, BlockHeaderValid] = {
-
-    def validateDaoForkExtraData(blockHeader: BlockHeader, daoForkConfig: DaoForkConfig): Either[BlockHeaderError, BlockHeaderValid] =
-      (daoForkConfig requiresExtraData blockHeader.number, daoForkConfig.blockExtraData) match {
-        case (false, _) =>
-          Right(BlockHeaderValid)
-        case (true, Some(forkExtraData)) if blockHeader.extraData == forkExtraData =>
-          Right(BlockHeaderValid)
-        case _ =>
-          Left(DaoHeaderExtraDataError)
-      }
-
     if (blockHeader.extraData.length <= MaxExtraDataSize) {
-      import blockchainConfig._
-      daoForkConfig.map(c => validateDaoForkExtraData(blockHeader, c)).getOrElse(Right(BlockHeaderValid))
+      Right(BlockHeaderValid)
     } else {
       Left(HeaderExtraDataError)
     }
@@ -216,7 +204,6 @@ object BlockHeaderError {
   case object SignedHeaderSignatureError extends BlockHeaderError
   case object HeaderParentNotFoundError extends BlockHeaderError
   case object HeaderExtraDataError extends BlockHeaderError
-  case object DaoHeaderExtraDataError extends BlockHeaderError
   case object HeaderTimestampError extends BlockHeaderError
   case object HeaderDifficultyError extends BlockHeaderError
   case object HeaderGasUsedError extends BlockHeaderError

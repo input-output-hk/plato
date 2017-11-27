@@ -42,8 +42,9 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
       MaxExtraDataSize + 1,
       MaxExtraDataSize + ExtraDataSizeLimit)
     ) { wrongExtraData =>
-      val invalidBlockHeader = validSignedBlockHeader.copy(validSignedBlockHeader.header.copy(extraData = wrongExtraData))
-      assert(blockHeaderValidator.validate(invalidBlockHeader, validSignedBlockHeaderParent.header) == Left(HeaderExtraDataError))
+      val invalidBlockHeader = validSignedBlockHeader.header.copy(extraData = wrongExtraData)
+      val invalidSignedBlockHeader = SignedBlockHeader.sign(invalidBlockHeader, validBlockBeneficiaryKeyPair)
+      assert(blockHeaderValidator.validate(invalidSignedBlockHeader, validSignedBlockHeaderParent.header) == Left(HeaderExtraDataError))
     }
   }
 
@@ -69,8 +70,9 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
     (clockMock.now _).expects().returning(CurrentTime).anyNumberOfTimes()
 
     forAll(bigIntGen) { difficulty =>
-      val blockHeader = validSignedBlockHeader.copy(validSignedBlockHeader.header.copy(difficulty = difficulty))
-      val validateResult = blockHeaderValidator.validate(blockHeader, validSignedBlockHeaderParent.header)
+      val blockHeader = validSignedBlockHeader.header.copy(difficulty = difficulty)
+      val signedBlockHeader = SignedBlockHeader.sign(blockHeader, validBlockBeneficiaryKeyPair)
+      val validateResult = blockHeaderValidator.validate(signedBlockHeader, validSignedBlockHeaderParent.header)
       if (difficulty != validSignedBlockHeader.header.difficulty) assert(validateResult == Left(HeaderDifficultyError))
       else assert(validateResult == Right(BlockHeaderValid))
     }
@@ -82,8 +84,9 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
     (clockMock.now _).expects().returning(CurrentTime).anyNumberOfTimes()
 
     forAll(bigIntGen) { gasUsed =>
-      val blockHeader = validSignedBlockHeader.copy(validSignedBlockHeader.header.copy(gasUsed = gasUsed))
-      val validateResult = blockHeaderValidator.validate(blockHeader, validSignedBlockHeaderParent.header)
+      val blockHeader = validSignedBlockHeader.header.copy(gasUsed = gasUsed)
+      val signedBlockHeader = SignedBlockHeader.sign(blockHeader, validBlockBeneficiaryKeyPair)
+      val validateResult = blockHeaderValidator.validate(signedBlockHeader, validSignedBlockHeaderParent.header)
       if (gasUsed > validSignedBlockHeader.header.gasLimit) assert(validateResult == Left(HeaderGasUsedError))
       else assert(validateResult == Right(BlockHeaderValid))
     }
@@ -99,8 +102,9 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
     val UpperGasLimit = validSignedBlockHeaderParent.header.gasLimit + validSignedBlockHeaderParent.header.gasLimit / GasLimitBoundDivisor - 1
 
     forAll(bigIntGen) { gasLimit =>
-      val blockHeader = validSignedBlockHeader.copy(validSignedBlockHeader.header.copy(gasLimit = gasLimit))
-      val validateResult = blockHeaderValidator.validate(blockHeader, validSignedBlockHeaderParent.header)
+      val blockHeader = validSignedBlockHeader.header.copy(gasLimit = gasLimit)
+      val signedBlockHeader = SignedBlockHeader.sign(blockHeader, validBlockBeneficiaryKeyPair)
+      val validateResult = blockHeaderValidator.validate(signedBlockHeader, validSignedBlockHeaderParent.header)
       if (gasLimit < LowerGasLimit || gasLimit > UpperGasLimit)
         assert(validateResult == Left(HeaderGasLimitError))
       else assert(validateResult == Right(BlockHeaderValid))
@@ -113,8 +117,9 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
     (clockMock.now _).expects().returning(CurrentTime).anyNumberOfTimes()
 
     val validParent = validSignedBlockHeaderParent.header.copy(gasLimit = Long.MaxValue)
-    val invalidBlockHeader = validSignedBlockHeader.copy(validSignedBlockHeader.header.copy(gasLimit = BigInt(Long.MaxValue) + 1))
-    blockHeaderValidator.validate(invalidBlockHeader, validParent) shouldBe Left(HeaderGasLimitError)
+    val invalidBlockHeader = validSignedBlockHeader.header.copy(gasLimit = BigInt(Long.MaxValue) + 1)
+    val invalidSignedBlockHeader = SignedBlockHeader.sign(invalidBlockHeader, validBlockBeneficiaryKeyPair)
+    blockHeaderValidator.validate(invalidSignedBlockHeader, validParent) shouldBe Left(HeaderGasLimitError)
   }
 
   it should "return a failure if created based on invalid number" in new TestSetup {
@@ -123,8 +128,9 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
     (clockMock.now _).expects().returning(CurrentTime).anyNumberOfTimes()
 
     forAll(longGen) { number =>
-      val blockHeader = validSignedBlockHeader.copy(validSignedBlockHeader.header.copy(number = number))
-      val validateResult = blockHeaderValidator.validate(blockHeader, validSignedBlockHeaderParent.header)
+      val blockHeader = validSignedBlockHeader.header.copy(number = number)
+      val signedBlockHeader = SignedBlockHeader.sign(blockHeader, validBlockBeneficiaryKeyPair)
+      val validateResult = blockHeaderValidator.validate(signedBlockHeader, validSignedBlockHeaderParent.header)
       if (number != validSignedBlockHeaderParent.header.number + 1)
         assert(validateResult == Left(HeaderNumberError) || validateResult == Left(HeaderDifficultyError))
       else assert(validateResult == Right(BlockHeaderValid))
@@ -159,8 +165,9 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
     (slotCalculatorMock.getSlotStartingMillis _).expects(*).returning(CurrentTime.toMillis - 1).anyNumberOfTimes()
     (clockMock.now _).expects().returning(CurrentTime).anyNumberOfTimes()
 
-    val invalidBlockHeader = validSignedBlockHeader.copy(validSignedBlockHeader.header.copy(slotNumber = validSignedBlockHeaderParent.header.slotNumber - 1))
-    blockHeaderValidator.validate(invalidBlockHeader, validSignedBlockHeaderParent.header) shouldBe Left(HeaderSlotNumberError)
+    val invalidBlockHeader = validSignedBlockHeader.header.copy(slotNumber = validSignedBlockHeaderParent.header.slotNumber - 1)
+    val invalidSignedBlockHeader = SignedBlockHeader.sign(invalidBlockHeader, validBlockBeneficiaryKeyPair)
+    blockHeaderValidator.validate(invalidSignedBlockHeader, validSignedBlockHeaderParent.header) shouldBe Left(HeaderSlotNumberError)
   }
 
   it should "return a failure if the block is from a future slot" in new TestSetup {
@@ -176,8 +183,9 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
     (slotCalculatorMock.getSlotStartingMillis _).expects(*).returning(CurrentTime.toMillis - 1).anyNumberOfTimes()
     (clockMock.now _).expects().returning(CurrentTime).anyNumberOfTimes()
 
-    val invalidBlockHeader = validSignedBlockHeader.copy(validSignedBlockHeader.header.copy(slotNumber = validSignedBlockHeaderParent.header.slotNumber - 1))
-    blockHeaderValidator.validate(invalidBlockHeader, validSignedBlockHeaderParent.header) shouldBe Left(HeaderBeneficiaryError)
+    val invalidBlockHeader = validSignedBlockHeader.header.copy(slotNumber = validSignedBlockHeaderParent.header.slotNumber - 1)
+    val invalidSignedBlockHeader = SignedBlockHeader.sign(invalidBlockHeader, validBlockBeneficiaryKeyPair)
+    blockHeaderValidator.validate(invalidSignedBlockHeader, validSignedBlockHeaderParent.header) shouldBe Left(HeaderBeneficiaryError)
   }
 
   it should "return a failure if the block is signed with a signature different to the block beneficiary signature" in new TestSetup {

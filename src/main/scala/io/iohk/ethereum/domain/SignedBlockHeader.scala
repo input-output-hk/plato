@@ -46,9 +46,6 @@ object SignedBlockHeader {
   val negativePointSign = 27
   val newNegativePointSign = 35
   val positivePointSign = 28
-  val newPositivePointSign = 36
-  val valueForEmptyR = 0
-  val valueForEmptyS = 0
 
   def sign(blockHeader: BlockHeader, keyPair: AsymmetricCipherKeyPair): SignedBlockHeader = {
     val bytes = SignedBlockHeader.bytesToSign(blockHeader)
