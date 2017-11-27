@@ -88,7 +88,7 @@ trait OuroborosConfigBuilder {
 
 trait ElectionManagerBuilder {
   self: OuroborosConfigBuilder =>
-  lazy val electionManager = ElectionManagerImpl(ouroborosConfig.knownStakeholders)
+  lazy val electionManager = ElectionManagerImpl(ouroborosConfig)
 }
 
 trait KnownNodesManagerBuilder {

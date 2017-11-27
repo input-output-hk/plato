@@ -402,17 +402,25 @@ object PruningConfig {
 }
 
 trait OuroborosConfig {
-  val knownStakeholders: Seq[Address]
   val slotDuration: FiniteDuration
+  val slotMinerStakeholdersMapping: Map[BigInt, Seq[Address]]
 }
 
 object OuroborosConfig {
   def apply(etcClientConfig: com.typesafe.config.Config): OuroborosConfig = {
     val ouroborosConfig = etcClientConfig.getConfig("ouroboros")
     new OuroborosConfig {
-      override val knownStakeholders = Try(ouroborosConfig.getStringList("known-stakeholders").asScala.toList)
-          .toOption.getOrElse(List.empty).map(Address(_))
       override val slotDuration: FiniteDuration = ouroborosConfig.getDuration("slot-duration").toMillis.millis
+      override val slotMinerStakeholdersMapping: Map[BigInt, Seq[Address]] =
+        ouroborosConfig.getObject("slot-minerStakeHolders-mapping").asScala.map {
+          case (slotNumberString, stakeholders) =>
+            val slotNumber = BigInt(slotNumberString)
+            val allowedStakeholders = stakeholders.unwrapped()
+              .asInstanceOf[java.util.ArrayList[String]].asScala
+              .map(Address.apply).toList
+
+            (slotNumber, allowedStakeholders)
+        }.toMap
     }
   }
 }
