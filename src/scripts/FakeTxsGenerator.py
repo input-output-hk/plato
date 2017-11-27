@@ -1,6 +1,7 @@
 #
 # TODO:
 #   - Add better error handling
+#   - Check endpoint format
 #
 
 import argparse
@@ -9,8 +10,8 @@ from web3 import Web3, HTTPProvider
 from time import sleep
 from sys import exit
 
-
 default_txs_generation_interval = 2000
+default_endpoint = 'http://localhost:8546'
 default_logging_level = logging.DEBUG
 default_account_passphrase = '1234'
 default_tx_value = 0
@@ -27,15 +28,20 @@ def parse_args():
 
     parser = argparse.ArgumentParser()
     parser.add_argument('-i', '--interval', type = int, help = 'TXs generation interval in milliseconds')
+    parser.add_argument('-e', '--endpoint', help = 'Endpoint used for connection in the format http://<ip>[:<port>]')
     args = parser.parse_args()
 
     interval = args.interval
     if not interval:
         interval = default_txs_generation_interval
 
-    logging.info('Generating TXs every {} ms.'.format(interval))
+    endpoint = args.endpoint
+    if not endpoint:
+        endpoint = default_endpoint
 
-    return interval
+    logging.info('Generating TXs every {} ms. for endpoint {}'.format(interval, endpoint))
+
+    return interval, endpoint
 
 
 def create_account():
@@ -82,18 +88,12 @@ def ping_pong(sleep_time, account_address1, account_address2):
 
 logging.basicConfig(format = '%(asctime)s - %(levelname)s - %(message)s', level = default_logging_level)
 
-txs_generation_interval = parse_args()
+txs_generation_interval, txs_generation_endpoint = parse_args()
 
-web3 = Web3(HTTPProvider('http://localhost:8546'))
+web3 = Web3(HTTPProvider(txs_generation_endpoint))
 
 account_address1 = create_account()
 account_address2 = create_account()
-
-# NOTE: For testing purposes only:
-#account_address1 = '0xC9851452EC56d4B60ae8B09c1E2dC3537f1D8015'
-#account_address2 = '0x8E6516f2e9da8E36bd3aa62BDa457826BD88064b'
-#web3.personal.unlockAccount(account_address1, default_account_passphrase)
-#web3.personal.unlockAccount(account_address2, default_account_passphrase)
 
 sleep_time = txs_generation_interval / 1000.0
 while True:
