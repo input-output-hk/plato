@@ -1,6 +1,5 @@
 package io.iohk.ethereum.domain
 
-import java.math.BigInteger
 import akka.util.ByteString
 import io.iohk.ethereum.crypto
 import io.iohk.ethereum.crypto.{ECDSASignature, kec256}
@@ -47,17 +46,6 @@ object SignedBlockHeader {
   val negativePointSign = 27
   val newNegativePointSign = 35
   val positivePointSign = 28
-  val newPositivePointSign = 36
-  val valueForEmptyR = 0
-  val valueForEmptyS = 0
-
-  def apply(blockHeader: BlockHeader, pointSign: Byte, signatureRandom: ByteString, signature: ByteString): Option[SignedBlockHeader] = {
-    val blockHeaderSignature = ECDSASignature(r = new BigInteger(1, signatureRandom.toArray), s = new BigInteger(1, signature.toArray), v = pointSign)
-    for {
-      coinbase <- SignedBlockHeader.getSender(blockHeader, blockHeaderSignature)
-      if coinbase == Address(blockHeader.beneficiary)
-    } yield SignedBlockHeader(blockHeader, blockHeaderSignature)
-  }
 
   def sign(blockHeader: BlockHeader, keyPair: AsymmetricCipherKeyPair): SignedBlockHeader = {
     val bytes = SignedBlockHeader.bytesToSign(blockHeader)
@@ -67,7 +55,7 @@ object SignedBlockHeader {
     SignedBlockHeader(blockHeader, sig)
   }
 
-  private def getSender(blockHeader: BlockHeader, signature: ECDSASignature): Option[Address] = {
+  def getSender(blockHeader: BlockHeader, signature: ECDSASignature): Option[Address] = {
     val bytesToSign: Array[Byte] = SignedBlockHeader.bytesToSign(blockHeader)
     val recoveredPublicKey: Option[Array[Byte]] = signature.publicKey(bytesToSign)
     for {
