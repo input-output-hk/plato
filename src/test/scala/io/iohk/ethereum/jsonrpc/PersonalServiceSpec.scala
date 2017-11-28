@@ -1,7 +1,7 @@
 package io.iohk.ethereum.jsonrpc
 
 import java.time.Duration
-
+import akka.util.ByteString.{empty => bEmpty}
 import akka.actor.ActorSystem
 import akka.testkit.TestProbe
 import akka.util.ByteString
@@ -13,6 +13,7 @@ import io.iohk.ethereum.jsonrpc.JsonRpcErrors._
 import io.iohk.ethereum.jsonrpc.PersonalService._
 import io.iohk.ethereum.keystore.KeyStore.{DecryptionFailed, IOError, KeyStoreError}
 import io.iohk.ethereum.keystore.{KeyStore, Wallet}
+import io.iohk.ethereum.nodebuilder.SecureRandomBuilder
 import io.iohk.ethereum.transactions.PendingTransactionsManager._
 import io.iohk.ethereum.utils.{BlockchainConfig, DaoForkConfig, MonetaryPolicyConfig, TxPoolConfig}
 import io.iohk.ethereum.{Fixtures, NormalPatience, Timeouts}
@@ -85,6 +86,15 @@ class PersonalServiceSpec extends FlatSpec with Matchers with MockFactory with S
     val res = personal.unlockAccount(req).futureValue
 
     res shouldEqual Right(UnlockAccountResponse(true))
+  }
+
+  it should "unlock a miner account given a correct passphrase" in new TestSetup {
+    (keyStore.unlockAccount _ ).expects(address, passphrase).returning(Right(wallet))
+
+    val req = UnlockMinerAccountRequest(address, passphrase)
+    val res = personal.unlockMinerAccount(req).futureValue
+
+    res shouldEqual Right(UnlockMinerAccountResponse(true))
   }
 
   it should "send a transaction (given sender address and a passphrase)" in new TestSetup {
@@ -216,6 +226,41 @@ class PersonalServiceSpec extends FlatSpec with Matchers with MockFactory with S
     personal.unlockAccount(UnlockAccountRequest(address, passphrase, None)).futureValue
     val res = personal.sign(req).futureValue
     res shouldEqual Right(SignResponse(ECDSASignature(r, s, v)))
+  }
+
+  it should "sign a block using an unlocked miner account" in new TestSetup {
+
+    (keyStore.unlockAccount _ ).expects(minerAddress, passphrase)
+      .returning(Right(minerWallet))
+    personal.unlockMinerAccount(UnlockMinerAccountRequest(minerAddress, passphrase)).futureValue
+
+    val validBlockSignedByMiner = SignedBlockHeader.sign(validBlockHeader, minerWallet.keyPair)
+    personal.signBlockHeader(validBlockHeader, minerAddress) shouldEqual Option(validBlockSignedByMiner)
+  }
+
+  it should "return an error if signing a block using a locked miner account" in new TestSetup {
+    personal.signBlockHeader(validBlockHeader, minerAddress) shouldEqual None
+  }
+
+  it should "return an error if signing a block using an account unlocked for signing transactions but locked for mining" in new TestSetup {
+
+    (keyStore.unlockAccount _ ).expects(minerAddress, passphrase)
+      .returning(Right(wallet))
+    personal.unlockAccount(UnlockAccountRequest(minerAddress, passphrase, None)).futureValue
+
+    personal.signBlockHeader(validBlockHeader, minerAddress) shouldEqual None
+  }
+
+  it should "return an error if signing a message using a unlocked miner account" in new TestSetup {
+
+    (keyStore.unlockAccount _ ).expects(minerAddress, passphrase)
+      .returning(Right(minerWallet))
+    personal.unlockMinerAccount(UnlockMinerAccountRequest(minerAddress, passphrase)).futureValue
+
+    val message = ByteString(Hex.decode("deadbeaf"))
+    val req = SignRequest(message, minerAddress, None)
+    val res = personal.sign(req).futureValue
+    res shouldEqual Left(AccountLocked)
   }
 
   it should "return an error if signing a message using a locked account" in new TestSetup {
@@ -399,7 +444,7 @@ class PersonalServiceSpec extends FlatSpec with Matchers with MockFactory with S
   }
 
 
-  trait TestSetup {
+  trait TestSetup extends SecureRandomBuilder  {
     val prvKey = ByteString(Hex.decode("7a44789ed3cd85861c0bbf9693c7e1de1862dd4396c390147ecf1275099c6e6f"))
     val address = Address(Hex.decode("aa6826f00d01fe4085f0c3dd12778e206ce4e2ac"))
     val passphrase = "aaa"
@@ -410,12 +455,12 @@ class PersonalServiceSpec extends FlatSpec with Matchers with MockFactory with S
     val blockchainConfig = new BlockchainConfig{
       override val eip155BlockNumber: BigInt = 12345
       override val chainId: Byte = 0x03.toByte
+      override val homesteadBlockNumber: BigInt = 0
 
       //unused
       override val maxCodeSize: Option[BigInt] = None
       override val eip161BlockNumber: BigInt = 0
       override val frontierBlockNumber: BigInt = 0
-      override val homesteadBlockNumber: BigInt = 0
       override val eip150BlockNumber: BigInt = 0
       override val eip160BlockNumber: BigInt = 0
       override val eip106BlockNumber: BigInt = 0
@@ -432,6 +477,28 @@ class PersonalServiceSpec extends FlatSpec with Matchers with MockFactory with S
     val tx = TransactionRequest(from = address, to = Some(Address(42)), value = Some(txValue))
     val stx: SignedTransaction = wallet.signTx(tx.toTransaction(nonce), None)
     val chainSpecificStx: SignedTransaction = wallet.signTx(tx.toTransaction(nonce), Some(blockchainConfig.chainId))
+
+    val minerPrvKey = ByteString(Hex.decode("8b54789ed3cd85861c0bbf9693c7e1de1862dd4396c390147ecf1275099c6e6e"))
+    val minerAddress = Address(Hex.decode("bb7826f00d01fe4085f0c3dd12778e206ce4e2ad"))
+    val minerWallet = Wallet(minerAddress, minerPrvKey)
+    val validBlockHeader = BlockHeader(
+      parentHash = bEmpty,
+      ommersHash = bEmpty,
+      beneficiary = minerAddress.bytes,
+      stateRoot = bEmpty,
+      transactionsRoot = bEmpty,
+      receiptsRoot = bEmpty,
+      logsBloom = bEmpty,
+      difficulty = 1000000,
+      number = blockchainConfig.homesteadBlockNumber + 1,
+      gasLimit = 1000000,
+      gasUsed = 0,
+      unixTimestamp = 1486752441,
+      extraData = bEmpty,
+      mixHash = bEmpty,
+      nonce = bEmpty,
+      slotNumber = blockchainConfig.homesteadBlockNumber + 1
+    )
 
     implicit val system = ActorSystem("personal-service-test")
 
