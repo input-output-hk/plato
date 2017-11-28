@@ -34,6 +34,9 @@ object PersonalService {
   case class UnlockAccountRequest(address: Address, passphrase: String, duration: Option[Duration])
   case class UnlockAccountResponse(result: Boolean)
 
+  case class UnlockMinerAccountRequest(address: Address, passphrase: String)
+  case class UnlockMinerAccountResponse(result: Boolean)
+
   case class LockAccountRequest(address: Address)
   case class LockAccountResponse(result: Boolean)
 
@@ -73,6 +76,7 @@ class PersonalService(
   txPoolConfig: TxPoolConfig) {
 
   private val unlockedWallets: ExpiringMap[Address, Wallet] = ExpiringMap.empty(Duration.ofSeconds(defaultUnlockTime))
+  private val unlockedMinerWallets: scala.collection.mutable.Map[Address, Wallet] = scala.collection.mutable.Map.empty
 
   def importRawKey(req: ImportRawKeyRequest): ServiceResponse[ImportRawKeyResponse] = Future {
     for {
@@ -108,6 +112,15 @@ class PersonalService(
       }
   }
 
+  def unlockMinerAccount(request: UnlockMinerAccountRequest): ServiceResponse[UnlockMinerAccountResponse] = Future {
+    keyStore.unlockAccount(request.address, request.passphrase)
+      .left.map(handleError)
+      .map { wallet =>
+        unlockedMinerWallets += request.address -> wallet
+        UnlockMinerAccountResponse(true)
+      }
+  }
+
   def lockAccount(request: LockAccountRequest): ServiceResponse[LockAccountResponse] = Future.successful {
     unlockedWallets.remove(request.address)
     Right(LockAccountResponse(true))
@@ -130,12 +143,11 @@ class PersonalService(
   /**
     * FIXME: This is a bad design because breaks the semantic of the object. This method
     * should be in another abstraction that manage the "mining" accounts(MinerService). For doing these,
-    * we should refactor PersonalService, in order to separate unlockedWallet and move it
-    * to a different place (keyStorage?). Then PersonalService and MinerService
-    * should use the unlockedWallets from that source.
+    * we should refactor PersonalService, in order to separate unlockedMinerWallet and move it
+    * to a different place (keyStorage?).
     */
   def signBlockHeader(blockHeader: BlockHeader, address: Address): Option[SignedBlockHeader] =
-    unlockedWallets.get(address) map { wallet =>
+    unlockedMinerWallets.get(address) map { wallet =>
       SignedBlockHeader.sign(blockHeader, wallet.keyPair)
     }
 
