@@ -1,6 +1,7 @@
 package io.iohk.ethereum.jsonrpc
 
 import akka.util.ByteString
+import io.iohk.ethereum.crypto.ECDSASignature
 import io.iohk.ethereum.domain.{Block, SignedBlockHeader}
 import io.iohk.ethereum.network.p2p.messages.PV62.BlockBody
 
@@ -23,7 +24,8 @@ case class BlockResponse(
     gasUsed: BigInt,
     timestamp: BigInt,
     transactions: Either[Seq[ByteString], Seq[TransactionResponse]],
-    uncles: Seq[ByteString])
+    uncles: Seq[ByteString],
+    signature: ECDSASignature)
 
 object BlockResponse {
 
@@ -56,7 +58,8 @@ object BlockResponse {
       gasUsed = block.signedHeader.header.gasUsed,
       timestamp = block.signedHeader.header.unixTimestamp,
       transactions = transactions,
-      uncles = block.body.uncleNodesList.map(_.hash)
+      uncles = block.body.uncleNodesList.map(_.hash),
+      signature = block.signedHeader.signature
     )
   }
 
