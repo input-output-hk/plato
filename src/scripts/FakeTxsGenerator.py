@@ -67,7 +67,7 @@ def send_transaction(sender_address, recipient_address, value, sleep_time):
         'value': value})
 
     logging.debug('Sent TX with ID {} from {} to {} with value {}'
-        .format(tx_id.hex(), sender_address, recipient_address, value))
+        .format(tx_id, sender_address, recipient_address, value))
 
     sleep(sleep_time)
 
