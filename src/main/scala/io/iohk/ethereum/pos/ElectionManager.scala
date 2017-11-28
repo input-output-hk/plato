@@ -1,6 +1,7 @@
 package io.iohk.ethereum.pos
 
 import io.iohk.ethereum.domain.Address
+import io.iohk.ethereum.utils.OuroborosConfig
 
 trait ElectionManager {
 
@@ -19,14 +20,20 @@ trait ElectionManager {
 
 // TODO: Implement an Election manager that uses Follow the Satoshi.
 /**
-  * This is a "mock" implementation for an ElectionManager, That choose a slot leader from a list
+  * This is a "mock" implementation for an ElectionManager, that selects a slot leader from a list
   * of know stakeholders fixed in the system using a "round robin" criteria.
+  * The list of stakeholders considered at each slot can be configured to change through the configuration:
+  *   ouroborosConfig.slot-minerStakeHolders-mapping
   */
-case class ElectionManagerImpl(knownStakeholders: Seq[Address]) extends ElectionManager {
+case class ElectionManagerImpl(ouroborosConfig: OuroborosConfig) extends ElectionManager {
 
-  def verifyIsLeader(stakeholderAddress: Address, slotNumber: BigInt): Boolean = knownStakeholders.length match {
-    case length if length > 0 => stakeholderAddress == knownStakeholders(((slotNumber - 1) % length).toInt)
-    case _ => false
+  def verifyIsLeader(stakeholderAddress: Address, slotNumber: BigInt): Boolean = {
+    val minerStakeholders = MinerStakeholdersConfig.forSlot(slotNumber, ouroborosConfig)
+
+    minerStakeholders.length match {
+      case length if length > 0 => stakeholderAddress == minerStakeholders(((slotNumber - 1) % length).toInt)
+      case _ => false
+    }
   }
 
 }

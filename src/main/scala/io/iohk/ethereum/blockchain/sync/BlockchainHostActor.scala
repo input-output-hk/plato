@@ -2,13 +2,13 @@ package io.iohk.ethereum.blockchain.sync
 
 import akka.actor.{Actor, ActorLogging, ActorRef, Props}
 import akka.util.ByteString
-import io.iohk.ethereum.domain.{BlockHeader, Blockchain}
+import io.iohk.ethereum.domain.{Blockchain, SignedBlockHeader}
 import io.iohk.ethereum.network.PeerEventBusActor.PeerEvent.MessageFromPeer
 import io.iohk.ethereum.network.PeerEventBusActor.SubscriptionClassifier.MessageClassifier
 import io.iohk.ethereum.network.PeerEventBusActor.{PeerSelector, Subscribe}
 import io.iohk.ethereum.network.PeerManagerActor.PeerConfiguration
 import io.iohk.ethereum.network.p2p.{Message, MessageSerializable}
-import io.iohk.ethereum.network.p2p.messages.PV62.{BlockBodies, BlockHeaders, GetBlockBodies, GetBlockHeaders}
+import io.iohk.ethereum.network.p2p.messages.PV62._
 import io.iohk.ethereum.network.p2p.messages.PV63.{GetNodeData, GetReceipts, NodeData, Receipts}
 import io.iohk.ethereum.network.p2p.messages.PV63.MptNodeEncoders._
 import io.iohk.ethereum.network.EtcPeerManagerActor
@@ -20,7 +20,7 @@ import io.iohk.ethereum.network.EtcPeerManagerActor
 class BlockchainHostActor(blockchain: Blockchain, peerConfiguration: PeerConfiguration,
                           peerEventBusActor: ActorRef, etcPeerManagerActor: ActorRef) extends Actor with ActorLogging {
 
-  private val requestMsgsCodes = Set(GetNodeData.code, GetReceipts.code, GetBlockBodies.code, GetBlockHeaders.code)
+  private val requestMsgsCodes = Set(GetNodeData.code, GetReceipts.code, GetBlockBodies.code, GetSignedBlockHeaders.code)
   peerEventBusActor ! Subscribe(MessageClassifier(requestMsgsCodes, PeerSelector.AllPeers))
 
   override def receive: Receive = {
@@ -74,8 +74,8 @@ class BlockchainHostActor(blockchain: Blockchain, peerConfiguration: PeerConfigu
 
       Some(BlockBodies(blockBodies))
 
-    case request: GetBlockHeaders =>
-      val blockNumber = request.block.fold(a => Some(a), b => blockchain.getBlockHeaderByHash(b).map(_.number))
+    case request: GetSignedBlockHeaders =>
+      val blockNumber = request.block.fold(a => Some(a), b => blockchain.getSignedBlockHeaderByHash(b).map(_.header.number))
 
       blockNumber match {
         case Some(startBlockNumber) if startBlockNumber >= 0 && request.maxHeaders >= 0 && request.skip >= 0 =>
@@ -88,9 +88,9 @@ class BlockchainHostActor(blockchain: Blockchain, peerConfiguration: PeerConfigu
             startBlockNumber to (startBlockNumber + (request.skip + 1) * headersCount - 1) by (request.skip + 1)
           }
 
-          val blockHeaders: Seq[BlockHeader] = range.flatMap { a: BigInt => blockchain.getBlockHeaderByNumber(a) }
+          val blockHeaders: Seq[SignedBlockHeader] = range.flatMap { a: BigInt => blockchain.getSignedBlockHeaderByNumber(a) }
 
-          Some(BlockHeaders(blockHeaders))
+          Some(SignedBlockHeaders(blockHeaders))
 
         case _ =>
           log.warning("got request for block headers with invalid block hash/number: {}", request)

@@ -13,24 +13,28 @@ import org.scalatest.{FlatSpec, Matchers}
 import org.spongycastle.util.encoders.Hex
 import io.iohk.ethereum.validators.BlockHeaderValidatorImpl._
 import org.scalamock.scalatest.MockFactory
+import io.iohk.ethereum.nodebuilder.SecureRandomBuilder
+import io.iohk.ethereum.crypto.{generateKeyPair, kec256}
+import org.spongycastle.crypto.AsymmetricCipherKeyPair
+import org.spongycastle.crypto.params.ECPublicKeyParameters
 
 import scala.concurrent.duration._
 
-class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyChecks with ObjectGenerators with MockFactory {
+class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyChecks with ObjectGenerators with MockFactory with SecureRandomBuilder {
 
-  "BlockHeaderValidator" should "validate correctly formed BlockHeaders" in new TestSetup {
+  "BlockHeaderValidator" should "validate correctly formed SignedBlockHeaders" in new TestSetup {
     (electionManagerMock.verifyIsLeader _).expects(*, *).returning(true).anyNumberOfTimes()
     (slotCalculatorMock.getSlotStartingMillis _).expects(*).returning(CurrentTime.toMillis - 1).anyNumberOfTimes()
     (clockMock.now _).expects().returning(CurrentTime).anyNumberOfTimes()
 
-    blockHeaderValidator.validate(validBlockHeader, validBlockParent) match {
+    blockHeaderValidator.validate(validSignedBlockHeader, validSignedBlockHeaderParent.header) match {
       case Right(_) => succeed
       case _ => fail
     }
   }
 
   it should "return a failure if created based on invalid extra data" in new TestSetup {
-    (electionManagerMock.verifyIsLeader _).expects(*,*).returning(true).anyNumberOfTimes()
+    (electionManagerMock.verifyIsLeader _).expects(*, *).returning(true).anyNumberOfTimes()
     (slotCalculatorMock.getSlotStartingMillis _).expects(*).returning(CurrentTime.toMillis - 1).anyNumberOfTimes()
     (clockMock.now _).expects().returning(CurrentTime).anyNumberOfTimes()
 
@@ -38,170 +42,162 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
       MaxExtraDataSize + 1,
       MaxExtraDataSize + ExtraDataSizeLimit)
     ) { wrongExtraData =>
-      val invalidBlockHeader = validBlockHeader.copy(extraData = wrongExtraData)
-      assert(blockHeaderValidator.validate(invalidBlockHeader, validBlockParent) == Left(HeaderExtraDataError))
-    }
-  }
-
-  it should "validate DAO block (extra data)" in new TestSetup {
-    import Fixtures.Blocks._
-    (electionManagerMock.verifyIsLeader _).expects(*,*).returning(true).anyNumberOfTimes()
-    (slotCalculatorMock.getSlotStartingMillis _).expects(*).returning(CurrentTime.toMillis - 1).anyNumberOfTimes()
-    (clockMock.now _).expects().returning(CurrentTime).anyNumberOfTimes()
-
-    val cases = Table(
-      ("Block", "Parent Block", "Supports Dao Fork", "Valid"),
-      (DaoForkBlock.header, DaoParentBlock.header, false, true),
-      (DaoForkBlock.header, DaoParentBlock.header, true, false),
-      (ProDaoForkBlock.header, DaoParentBlock.header, true, true),
-      (ProDaoForkBlock.header, DaoParentBlock.header, false, true), // We don't care for extra data if no pro dao
-      (ProDaoForkBlock.header.copy(extraData = ByteString("Wrond DAO Extra")), DaoParentBlock.header, true, false),
-      // We need to check extradata up to 10 blocks after
-      (ProDaoBlock1920009Header, ProDaoBlock1920008Header, true, true),
-      (ProDaoBlock1920009Header.copy(extraData = ByteString("Wrond DAO Extra")), ProDaoBlock1920008Header, true, false),
-      (ProDaoBlock1920010Header, ProDaoBlock1920009Header, true, true)
-    )
-
-    forAll(cases) { (block, parentBlock, supportsDaoFork, valid ) =>
-      val blockHeaderValidator = new BlockHeaderValidatorImpl(createBlockchainConfig(supportsDaoFork), electionManagerMock, slotCalculatorMock, clockMock)
-      blockHeaderValidator.validate(block, parentBlock) match {
-        case Right(_) => assert(valid)
-        case Left(DaoHeaderExtraDataError) => assert(!valid)
-        case _ => fail()
-      }
+      val invalidBlockHeader = validSignedBlockHeader.header.copy(extraData = wrongExtraData)
+      val invalidSignedBlockHeader = SignedBlockHeader.sign(invalidBlockHeader, validBlockBeneficiaryKeyPair)
+      assert(blockHeaderValidator.validate(invalidSignedBlockHeader, validSignedBlockHeaderParent.header) == Left(HeaderExtraDataError))
     }
   }
 
   it should "return a failure if created based on invalid timestamp" in new TestSetup {
-    (electionManagerMock.verifyIsLeader _).expects(*,*).returning(true).anyNumberOfTimes()
+    (electionManagerMock.verifyIsLeader _).expects(*, *).returning(true).anyNumberOfTimes()
     (slotCalculatorMock.getSlotStartingMillis _).expects(*).returning(CurrentTime.toMillis - 1).anyNumberOfTimes()
     (clockMock.now _).expects().returning(CurrentTime).anyNumberOfTimes()
 
     forAll(longGen) { timestamp =>
-      val blockHeader = validBlockHeader.copy(unixTimestamp = timestamp)
-      val validateResult = blockHeaderValidator.validate(blockHeader, validBlockParent)
+      val blockHeaderWithInvalidTimestamp = validSignedBlockHeader.header.copy(unixTimestamp = timestamp)
+      val signedBlockHeaderWithInvalidTimestamp = SignedBlockHeader.sign(blockHeaderWithInvalidTimestamp, validBlockBeneficiaryKeyPair)
+      val validateResult = blockHeaderValidator.validate(signedBlockHeaderWithInvalidTimestamp, validSignedBlockHeaderParent.header)
       timestamp match {
-        case t if t <= validBlockParent.unixTimestamp => assert(validateResult == Left(HeaderTimestampError))
+        case t if t <= validSignedBlockHeaderParent.header.unixTimestamp => assert(validateResult == Left(HeaderTimestampError))
         case _ => assert(validateResult == Right(BlockHeaderValid))
       }
     }
   }
 
   it should "return a failure if created based on invalid difficulty" in new TestSetup {
-    (electionManagerMock.verifyIsLeader _).expects(*,*).returning(true).anyNumberOfTimes()
+    (electionManagerMock.verifyIsLeader _).expects(*, *).returning(true).anyNumberOfTimes()
     (slotCalculatorMock.getSlotStartingMillis _).expects(*).returning(CurrentTime.toMillis - 1).anyNumberOfTimes()
     (clockMock.now _).expects().returning(CurrentTime).anyNumberOfTimes()
 
     forAll(bigIntGen) { difficulty =>
-      val blockHeader = validBlockHeader.copy(difficulty = difficulty)
-      val validateResult = blockHeaderValidator.validate(blockHeader, validBlockParent)
-      if(difficulty != validBlockHeader.difficulty) assert(validateResult == Left(HeaderDifficultyError))
+      val blockHeader = validSignedBlockHeader.header.copy(difficulty = difficulty)
+      val signedBlockHeader = SignedBlockHeader.sign(blockHeader, validBlockBeneficiaryKeyPair)
+      val validateResult = blockHeaderValidator.validate(signedBlockHeader, validSignedBlockHeaderParent.header)
+      if (difficulty != validSignedBlockHeader.header.difficulty) assert(validateResult == Left(HeaderDifficultyError))
       else assert(validateResult == Right(BlockHeaderValid))
     }
   }
 
   it should "return a failure if created based on invalid gas used" in new TestSetup {
-    (electionManagerMock.verifyIsLeader _).expects(*,*).returning(true).anyNumberOfTimes()
+    (electionManagerMock.verifyIsLeader _).expects(*, *).returning(true).anyNumberOfTimes()
     (slotCalculatorMock.getSlotStartingMillis _).expects(*).returning(CurrentTime.toMillis - 1).anyNumberOfTimes()
     (clockMock.now _).expects().returning(CurrentTime).anyNumberOfTimes()
 
     forAll(bigIntGen) { gasUsed =>
-      val blockHeader = validBlockHeader.copy(gasUsed = gasUsed)
-      val validateResult = blockHeaderValidator.validate(blockHeader, validBlockParent)
-      if(gasUsed > validBlockHeader.gasLimit) assert(validateResult == Left(HeaderGasUsedError))
+      val blockHeader = validSignedBlockHeader.header.copy(gasUsed = gasUsed)
+      val signedBlockHeader = SignedBlockHeader.sign(blockHeader, validBlockBeneficiaryKeyPair)
+      val validateResult = blockHeaderValidator.validate(signedBlockHeader, validSignedBlockHeaderParent.header)
+      if (gasUsed > validSignedBlockHeader.header.gasLimit) assert(validateResult == Left(HeaderGasUsedError))
       else assert(validateResult == Right(BlockHeaderValid))
     }
   }
 
   it should "return a failure if created based on invalid gas limit" in new TestSetup {
-    (electionManagerMock.verifyIsLeader _).expects(*,*).returning(true).anyNumberOfTimes()
+    (electionManagerMock.verifyIsLeader _).expects(*, *).returning(true).anyNumberOfTimes()
     (slotCalculatorMock.getSlotStartingMillis _).expects(*).returning(CurrentTime.toMillis - 1).anyNumberOfTimes()
     (clockMock.now _).expects().returning(CurrentTime).anyNumberOfTimes()
 
     val LowerGasLimit = MinGasLimit.max(
-      validBlockParent.gasLimit - validBlockParent.gasLimit / GasLimitBoundDivisor + 1)
-    val UpperGasLimit = validBlockParent.gasLimit + validBlockParent.gasLimit / GasLimitBoundDivisor - 1
+      validSignedBlockHeaderParent.header.gasLimit - validSignedBlockHeaderParent.header.gasLimit / GasLimitBoundDivisor + 1)
+    val UpperGasLimit = validSignedBlockHeaderParent.header.gasLimit + validSignedBlockHeaderParent.header.gasLimit / GasLimitBoundDivisor - 1
 
     forAll(bigIntGen) { gasLimit =>
-      val blockHeader = validBlockHeader.copy(gasLimit = gasLimit)
-      val validateResult = blockHeaderValidator.validate(blockHeader, validBlockParent)
-      if(gasLimit < LowerGasLimit || gasLimit > UpperGasLimit)
+      val blockHeader = validSignedBlockHeader.header.copy(gasLimit = gasLimit)
+      val signedBlockHeader = SignedBlockHeader.sign(blockHeader, validBlockBeneficiaryKeyPair)
+      val validateResult = blockHeaderValidator.validate(signedBlockHeader, validSignedBlockHeaderParent.header)
+      if (gasLimit < LowerGasLimit || gasLimit > UpperGasLimit)
         assert(validateResult == Left(HeaderGasLimitError))
       else assert(validateResult == Right(BlockHeaderValid))
     }
   }
 
   it should "return a failure if created with gas limit above threshold and block number >= eip106 block number" in new TestSetup {
-    (electionManagerMock.verifyIsLeader _).expects(*,*).returning(true).anyNumberOfTimes()
+    (electionManagerMock.verifyIsLeader _).expects(*, *).returning(true).anyNumberOfTimes()
     (slotCalculatorMock.getSlotStartingMillis _).expects(*).returning(CurrentTime.toMillis - 1).anyNumberOfTimes()
     (clockMock.now _).expects().returning(CurrentTime).anyNumberOfTimes()
 
-    val validParent = validBlockParent.copy(gasLimit = Long.MaxValue)
-    val invalidBlockHeader = validBlockHeader.copy(gasLimit = BigInt(Long.MaxValue) + 1)
-    blockHeaderValidator.validate(invalidBlockHeader, validParent) shouldBe Left(HeaderGasLimitError)
+    val validParent = validSignedBlockHeaderParent.header.copy(gasLimit = Long.MaxValue)
+    val invalidBlockHeader = validSignedBlockHeader.header.copy(gasLimit = BigInt(Long.MaxValue) + 1)
+    val invalidSignedBlockHeader = SignedBlockHeader.sign(invalidBlockHeader, validBlockBeneficiaryKeyPair)
+    blockHeaderValidator.validate(invalidSignedBlockHeader, validParent) shouldBe Left(HeaderGasLimitError)
   }
 
   it should "return a failure if created based on invalid number" in new TestSetup {
-    (electionManagerMock.verifyIsLeader _).expects(*,*).returning(true).anyNumberOfTimes()
+    (electionManagerMock.verifyIsLeader _).expects(*, *).returning(true).anyNumberOfTimes()
     (slotCalculatorMock.getSlotStartingMillis _).expects(*).returning(CurrentTime.toMillis - 1).anyNumberOfTimes()
     (clockMock.now _).expects().returning(CurrentTime).anyNumberOfTimes()
 
     forAll(longGen) { number =>
-      val blockHeader = validBlockHeader.copy(number = number)
-      val validateResult = blockHeaderValidator.validate(blockHeader, validBlockParent)
-      if(number != validBlockParent.number + 1)
+      val blockHeader = validSignedBlockHeader.header.copy(number = number)
+      val signedBlockHeader = SignedBlockHeader.sign(blockHeader, validBlockBeneficiaryKeyPair)
+      val validateResult = blockHeaderValidator.validate(signedBlockHeader, validSignedBlockHeaderParent.header)
+      if (number != validSignedBlockHeaderParent.header.number + 1)
         assert(validateResult == Left(HeaderNumberError) || validateResult == Left(HeaderDifficultyError))
       else assert(validateResult == Right(BlockHeaderValid))
     }
   }
 
   it should "validate correctly a block whose parent is in storage" in new TestSetup {
-    (electionManagerMock.verifyIsLeader _).expects(*,*).returning(true).anyNumberOfTimes()
+    (electionManagerMock.verifyIsLeader _).expects(*, *).returning(true).anyNumberOfTimes()
     (slotCalculatorMock.getSlotStartingMillis _).expects(*).returning(CurrentTime.toMillis - 1).anyNumberOfTimes()
     (clockMock.now _).expects().returning(CurrentTime).anyNumberOfTimes()
 
-    blockchain.save(validBlockParent)
-    blockHeaderValidator.validate(validBlockHeader, blockchain) match {
-      case Right(_)  => succeed
+    blockchain.save(validSignedBlockHeaderParent)
+    blockHeaderValidator.validate(validSignedBlockHeader, blockchain) match {
+      case Right(_) => succeed
       case _ => fail
     }
   }
 
   it should "return a failure if the parent's header is not in storage" in new TestSetup {
-    (electionManagerMock.verifyIsLeader _).expects(*,*).returning(true).anyNumberOfTimes()
+    (electionManagerMock.verifyIsLeader _).expects(*, *).returning(true).anyNumberOfTimes()
     (slotCalculatorMock.getSlotStartingMillis _).expects(*).returning(CurrentTime.toMillis - 1).anyNumberOfTimes()
     (clockMock.now _).expects().returning(CurrentTime).anyNumberOfTimes()
 
-    blockHeaderValidator.validate(validBlockHeader, blockchain) match {
+    blockHeaderValidator.validate(validSignedBlockHeader, blockchain) match {
       case Left(HeaderParentNotFoundError) => succeed
       case _ => fail
     }
   }
 
   it should "return a failure if the slot number is lower than it's parent's" in new TestSetup {
-    (electionManagerMock.verifyIsLeader _).expects(*,*).returning(true).anyNumberOfTimes()
+    (electionManagerMock.verifyIsLeader _).expects(*, *).returning(true).anyNumberOfTimes()
     (slotCalculatorMock.getSlotStartingMillis _).expects(*).returning(CurrentTime.toMillis - 1).anyNumberOfTimes()
     (clockMock.now _).expects().returning(CurrentTime).anyNumberOfTimes()
 
-    val invalidBlockHeader = validBlockHeader.copy(slotNumber = validBlockParent.slotNumber - 1)
-    blockHeaderValidator.validate(invalidBlockHeader, validBlockParent) shouldBe Left(HeaderSlotNumberError)
+    val invalidBlockHeader = validSignedBlockHeader.header.copy(slotNumber = validSignedBlockHeaderParent.header.slotNumber - 1)
+    val invalidSignedBlockHeader = SignedBlockHeader.sign(invalidBlockHeader, validBlockBeneficiaryKeyPair)
+    blockHeaderValidator.validate(invalidSignedBlockHeader, validSignedBlockHeaderParent.header) shouldBe Left(HeaderSlotNumberError)
   }
 
   it should "return a failure if the block is from a future slot" in new TestSetup {
-    (electionManagerMock.verifyIsLeader _).expects(*,*).returning(true).anyNumberOfTimes()
+    (electionManagerMock.verifyIsLeader _).expects(*, *).returning(true).anyNumberOfTimes()
     (slotCalculatorMock.getSlotStartingMillis _).expects(*).returning(CurrentTime.toMillis).anyNumberOfTimes()
     (clockMock.now _).expects().returning(CurrentTime - 1.millis).anyNumberOfTimes()
 
-    blockHeaderValidator.validate(validBlockHeader, validBlockParent) shouldBe Left(HeaderSlotNumberError)
+    blockHeaderValidator.validate(validSignedBlockHeader, validSignedBlockHeaderParent.header) shouldBe Left(HeaderSlotNumberError)
   }
 
   it should "return a failure if the block beneficiary wasn't the slot leader" in new TestSetup {
-    (electionManagerMock.verifyIsLeader _).expects(*,*).returning(false).anyNumberOfTimes()
+    (electionManagerMock.verifyIsLeader _).expects(*, *).returning(false).anyNumberOfTimes()
     (slotCalculatorMock.getSlotStartingMillis _).expects(*).returning(CurrentTime.toMillis - 1).anyNumberOfTimes()
     (clockMock.now _).expects().returning(CurrentTime).anyNumberOfTimes()
 
-    val invalidBlockHeader = validBlockHeader.copy(slotNumber = validBlockParent.slotNumber - 1)
-    blockHeaderValidator.validate(invalidBlockHeader, validBlockParent) shouldBe Left(HeaderBeneficiaryError)
+    val invalidBlockHeader = validSignedBlockHeader.header.copy(slotNumber = validSignedBlockHeaderParent.header.slotNumber - 1)
+    val invalidSignedBlockHeader = SignedBlockHeader.sign(invalidBlockHeader, validBlockBeneficiaryKeyPair)
+    blockHeaderValidator.validate(invalidSignedBlockHeader, validSignedBlockHeaderParent.header) shouldBe Left(HeaderBeneficiaryError)
+  }
+
+  it should "return a failure if the block is signed with a signature different to the block beneficiary signature" in new TestSetup {
+
+    val anotherBeneficiaryKeyPair: AsymmetricCipherKeyPair = generateKeyPair(secureRandom)
+    val signedBlockHeaderWithInvalidSignature = SignedBlockHeader.sign(validBlockHeader, anotherBeneficiaryKeyPair)
+
+    (electionManagerMock.verifyIsLeader _).expects(*, *).returning(true).anyNumberOfTimes()
+    (slotCalculatorMock.getSlotStartingMillis _).expects(*).returning(CurrentTime.toMillis - 1).anyNumberOfTimes()
+    (clockMock.now _).expects().returning(CurrentTime).anyNumberOfTimes()
+
+    blockHeaderValidator.validate(signedBlockHeaderWithInvalidSignature, validSignedBlockHeaderParent.header) shouldBe Left(SignedHeaderSignatureError)
   }
 
   trait TestSetup extends EphemBlockchainTestSetup {
@@ -222,10 +218,11 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
     val CurrentTime = 2.millis
   }
 
-  val pausedDifficultyBombBlock = BlockHeader(
+  val pausedDifficultyBombBlockBeneficiaryKeyPair: AsymmetricCipherKeyPair = generateKeyPair(secureRandom)
+  val pausedDifficultyBombBlockHeader = BlockHeader(
     parentHash = ByteString(Hex.decode("77af90df2b60071da7f11060747b6590a3bc2f357da4addccb5eef7cb8c2b723")),
     ommersHash = ByteString(Hex.decode("1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347")),
-    beneficiary = ByteString(Hex.decode("10807cacf99ac84b7b8f9b4077e3a11ee8880bf9")),
+    beneficiary = getAddressBytesFromKeyPair(pausedDifficultyBombBlockBeneficiaryKeyPair),
     stateRoot = ByteString(Hex.decode("32deebbf585e9b0d0153b96d62283e903c10fac41fc4181438e29732c490ac6e")),
     transactionsRoot = ByteString(Hex.decode("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")),
     receiptsRoot = ByteString(Hex.decode("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")),
@@ -240,11 +237,13 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
     nonce = ByteString(Hex.decode("81d6a5e8029f9446")),
     slotNumber = 3582022
   )
+  val pausedDifficultyBombBlockSignedBlockHProDaoBlock1920009KeyPaireader = SignedBlockHeader.sign(pausedDifficultyBombBlockHeader, pausedDifficultyBombBlockBeneficiaryKeyPair)
 
-  val pausedDifficultyBombBlockParent = BlockHeader(
+  val pausedDifficultyBombBlockParentKeyPair: AsymmetricCipherKeyPair = generateKeyPair(secureRandom)
+  val pausedDifficultyBombBlockParentBlockHeader = BlockHeader(
     parentHash = ByteString(Hex.decode("e6e90c1ba10df710365a2ae9f899bd787416d98f19874f4cb1a62f09c3b8277d")),
     ommersHash = ByteString(Hex.decode("1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347")),
-    beneficiary = ByteString(Hex.decode("4c2b4e716883a2c3f6b980b70b577e54b9441060")),
+    beneficiary = getAddressBytesFromKeyPair(pausedDifficultyBombBlockParentKeyPair),
     stateRoot = ByteString(Hex.decode("0920dc025715c278dc297aa7b2d1bf5a60666d92be22d338135d13571539fad7")),
     transactionsRoot = ByteString(Hex.decode("6616c23aeb486dd47aca667814ffed831553c7322440913b95847235a4c3bb97")),
     receiptsRoot = ByteString(Hex.decode("5fa90473cd08a08fc766329651d81bb6e4ef2bb330cf90c3025927a3bafe0c57")),
@@ -259,11 +258,13 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
     nonce = ByteString(Hex.decode("83e2d9b401cdfa77")),
     slotNumber = 3582021
   )
+  val pausedDifficultyBombBlockParent = SignedBlockHeader.sign(pausedDifficultyBombBlockParentBlockHeader, pausedDifficultyBombBlockParentKeyPair)
 
-  val validBlockParent = BlockHeader(
+  val validBlockParentBeneficiaryKeyPair: AsymmetricCipherKeyPair = generateKeyPair(secureRandom)
+  val validBlockParentBlockHeader = BlockHeader(
     parentHash = ByteString(Hex.decode("677a5fb51d52321b03552e3c667f602cc489d15fc1d7824445aee6d94a9db2e7")),
     ommersHash = ByteString(Hex.decode("1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347")),
-    beneficiary = ByteString(Hex.decode("95f484419881c6e9b6de7fb3f8ad03763bd49a89")),
+    beneficiary = getAddressBytesFromKeyPair(validBlockParentBeneficiaryKeyPair),
     stateRoot = ByteString(Hex.decode("cddeeb071e2f69ad765406fb7c96c0cd42ddfc6ec54535822b564906f9e38e44")),
     transactionsRoot = ByteString(Hex.decode("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")),
     receiptsRoot = ByteString(Hex.decode("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")),
@@ -278,11 +279,13 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
     nonce = ByteString(Hex.decode("3fc7bc671f7cee70")),
     slotNumber = 19
   )
+  val validSignedBlockHeaderParent = SignedBlockHeader.sign(validBlockParentBlockHeader, validBlockParentBeneficiaryKeyPair)
 
+  val validBlockBeneficiaryKeyPair: AsymmetricCipherKeyPair = generateKeyPair(secureRandom)
   val validBlockHeader = BlockHeader(
-    parentHash = validBlockParent.hash,
+    parentHash = validSignedBlockHeaderParent.hash,
     ommersHash = ByteString(Hex.decode("1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347")),
-    beneficiary = ByteString(Hex.decode("95f484419881c6e9b6de7fb3f8ad03763bd49a89")),
+    beneficiary = getAddressBytesFromKeyPair(validBlockBeneficiaryKeyPair),
     stateRoot = ByteString(Hex.decode("634a2b20c9e02afdda7157afe384306c5acc4fb9c09b45dc0203c0fbb2fed0e6")),
     transactionsRoot = ByteString(Hex.decode("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")),
     receiptsRoot = ByteString(Hex.decode("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")),
@@ -297,6 +300,7 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
     nonce = ByteString(Hex.decode("797a8f3a494f937b")),
     slotNumber = 20
   )
+  val validSignedBlockHeader = SignedBlockHeader.sign(validBlockHeader, validBlockBeneficiaryKeyPair)
 
   def createBlockchainConfig(supportsDaoFork: Boolean = false): BlockchainConfig =
     new BlockchainConfig {
@@ -309,11 +313,11 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
       override val difficultyBombContinueBlockNumber: BigInt = 5000000
 
       override val daoForkConfig: Option[DaoForkConfig] = Some(new DaoForkConfig {
-        override val blockExtraData: Option[ByteString] = if(supportsDaoFork) Some(ProDaoForkBlock.header.extraData) else None
+        override val blockExtraData: Option[ByteString] = if (supportsDaoFork) Some(ProDaoForkBlock.signedHeader.header.extraData) else None
         override val range: Int = 10
         override val drainList: Seq[Address] = Nil
-        override val forkBlockHash: ByteString = if(supportsDaoFork) ProDaoForkBlock.header.hash else DaoForkBlock.header.hash
-        override val forkBlockNumber: BigInt = DaoForkBlock.header.number
+        override val forkBlockHash: ByteString = if (supportsDaoFork) ProDaoForkBlock.signedHeader.hash else DaoForkBlock.signedHeader.hash
+        override val forkBlockNumber: BigInt = DaoForkBlock.signedHeader.header.number
         override val refundContract: Option[Address] = None
       })
 
@@ -331,10 +335,11 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
       val gasTieBreaker: Boolean = false
     }
 
-  val ProDaoBlock1920008Header = BlockHeader(
+  val ProDaoBlock1920008KeyPair: AsymmetricCipherKeyPair = generateKeyPair(secureRandom)
+  val ProDaoBlock1920008BlockHeader = BlockHeader(
     parentHash = ByteString(Hex.decode("05c45c9671ee31736b9f37ee98faa72c89e314059ecff3257206e6ab498eb9d1")),
     ommersHash = ByteString(Hex.decode("1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347")),
-    beneficiary = ByteString(Hex.decode("2a65aca4d5fc5b5c859090a6c34d164135398226")),
+    beneficiary = getAddressBytesFromKeyPair(ProDaoBlock1920008KeyPair),
     stateRoot = ByteString(Hex.decode("fa8d3b3cbd37caba2faf09d5e472ae6c47a58d846751bc72306166a71d0fa4fa")),
     transactionsRoot = ByteString(Hex.decode("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")),
     receiptsRoot = ByteString(Hex.decode("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")),
@@ -349,11 +354,13 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
     nonce = ByteString(Hex.decode("c207c8381305bef2")),
     slotNumber = 1920008
   )
+  val ProDaoBlock1920008Header = SignedBlockHeader.sign(ProDaoBlock1920008BlockHeader, ProDaoBlock1920008KeyPair)
 
-  val ProDaoBlock1920009Header = BlockHeader(
+  val ProDaoBlock1920009KeyPair: AsymmetricCipherKeyPair = generateKeyPair(secureRandom)
+  val ProDaoBlock1920009BlockHeader = BlockHeader(
     parentHash = ProDaoBlock1920008Header.hash,
     ommersHash = ByteString(Hex.decode("808d06176049aecfd504197dde49f46c3dd75f1af055e417d100228162eefdd8")),
-    beneficiary = ByteString(Hex.decode("ea674fdde714fd979de3edf0f56aa9716b898ec8")),
+    beneficiary = getAddressBytesFromKeyPair(ProDaoBlock1920009KeyPair),
     stateRoot = ByteString(Hex.decode("49eb333152713b78d920440ef065ed7f681611e0c2e6933d657d6f4a7f1936ee")),
     transactionsRoot = ByteString(Hex.decode("a8060f1391fd4cbde4b03d83b32a1bda445578cd6ec6b7982db20c499ed3682b")),
     receiptsRoot = ByteString(Hex.decode("ab66b1986e713eaf5621059e79f04ba9c528187c1b9da969f46442c3f915c120")),
@@ -368,11 +375,13 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
     nonce = ByteString(Hex.decode("2b4b464c0a4da82a")),
     slotNumber = 1920009
   )
+  val ProDaoBlock1920009Header = SignedBlockHeader.sign(ProDaoBlock1920009BlockHeader, ProDaoBlock1920009KeyPair)
 
-  val ProDaoBlock1920010Header = BlockHeader(
+  val ProDaoBlock1920010KeyPair: AsymmetricCipherKeyPair = generateKeyPair(secureRandom)
+  val ProDaoBlock1920010BlockHeader = BlockHeader(
     parentHash = ProDaoBlock1920009Header.hash,
     ommersHash = ByteString(Hex.decode("1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347")),
-    beneficiary = ByteString(Hex.decode("4bb96091ee9d802ed039c4d1a5f6216f90f81b01")),
+    beneficiary = getAddressBytesFromKeyPair(ProDaoBlock1920010KeyPair),
     stateRoot = ByteString(Hex.decode("6ee63abee7416d3a671bcbefa01aa5d4ea427e246d548e15c5f3d9a108e738fd")),
     transactionsRoot = ByteString(Hex.decode("0c6d4a643ed081f92e384a5853f14d7f5ff5d68b65d0c90b46159584a80effe0")),
     receiptsRoot = ByteString(Hex.decode("a7d1ddb80060d4b77c07007e9a9f0b83413bd2c5de71501683ba4764982eef4b")),
@@ -387,6 +396,8 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
     nonce = ByteString(Hex.decode("c7de19e00a8c3e32")),
     slotNumber = 1920010
   )
+  val ProDaoBlock1920010Header = SignedBlockHeader.sign(ProDaoBlock1920010BlockHeader, ProDaoBlock1920010KeyPair)
 
-
+  private def getAddressBytesFromKeyPair(keyPair: AsymmetricCipherKeyPair): ByteString =
+    Address(kec256(keyPair.getPublic.asInstanceOf[ECPublicKeyParameters].getQ.getEncoded(false).tail)).bytes
 }

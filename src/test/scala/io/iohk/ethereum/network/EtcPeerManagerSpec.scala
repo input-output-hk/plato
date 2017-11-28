@@ -8,7 +8,7 @@ import akka.util.ByteString
 import io.iohk.ethereum.Fixtures
 import io.iohk.ethereum.Fixtures.Blocks.DaoForkBlock
 import io.iohk.ethereum.blockchain.sync.EphemBlockchainTestSetup
-import io.iohk.ethereum.domain.{Block, BlockHeader}
+import io.iohk.ethereum.domain.{Block, SignedBlockHeader}
 import io.iohk.ethereum.network.PeerEventBusActor.PeerEvent.{MessageFromPeer, PeerDisconnected, PeerHandshakeSuccessful}
 import io.iohk.ethereum.network.PeerEventBusActor.{PeerSelector, Subscribe}
 import io.iohk.ethereum.network.PeerEventBusActor.SubscriptionClassifier._
@@ -46,10 +46,10 @@ class EtcPeerManagerSpec extends FlatSpec with Matchers {
 
     //given
     val newBlockTD = 300
-    val firstHeader: BlockHeader = baseBlockHeader.copy(number = peer1Info.maxBlockNumber + 4)
+    val firstHeader: SignedBlockHeader = baseBlockHeader.copy(baseBlockHeader.header.copy(number = peer1Info.maxBlockNumber + 4))
     val firstBlock = NewBlock(Block(firstHeader, BlockBody(Nil, Nil)), newBlockTD)
 
-    val secondHeader: BlockHeader = baseBlockHeader.copy(number = peer2Info.maxBlockNumber + 2)
+    val secondHeader: SignedBlockHeader = baseBlockHeader.copy(baseBlockHeader.header.copy(number = peer1Info.maxBlockNumber + 2))
     val secondBlock = NewBlock(Block(secondHeader, BlockBody(Nil, Nil)), newBlockTD)
 
     //when
@@ -69,11 +69,11 @@ class EtcPeerManagerSpec extends FlatSpec with Matchers {
     setupNewPeer(peer1, peer1Probe, peer1Info)
 
     //given
-    val firstHeader: BlockHeader = baseBlockHeader.copy(number = peer1Info.maxBlockNumber + 4)
-    val secondHeader: BlockHeader = baseBlockHeader.copy(number = peer1Info.maxBlockNumber + 2)
+    val firstHeader: SignedBlockHeader = baseBlockHeader.copy(baseBlockHeader.header.copy(number = peer1Info.maxBlockNumber + 4))
+    val secondHeader: SignedBlockHeader = baseBlockHeader.copy(baseBlockHeader.header.copy(number = peer1Info.maxBlockNumber + 2))
 
     //when
-    peersInfoHolder ! MessageFromPeer(BlockHeaders(Seq(firstHeader, secondHeader, blockchain.genesisHeader)), peer1.id)
+    peersInfoHolder ! MessageFromPeer(SignedBlockHeaders(Seq(firstHeader, secondHeader, blockchain.genesisSignedHeader)), peer1.id)
 
     //then
     requestSender.send(peersInfoHolder, PeerInfoRequest(peer1.id))
@@ -101,10 +101,10 @@ class EtcPeerManagerSpec extends FlatSpec with Matchers {
     setupNewPeer(peer1, peer1Probe, peer1Info)
 
     //given
-    val firstHeader: BlockHeader = baseBlockHeader.copy(number = peer1Info.maxBlockNumber + 4)
+    val firstHeader: SignedBlockHeader = baseBlockHeader.copy(baseBlockHeader.header.copy(number = peer1Info.maxBlockNumber + 4))
     val firstBlock = NewBlock(Block(firstHeader, BlockBody(Nil, Nil)), 300)
 
-    val secondHeader: BlockHeader = baseBlockHeader.copy(number = peer1Info.maxBlockNumber + 2)
+    val secondHeader: SignedBlockHeader = baseBlockHeader.copy(baseBlockHeader.header.copy(number = peer1Info.maxBlockNumber + 2))
     val secondBlock = NewBlock(Block(secondHeader, BlockBody(Nil, Nil)), 300)
 
     //when
@@ -125,19 +125,19 @@ class EtcPeerManagerSpec extends FlatSpec with Matchers {
     setupNewPeer(peer1, peer1Probe, peer1Info)
 
     //given
-    val firstHeader: BlockHeader = baseBlockHeader.copy(number = peer1Info.maxBlockNumber + 4)
-    val secondHeader: BlockHeader = baseBlockHeader.copy(number = peer1Info.maxBlockNumber + 2)
+    val firstHeader: SignedBlockHeader = baseBlockHeader.copy(baseBlockHeader.header.copy(number = peer1Info.maxBlockNumber + 4))
+    val secondHeader: SignedBlockHeader = baseBlockHeader.copy(baseBlockHeader.header.copy(number = peer1Info.maxBlockNumber + 2))
 
     //when
-    peersInfoHolder ! EtcPeerManagerActor.SendMessage(BlockHeaders(Seq(firstHeader)), peer1.id)
-    peersInfoHolder ! EtcPeerManagerActor.SendMessage(BlockHeaders(Seq(secondHeader)), peer1.id)
+    peersInfoHolder ! EtcPeerManagerActor.SendMessage(SignedBlockHeaders(Seq(firstHeader)), peer1.id)
+    peersInfoHolder ! EtcPeerManagerActor.SendMessage(SignedBlockHeaders(Seq(secondHeader)), peer1.id)
 
     //then
     requestSender.send(peersInfoHolder, PeerInfoRequest(peer1.id))
     requestSender.expectMsg(PeerInfoResponse(Some(peer1Info.withMaxBlockNumber(peer1Info.maxBlockNumber + 4))))
     peerManager.expectMsgAllOf(
-      PeerManagerActor.SendMessage(BlockHeaders(Seq(firstHeader)), peer1.id),
-      PeerManagerActor.SendMessage(BlockHeaders(Seq(secondHeader)), peer1.id)
+      PeerManagerActor.SendMessage(SignedBlockHeaders(Seq(firstHeader)), peer1.id),
+      PeerManagerActor.SendMessage(SignedBlockHeaders(Seq(secondHeader)), peer1.id)
     )
   }
 
@@ -182,10 +182,10 @@ class EtcPeerManagerSpec extends FlatSpec with Matchers {
     setupNewPeer(peer1, peer1Probe, peer1Info)
 
     //given
-    val blockHeaders = BlockHeaders(Seq(DaoForkBlock.header))
+    val signedBlockHeaders: SignedBlockHeaders = SignedBlockHeaders(Seq(DaoForkBlock.signedHeader))
 
     //when
-    peersInfoHolder ! MessageFromPeer(blockHeaders, peer1.id)
+    peersInfoHolder ! MessageFromPeer(signedBlockHeaders, peer1.id)
 
     //then
     requestSender.send(peersInfoHolder, PeerInfoRequest(peer1.id))
@@ -230,7 +230,7 @@ class EtcPeerManagerSpec extends FlatSpec with Matchers {
   trait TestSetup extends EphemBlockchainTestSetup {
     implicit val system = ActorSystem("PeersInfoHolderSpec_System")
 
-    blockchain.save(Fixtures.Blocks.Genesis.header)
+    blockchain.save(Fixtures.Blocks.Genesis.signedHeader)
 
     val blockchainConfig = BlockchainConfig(Config.config)
     val forkResolver = new ForkResolver.EtcForkResolver(blockchainConfig.daoForkConfig.get)
@@ -239,14 +239,14 @@ class EtcPeerManagerSpec extends FlatSpec with Matchers {
       protocolVersion = Versions.PV63,
       networkId = 1,
       totalDifficulty = BigInt(10000),
-      bestHash = Fixtures.Blocks.Block3125369.header.hash,
-      genesisHash = Fixtures.Blocks.Genesis.header.hash
+      bestHash = Fixtures.Blocks.Block3125369.signedHeader.hash,
+      genesisHash = Fixtures.Blocks.Genesis.signedHeader.hash
     )
     val initialPeerInfo = PeerInfo(
       remoteStatus = peerStatus,
       totalDifficulty = peerStatus.totalDifficulty,
       forkAccepted = false,
-      maxBlockNumber = Fixtures.Blocks.Block3125369.header.number
+      maxBlockNumber = Fixtures.Blocks.Block3125369.signedHeader.header.number
     )
 
     val peer1Probe = TestProbe()
@@ -266,7 +266,7 @@ class EtcPeerManagerSpec extends FlatSpec with Matchers {
 
     val requestSender = TestProbe()
 
-    val baseBlockHeader = Fixtures.Blocks.Block3125369.header
+    val baseBlockHeader = Fixtures.Blocks.Block3125369.signedHeader
     val baseBlockBody = BlockBody(Nil, Nil)
     val baseBlock = Block(baseBlockHeader, baseBlockBody)
 
@@ -277,10 +277,10 @@ class EtcPeerManagerSpec extends FlatSpec with Matchers {
       peerEventBus.expectMsg(Subscribe(PeerDisconnectedClassifier(PeerSelector.WithId(peer.id))))
 
       peerEventBus.expectMsg(Subscribe(MessageClassifier(
-        Set(BlockHeaders.code, NewBlock.code, NewBlockHashes.code), PeerSelector.WithId(peer.id))))
+        Set(SignedBlockHeaders.code, NewBlock.code, NewBlockHashes.code), PeerSelector.WithId(peer.id))))
 
       //Peer should receive request for highest block
-      peerProbe.expectMsg(PeerActor.SendMessage(GetBlockHeaders(Right(peerInfo.remoteStatus.bestHash), 1, 0, false)))
+      peerProbe.expectMsg(PeerActor.SendMessage(GetSignedBlockHeaders(Right(peerInfo.remoteStatus.bestHash), 1, 0, false)))
     }
   }
 

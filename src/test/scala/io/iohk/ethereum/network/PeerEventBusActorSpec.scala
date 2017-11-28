@@ -198,14 +198,14 @@ class PeerEventBusActorSpec extends FlatSpec with Matchers {
       protocolVersion = Versions.PV63,
       networkId = 1,
       totalDifficulty = BigInt(10000),
-      bestHash = Fixtures.Blocks.Block3125369.header.hash,
-      genesisHash = Fixtures.Blocks.Genesis.header.hash
+      bestHash = Fixtures.Blocks.Block3125369.signedHeader.hash,
+      genesisHash = Fixtures.Blocks.Genesis.signedHeader.hash
     )
     val initialPeerInfo = PeerInfo(
       remoteStatus = peerStatus,
       totalDifficulty = peerStatus.totalDifficulty,
       forkAccepted = false,
-      maxBlockNumber = Fixtures.Blocks.Block3125369.header.number
+      maxBlockNumber = Fixtures.Blocks.Block3125369.signedHeader.header.number
     )
 
   }

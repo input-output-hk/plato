@@ -6,7 +6,7 @@ import akka.util.ByteString
 import io.iohk.ethereum.blockchain.sync.EphemBlockchainTestSetup
 import io.iohk.ethereum.crypto.ECDSASignature
 import io.iohk.ethereum.db.storage.AppStateStorage
-import io.iohk.ethereum.domain.{Address, Block, BlockHeader}
+import io.iohk.ethereum.domain.{Address, Block, BlockHeader, SignedBlockHeader}
 import io.iohk.ethereum.jsonrpc.EthService._
 import io.iohk.ethereum.jsonrpc.FilterManager.{LogFilterLogs, TxLog}
 import io.iohk.ethereum.jsonrpc.JsonRpcController.JsonRpcConfig
@@ -15,7 +15,7 @@ import io.iohk.ethereum.jsonrpc.NetService.{ListeningResponse, PeerCountResponse
 import io.iohk.ethereum.jsonrpc.PersonalService._
 import io.iohk.ethereum.keystore.KeyStore
 import io.iohk.ethereum.ledger.{BloomFilter, Ledger}
-import io.iohk.ethereum.mining.{BlockGenerator}
+import io.iohk.ethereum.mining.BlockGenerator
 import io.iohk.ethereum.network.p2p.messages.PV62.BlockBody
 import io.iohk.ethereum.utils._
 import io.iohk.ethereum.validators.Validators
@@ -28,6 +28,7 @@ import org.scalatest.concurrent.{Eventually, ScalaFutures}
 import org.scalatest.prop.PropertyChecks
 import org.scalatest.{FlatSpec, Matchers}
 import org.spongycastle.util.encoders.Hex
+import io.iohk.ethereum.Fixtures.FakeSignature
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
@@ -162,14 +163,14 @@ class JsonRpcControllerSpec extends FlatSpec with Matchers with PropertyChecks w
   }
 
   it should "handle eth_getBlockTransactionCountByHash request" in new TestSetup {
-    val blockToRequest = Block(Fixtures.Blocks.Block3125369.header, Fixtures.Blocks.Block3125369.body)
+    val blockToRequest = Block(Fixtures.Blocks.Block3125369.signedHeader, Fixtures.Blocks.Block3125369.body)
 
     blockchain.save(blockToRequest)
 
     val rpcRequest = JsonRpcRequest(
       "2.0",
       "eth_getBlockTransactionCountByHash",
-      Some(JArray(List(JString(s"0x${blockToRequest.header.hashAsHexString}")))),
+      Some(JArray(List(JString(s"0x${blockToRequest.signedHeader.hashAsHexString}")))),
       Some(JInt(1))
     )
     val response = jsonRpcController.handleRequest(rpcRequest).futureValue
@@ -184,16 +185,16 @@ class JsonRpcControllerSpec extends FlatSpec with Matchers with PropertyChecks w
 
   it should "handle eth_getBlockByHash request" in new TestSetup {
 
-    val blockToRequest = Block(Fixtures.Blocks.Block3125369.header, Fixtures.Blocks.Block3125369.body)
-    val blockTd = blockToRequest.header.difficulty
+    val blockToRequest = Block(Fixtures.Blocks.Block3125369.signedHeader, Fixtures.Blocks.Block3125369.body)
+    val blockTd = blockToRequest.signedHeader.header.difficulty
 
     blockchain.save(blockToRequest)
-    blockchain.save(blockToRequest.header.hash, blockTd)
+    blockchain.save(blockToRequest.signedHeader.hash, blockTd)
 
     val request = JsonRpcRequest(
       "2.0",
       "eth_getBlockByHash",
-      Some(JArray(List(JString(s"0x${blockToRequest.header.hashAsHexString}"), JBool(false)))),
+      Some(JArray(List(JString(s"0x${blockToRequest.signedHeader.hashAsHexString}"), JBool(false)))),
       Some(JInt(1))
     )
     val response = jsonRpcController.handleRequest(request).futureValue
@@ -208,16 +209,16 @@ class JsonRpcControllerSpec extends FlatSpec with Matchers with PropertyChecks w
 
   it should "handle eth_getBlockByNumber request" in new TestSetup {
 
-    val blockToRequest = Block(Fixtures.Blocks.Block3125369.header, Fixtures.Blocks.Block3125369.body)
-    val blockTd = blockToRequest.header.difficulty
+    val blockToRequest = Block(Fixtures.Blocks.Block3125369.signedHeader, Fixtures.Blocks.Block3125369.body)
+    val blockTd = blockToRequest.signedHeader.header.difficulty
 
     blockchain.save(blockToRequest)
-    blockchain.save(blockToRequest.header.hash, blockTd)
+    blockchain.save(blockToRequest.signedHeader.hash, blockTd)
 
     val request = JsonRpcRequest(
       "2.0",
       "eth_getBlockByNumber",
-      Some(JArray(List(JString(s"0x${Hex.toHexString(blockToRequest.header.number.toByteArray)}"), JBool(false)))),
+      Some(JArray(List(JString(s"0x${Hex.toHexString(blockToRequest.signedHeader.header.number.toByteArray)}"), JBool(false)))),
       Some(JInt(1))
     )
     val response = jsonRpcController.handleRequest(request).futureValue
@@ -231,8 +232,8 @@ class JsonRpcControllerSpec extends FlatSpec with Matchers with PropertyChecks w
   }
 
   it should "handle eth_getUncleByBlockHashAndIndex request" in new TestSetup {
-    val uncle = Fixtures.Blocks.DaoForkBlock.header
-    val blockToRequest = Block(Fixtures.Blocks.Block3125369.header, BlockBody(Nil, Seq(uncle)))
+    val uncle = Fixtures.Blocks.DaoForkBlock.signedHeader
+    val blockToRequest = Block(Fixtures.Blocks.Block3125369.signedHeader, BlockBody(Nil, Seq(uncle)))
 
     blockchain.save(blockToRequest)
 
@@ -240,7 +241,7 @@ class JsonRpcControllerSpec extends FlatSpec with Matchers with PropertyChecks w
       "2.0",
       "eth_getUncleByBlockHashAndIndex",
       Some(JArray(List(
-        JString(s"0x${blockToRequest.header.hashAsHexString}"),
+        JString(s"0x${blockToRequest.signedHeader.hashAsHexString}"),
         JString(s"0x${Hex.toHexString(BigInt(0).toByteArray)}")
       ))),
       Some(JInt(1))
@@ -260,8 +261,8 @@ class JsonRpcControllerSpec extends FlatSpec with Matchers with PropertyChecks w
   }
 
   it should "handle eth_getUncleByBlockNumberAndIndex request" in new TestSetup {
-    val uncle = Fixtures.Blocks.DaoForkBlock.header
-    val blockToRequest = Block(Fixtures.Blocks.Block3125369.header, BlockBody(Nil, Seq(uncle)))
+    val uncle = Fixtures.Blocks.DaoForkBlock.signedHeader
+    val blockToRequest = Block(Fixtures.Blocks.Block3125369.signedHeader, BlockBody(Nil, Seq(uncle)))
 
     blockchain.save(blockToRequest)
 
@@ -269,7 +270,7 @@ class JsonRpcControllerSpec extends FlatSpec with Matchers with PropertyChecks w
       "2.0",
       "eth_getUncleByBlockNumberAndIndex",
       Some(JArray(List(
-        JString(s"0x${Hex.toHexString(blockToRequest.header.number.toByteArray)}"),
+        JString(s"0x${Hex.toHexString(blockToRequest.signedHeader.header.number.toByteArray)}"),
         JString(s"0x${Hex.toHexString(BigInt(0).toByteArray)}")
       ))),
       Some(JInt(1))
@@ -289,7 +290,7 @@ class JsonRpcControllerSpec extends FlatSpec with Matchers with PropertyChecks w
   }
 
   it should "handle eth_getTransactionByBlockHashAndIndex request" in new TestSetup {
-    val blockToRequest = Block(Fixtures.Blocks.Block3125369.header, Fixtures.Blocks.Block3125369.body)
+    val blockToRequest = Block(Fixtures.Blocks.Block3125369.signedHeader, Fixtures.Blocks.Block3125369.body)
     val txIndexToRequest = blockToRequest.body.transactionList.size / 2
 
     blockchain.save(blockToRequest)
@@ -298,7 +299,7 @@ class JsonRpcControllerSpec extends FlatSpec with Matchers with PropertyChecks w
       "2.0",
       "eth_getTransactionByBlockHashAndIndex",
       Some(JArray(List(
-        JString(s"0x${blockToRequest.header.hashAsHexString}"),
+        JString(s"0x${blockToRequest.signedHeader.hashAsHexString}"),
         JString(s"0x${Hex.toHexString(BigInt(txIndexToRequest).toByteArray)}")
       ))),
       Some(JInt(1))
@@ -306,7 +307,7 @@ class JsonRpcControllerSpec extends FlatSpec with Matchers with PropertyChecks w
     val response = jsonRpcController.handleRequest(request).futureValue
     val expectedStx = blockToRequest.body.transactionList.apply(txIndexToRequest)
     val expectedTxResponse = Extraction.decompose(
-      TransactionResponse(expectedStx, Some(blockToRequest.header), Some(txIndexToRequest))
+      TransactionResponse(expectedStx, Some(blockToRequest.signedHeader), Some(txIndexToRequest))
     )
 
     response.jsonrpc shouldBe "2.0"
@@ -521,7 +522,11 @@ class JsonRpcControllerSpec extends FlatSpec with Matchers with PropertyChecks w
 
   it should "eth_gasPrice" in new TestSetup {
     (appStateStorage.getBestBlockNumber _).expects().returning(42)
-    blockchain.save(Block(Fixtures.Blocks.Block3125369.header.copy(number = 42), Fixtures.Blocks.Block3125369.body))
+
+    blockchain.save(Block(
+      Fixtures.Blocks.Block3125369.signedHeader.copy(Fixtures.Blocks.Block3125369.signedHeader.header.copy(number = 42)),
+      Fixtures.Blocks.Block3125369.body)
+    )
 
     val request: JsonRpcRequest = JsonRpcRequest(
       "2.0",
@@ -691,11 +696,11 @@ class JsonRpcControllerSpec extends FlatSpec with Matchers with PropertyChecks w
   }
 
   it should "eth_getTransactionByBlockNumberAndIndex by tag" in new TestSetup {
-    val blockToRequest = Block(Fixtures.Blocks.Block3125369.header, Fixtures.Blocks.Block3125369.body)
+    val blockToRequest = Block(Fixtures.Blocks.Block3125369.signedHeader, Fixtures.Blocks.Block3125369.body)
     val txIndex = 1
 
     blockchain.save(blockToRequest)
-    (appStateStorage.getBestBlockNumber _).expects().returns(blockToRequest.header.number)
+    (appStateStorage.getBestBlockNumber _).expects().returns(blockToRequest.signedHeader.header.number)
 
     val request: JsonRpcRequest = JsonRpcRequest(
       "2.0",
@@ -709,7 +714,7 @@ class JsonRpcControllerSpec extends FlatSpec with Matchers with PropertyChecks w
     val response = jsonRpcController.handleRequest(request).futureValue
     val expectedStx = blockToRequest.body.transactionList(txIndex)
     val expectedTxResponse = Extraction.decompose(
-      TransactionResponse(expectedStx, Some(blockToRequest.header), Some(txIndex))
+      TransactionResponse(expectedStx, Some(blockToRequest.signedHeader), Some(txIndex))
     )
 
     response.jsonrpc shouldBe "2.0"
@@ -719,7 +724,9 @@ class JsonRpcControllerSpec extends FlatSpec with Matchers with PropertyChecks w
   }
 
   it should "eth_getTransactionByBlockNumberAndIndex by hex number" in new TestSetup {
-    val blockToRequest = Block(Fixtures.Blocks.Block3125369.header.copy(number = BigInt(0xC005)), Fixtures.Blocks.Block3125369.body)
+    val blockToRequest = Block(
+      Fixtures.Blocks.Block3125369.signedHeader.copy(Fixtures.Blocks.Block3125369.signedHeader.header.copy(number = BigInt(0xC005))),
+      Fixtures.Blocks.Block3125369.body)
     val txIndex = 1
 
     blockchain.save(blockToRequest)
@@ -736,7 +743,7 @@ class JsonRpcControllerSpec extends FlatSpec with Matchers with PropertyChecks w
     val response = jsonRpcController.handleRequest(request).futureValue
     val expectedStx = blockToRequest.body.transactionList(txIndex)
     val expectedTxResponse = Extraction.decompose(
-      TransactionResponse(expectedStx, Some(blockToRequest.header), Some(txIndex))
+      TransactionResponse(expectedStx, Some(blockToRequest.signedHeader), Some(txIndex))
     )
 
     response.jsonrpc shouldBe "2.0"
@@ -746,7 +753,7 @@ class JsonRpcControllerSpec extends FlatSpec with Matchers with PropertyChecks w
   }
 
   it should "eth_getTransactionByBlockNumberAndIndex by number" in new TestSetup {
-    val blockToRequest = Block(Fixtures.Blocks.Block3125369.header, Fixtures.Blocks.Block3125369.body)
+    val blockToRequest = Block(Fixtures.Blocks.Block3125369.signedHeader, Fixtures.Blocks.Block3125369.body)
     val txIndex = 1
 
     blockchain.save(blockToRequest)
@@ -755,7 +762,7 @@ class JsonRpcControllerSpec extends FlatSpec with Matchers with PropertyChecks w
       "2.0",
       "eth_getTransactionByBlockNumberAndIndex",
       Some(JArray(List(
-        JInt(Fixtures.Blocks.Block3125369.header.number),
+        JInt(Fixtures.Blocks.Block3125369.signedHeader.header.number),
         JString(s"0x${Hex.toHexString(BigInt(txIndex).toByteArray)}")
       ))),
       Some(JInt(1))
@@ -763,7 +770,7 @@ class JsonRpcControllerSpec extends FlatSpec with Matchers with PropertyChecks w
     val response = jsonRpcController.handleRequest(request).futureValue
     val expectedStx = blockToRequest.body.transactionList(txIndex)
     val expectedTxResponse = Extraction.decompose(
-      TransactionResponse(expectedStx, Some(blockToRequest.header), Some(txIndex))
+      TransactionResponse(expectedStx, Some(blockToRequest.signedHeader), Some(txIndex))
     )
 
     response.jsonrpc shouldBe "2.0"
@@ -1165,8 +1172,8 @@ class JsonRpcControllerSpec extends FlatSpec with Matchers with PropertyChecks w
       TransactionReceiptResponse(
         transactionHash = ByteString(Hex.decode("23" * 32)),
         transactionIndex = 1,
-        blockNumber = Fixtures.Blocks.Block3125369.header.number,
-        blockHash = Fixtures.Blocks.Block3125369.header.hash,
+        blockNumber = Fixtures.Blocks.Block3125369.signedHeader.header.number,
+        blockHash = Fixtures.Blocks.Block3125369.signedHeader.hash,
         cumulativeGasUsed = arbitraryValue * 10,
         gasUsed = arbitraryValue,
         contractAddress = Some(Address(arbitraryValue)),
@@ -1174,8 +1181,8 @@ class JsonRpcControllerSpec extends FlatSpec with Matchers with PropertyChecks w
           logIndex = 0,
           transactionIndex = 1,
           transactionHash = ByteString(Hex.decode("23" * 32)),
-          blockHash = Fixtures.Blocks.Block3125369.header.hash,
-          blockNumber = Fixtures.Blocks.Block3125369.header.number,
+          blockHash = Fixtures.Blocks.Block3125369.signedHeader.hash,
+          blockNumber = Fixtures.Blocks.Block3125369.signedHeader.header.number,
           address = Address(arbitraryValue),
           data = ByteString(Hex.decode("43" * 32)),
           topics = Seq(ByteString(Hex.decode("44" * 32)), ByteString(Hex.decode("45" * 32)))))))))
@@ -1197,7 +1204,7 @@ class JsonRpcControllerSpec extends FlatSpec with Matchers with PropertyChecks w
       JField("transactionHash", JString("0x" + "23" * 32)),
       JField("transactionIndex", JString("0x1")),
       JField("blockNumber", JString("0x2fb079")),
-      JField("blockHash", JString("0x" + Hex.toHexString(Fixtures.Blocks.Block3125369.header.hash.toArray[Byte]))),
+      JField("blockHash", JString("0x" + Hex.toHexString(Fixtures.Blocks.Block3125369.signedHeader.hash.toArray[Byte]))),
       JField("cumulativeGasUsed", JString("0x1a4")),
       JField("gasUsed", JString("0x2a")),
       JField("contractAddress", JString("0x000000000000000000000000000000000000002a")),
@@ -1205,7 +1212,7 @@ class JsonRpcControllerSpec extends FlatSpec with Matchers with PropertyChecks w
         JField("logIndex", JString("0x0")),
         JField("transactionIndex", JString("0x1")),
         JField("transactionHash", JString("0x" + "23" * 32)),
-        JField("blockHash", JString("0x" + Hex.toHexString(Fixtures.Blocks.Block3125369.header.hash.toArray[Byte]))),
+        JField("blockHash", JString("0x" + Hex.toHexString(Fixtures.Blocks.Block3125369.signedHeader.hash.toArray[Byte]))),
         JField("blockNumber", JString("0x2fb079")),
         JField("address", JString("0x000000000000000000000000000000000000002a")),
         JField("data", JString("0x" + "43" * 32)),
@@ -1222,8 +1229,8 @@ class JsonRpcControllerSpec extends FlatSpec with Matchers with PropertyChecks w
     val receivedTx = block.body.transactionList.last
 
     (mockEthService.getAccountTransactions _).expects(*)
-      .returning(Future.successful(Right(GetAccountTransactionsResponse(Seq(TransactionResponse(sentTx, Some(block.header))),
-        Seq(TransactionResponse(receivedTx, Some(block.header)))))))
+      .returning(Future.successful(Right(GetAccountTransactionsResponse(Seq(TransactionResponse(sentTx, Some(block.signedHeader))),
+        Seq(TransactionResponse(receivedTx, Some(block.signedHeader)))))))
 
     val request: JsonRpcRequest = JsonRpcRequest(
       "2.0",
@@ -1237,8 +1244,8 @@ class JsonRpcControllerSpec extends FlatSpec with Matchers with PropertyChecks w
     )
 
     val response = jsonRpcController.handleRequest(request).futureValue
-    val expectedSentTx = Extraction.decompose(TransactionResponse(sentTx, Some(block.header)))
-    val expectedReceivedTx = Extraction.decompose(TransactionResponse(receivedTx, Some(block.header)))
+    val expectedSentTx = Extraction.decompose(TransactionResponse(sentTx, Some(block.signedHeader)))
+    val expectedReceivedTx = Extraction.decompose(TransactionResponse(receivedTx, Some(block.signedHeader)))
 
     response.jsonrpc shouldBe "2.0"
     response.id shouldBe JInt(1)
@@ -1287,7 +1294,7 @@ class JsonRpcControllerSpec extends FlatSpec with Matchers with PropertyChecks w
       blockchainConfig, currentProtocolVersion)
     val jsonRpcController = new JsonRpcController(web3Service, netService, ethService, personalService, config)
 
-    val blockHeader = BlockHeader(
+    val blockHeader = SignedBlockHeader(BlockHeader(
       parentHash = ByteString("unused"),
       ommersHash = ByteString("unused"),
       beneficiary = ByteString("unused"),
@@ -1303,9 +1310,9 @@ class JsonRpcControllerSpec extends FlatSpec with Matchers with PropertyChecks w
       extraData = ByteString("unused"),
       mixHash = ByteString("unused"),
       nonce = ByteString("unused"),
-      slotNumber = 2)
+      slotNumber = 2), FakeSignature)
 
-    val parentBlock = Block(blockHeader.copy(number = 1), BlockBody(Nil, Nil))
+    val parentBlock = Block(blockHeader.copy(blockHeader.header.copy(number = 1)), BlockBody(Nil, Nil))
 
     val r: ByteString = ByteString(Hex.decode("a3f20717a250c2b0b729b7e5becbff67fdaef7e0699da4de7ca5895b02a170a1"))
     val s: ByteString = ByteString(Hex.decode("2d887fd3b17bfdce3481f10bea41f45ba9f709d39ce8325427b57afcfc994cee"))

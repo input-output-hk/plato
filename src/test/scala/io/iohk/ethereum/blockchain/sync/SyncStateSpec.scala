@@ -9,7 +9,7 @@ class SyncStateSpec extends FlatSpec with Matchers {
 
   "SyncState" should "prepend mpt nodes when enqueueing them" in {
     val syncState = SyncState(
-      targetBlock = Fixtures.Blocks.ValidBlock.header,
+      targetBlock = Fixtures.Blocks.ValidBlock.signedHeader.header,
       pendingMptNodes = toStateMptNodeHash("1", "2", "3"),
       pendingNonMptNodes = toEvmCodeHash("a", "b", "c")
     )

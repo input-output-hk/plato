@@ -28,7 +28,7 @@ class SnappyTest extends FreeSpec with Matchers with Logger {
       val block: Block = sourceBlockchain.getBlockByNumber(n)
         .getOrElse(fail(s"Failed to retrieve block by number: $n"))
 
-      val expectedReceipts = sourceBlockchain.getReceiptsByHash(block.header.hash)
+      val expectedReceipts = sourceBlockchain.getReceiptsByHash(block.signedHeader.hash)
         .getOrElse(fail(s"Failed to retrieve receipts for block number: $n"))
 
       val result = executeBlock(block)
@@ -40,7 +40,7 @@ class SnappyTest extends FreeSpec with Matchers with Logger {
         case Right(receipts) =>
           if (receipts == expectedReceipts) {
             targetBlockchain.foreach(_.save(block))
-            targetBlockchain.foreach(_.save(block.header.hash, receipts))
+            targetBlockchain.foreach(_.save(block.signedHeader.hash, receipts))
           } else {
             fail(s"Block $n did not execute correctly.\n$receipts did not equal $expectedReceipts")
           }

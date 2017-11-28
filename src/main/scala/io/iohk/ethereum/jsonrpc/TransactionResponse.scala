@@ -1,7 +1,7 @@
 package io.iohk.ethereum.jsonrpc
 
 import akka.util.ByteString
-import io.iohk.ethereum.domain.{BlockHeader, SignedTransaction}
+import io.iohk.ethereum.domain.{SignedBlockHeader, SignedTransaction}
 
 case class TransactionResponse(
     hash: ByteString,
@@ -20,14 +20,14 @@ case class TransactionResponse(
 object TransactionResponse {
 
   def apply(stx: SignedTransaction,
-            blockHeader: Option[BlockHeader] = None,
+            blockHeader: Option[SignedBlockHeader] = None,
             transactionIndex: Option[Int] = None,
             pending: Option[Boolean] = None): TransactionResponse =
     TransactionResponse(
       hash = stx.hash,
       nonce = stx.tx.nonce,
       blockHash = blockHeader.map(_.hash),
-      blockNumber = blockHeader.map(_.number),
+      blockNumber = blockHeader.map(_.header.number),
       transactionIndex = transactionIndex.map(txIndex => BigInt(txIndex)),
       from = stx.senderAddress.bytes,
       to = stx.tx.receivingAddress.map(_.bytes),

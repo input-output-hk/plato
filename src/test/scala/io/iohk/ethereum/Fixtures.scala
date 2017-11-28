@@ -1,11 +1,20 @@
 package io.iohk.ethereum
 
 import akka.util.ByteString
+import io.iohk.ethereum.crypto.ECDSASignature
 import io.iohk.ethereum.domain._
 import io.iohk.ethereum.network.p2p.messages.PV62.BlockBody
 import org.spongycastle.util.encoders.Hex
 
 object Fixtures {
+
+  private def zeros(length: Int) =
+    ByteString(Hex.decode(List.fill(length)("0").mkString))
+
+  val FakeSignature = ECDSASignature(
+    s = zeros(ECDSASignature.SLength),
+    r = zeros(ECDSASignature.SLength),
+    v = 0.toByte)
 
   /**
     * This blocks were initially obtained from the Ethereum network, however some minor changes were
@@ -17,41 +26,42 @@ object Fixtures {
   object Blocks {
 
     trait FixtureBlock {
-      val header: BlockHeader
+      val signedHeader: SignedBlockHeader
       val body: BlockBody
       val transactionHashes: Seq[ByteString]
       val size: Long
 
-      def block: Block = Block(header, body)
+      def block: Block = Block(signedHeader, body)
     }
 
     object ValidBlock extends FixtureBlock {
       // Arbitrary taken Block 3125369
-      override val header: BlockHeader = Block3125369.header
+      override val signedHeader: SignedBlockHeader = Block3125369.signedHeader
       override val body: BlockBody = Block3125369.body
       override val transactionHashes: Seq[ByteString] = Block3125369.transactionHashes
       override val size: Long = Block3125369.size
     }
 
     object Block3125369 extends FixtureBlock {
-      val header = BlockHeader(
-        parentHash = ByteString(Hex.decode("8345d132564b3660aa5f27c9415310634b50dbc92579c65a0825d9a255227a71")),
-        ommersHash = ByteString(Hex.decode("1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347")),
-        beneficiary = ByteString(Hex.decode("df7d7e053933b5cc24372f878c90e62dadad5d42")),
-        stateRoot = ByteString(Hex.decode("087f96537eba43885ab563227262580b27fc5e6516db79a6fc4d3bcd241dda67")),
-        transactionsRoot = ByteString(Hex.decode("8ae451039a8bf403b899dcd23252d94761ddd23b88c769d9b7996546edc47fac")),
-        receiptsRoot = ByteString(Hex.decode("8b472d8d4d39bae6a5570c2a42276ed2d6a56ac51a1a356d5b17c5564d01fd5d")),
-        logsBloom = ByteString(Hex.decode("0" * 512)),
-        difficulty = 1,
-        number = 3125369,
-        gasLimit = 4699996,
-        gasUsed = 84000,
-        unixTimestamp = 1486131165,
-        extraData = ByteString(Hex.decode("d5830104098650617269747986312e31332e30826c69")),
-        mixHash = ByteString(Hex.decode("be90ac33b3f6d0316e60eef505ff5ec7333c9f3c85c1a36fc2523cd6b75ddb8a")),
-        nonce = ByteString(Hex.decode("2b0fb0c002946392")),
-        slotNumber = 3125369
-      )
+      val signedHeader = SignedBlockHeader(
+        BlockHeader(
+          parentHash = ByteString(Hex.decode("8345d132564b3660aa5f27c9415310634b50dbc92579c65a0825d9a255227a71")),
+          ommersHash = ByteString(Hex.decode("1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347")),
+          beneficiary = ByteString(Hex.decode("df7d7e053933b5cc24372f878c90e62dadad5d42")),
+          stateRoot = ByteString(Hex.decode("087f96537eba43885ab563227262580b27fc5e6516db79a6fc4d3bcd241dda67")),
+          transactionsRoot = ByteString(Hex.decode("8ae451039a8bf403b899dcd23252d94761ddd23b88c769d9b7996546edc47fac")),
+          receiptsRoot = ByteString(Hex.decode("8b472d8d4d39bae6a5570c2a42276ed2d6a56ac51a1a356d5b17c5564d01fd5d")),
+          logsBloom = ByteString(Hex.decode("0" * 512)),
+          difficulty = 1,
+          number = 3125369,
+          gasLimit = 4699996,
+          gasUsed = 84000,
+          unixTimestamp = 1486131165,
+          extraData = ByteString(Hex.decode("d5830104098650617269747986312e31332e30826c69")),
+          mixHash = ByteString(Hex.decode("be90ac33b3f6d0316e60eef505ff5ec7333c9f3c85c1a36fc2523cd6b75ddb8a")),
+          nonce = ByteString(Hex.decode("2b0fb0c002946392")),
+          slotNumber = 3125369
+        ), FakeSignature)
 
       val body = BlockBody(
         transactionList = Seq[SignedTransaction](
@@ -109,7 +119,7 @@ object Fixtures {
             chainId = 0x3d.toByte
           ).get
         ),
-        uncleNodesList = Seq[BlockHeader]()
+        uncleNodesList = Nil
       )
 
       val transactionHashes = Seq(
@@ -119,11 +129,11 @@ object Fixtures {
         ByteString(Hex.decode("067bd4b1a9d37ff932473212856262d59f999935a4a357faf71b1d7e276b762b"))
       )
 
-      val size = 998L
+      val size = 1001L
     }
 
     object Genesis extends FixtureBlock {
-      val header = BlockHeader(
+      val signedHeader = SignedBlockHeader(BlockHeader(
         parentHash = ByteString(Hex.decode("0000000000000000000000000000000000000000000000000000000000000000")),
         ommersHash = ByteString(Hex.decode("1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347")),
         beneficiary = ByteString(Hex.decode("0000000000000000000000000000000000000000")),
@@ -140,19 +150,18 @@ object Fixtures {
         mixHash = ByteString(Hex.decode("0000000000000000000000000000000000000000000000000000000000000000")),
         nonce = ByteString(Hex.decode("0000000000000042")),
         slotNumber = 0
-      )
+      ), FakeSignature)
       override val body: BlockBody = BlockBody(
         transactionList = Seq[SignedTransaction](
         ),
-        uncleNodesList = Seq[BlockHeader](
-        )
+        uncleNodesList = Nil
       )
       override val transactionHashes: Seq[ByteString] = Seq()
-      override val size: Long = 536
+      override val size: Long = 539
     }
 
     object DaoForkBlock extends FixtureBlock {
-      override val header: BlockHeader = BlockHeader(
+      override val signedHeader = SignedBlockHeader(BlockHeader(
         parentHash = ByteString(Hex.decode("a218e2c611f21232d857e3c8cecdcdf1f65f25a4477f98f6f47e4063807f2308")),
         ommersHash = ByteString(Hex.decode("1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347")),
         beneficiary = ByteString(Hex.decode("61c808d82a3ac53231750dadc13c777b59310bd9")),
@@ -169,7 +178,7 @@ object Fixtures {
         mixHash = ByteString(Hex.decode("c52daa7054babe515b17ee98540c0889cf5e1595c5dd77496997ca84a68c8da1")),
         nonce = ByteString(Hex.decode("05276a600980199d")),
         slotNumber = 1920000
-      )
+      ), FakeSignature)
       override val body: BlockBody = BlockBody(
         transactionList = Seq[SignedTransaction](
           SignedTransaction(
@@ -226,9 +235,7 @@ object Fixtures {
             chainId = 0x3d.toByte
           ).get
         ),
-        uncleNodesList = Seq[BlockHeader](
-
-        )
+        uncleNodesList = Nil
       )
 
       override val transactionHashes: Seq[ByteString] = Seq(
@@ -237,11 +244,11 @@ object Fixtures {
         ByteString(Hex.decode("4677a93807b73a0875d3a292eacb450d0af0d6f0eec6f283f8ad927ec539a17b")),
         ByteString(Hex.decode("2a5177e6d6cea40594c7d4b0115dcd087443be3ec2fa81db3c21946a5e51cea9"))
       )
-      override val size: Long = 976L
+      override val size: Long = 979L
     }
 
     object ProDaoForkBlock extends FixtureBlock {
-      override val header: BlockHeader = BlockHeader(
+      override val signedHeader: SignedBlockHeader = SignedBlockHeader(BlockHeader(
         parentHash = ByteString(Hex.decode("a218e2c611f21232d857e3c8cecdcdf1f65f25a4477f98f6f47e4063807f2308")),
         ommersHash = ByteString(Hex.decode("1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347")),
         beneficiary = ByteString(Hex.decode("bcdfc35b86bedf72f0cda046a3c16829a2ef41d1 ")),
@@ -258,7 +265,7 @@ object Fixtures {
         mixHash = ByteString(Hex.decode("5b5acbf4bf305f948bd7be176047b20623e1417f75597341a059729165b92397")),
         nonce = ByteString(Hex.decode("bede87201de42426")),
         slotNumber = 1920000
-      )
+      ), FakeSignature)
       override lazy val body: BlockBody = BlockBody(
         transactionList = Seq[SignedTransaction](
           SignedTransaction(
@@ -315,7 +322,7 @@ object Fixtures {
             chainId = 0x01.toByte
           ).get
         ),
-        uncleNodesList = Seq[BlockHeader]()
+        uncleNodesList = Nil
       )
 
       override val transactionHashes: Seq[ByteString] = Seq(
@@ -328,7 +335,7 @@ object Fixtures {
     }
 
     object DaoParentBlock extends FixtureBlock {
-      override val header: BlockHeader = BlockHeader(
+      override val signedHeader: SignedBlockHeader = SignedBlockHeader(BlockHeader(
         parentHash = ByteString(Hex.decode("505ffd21f4cbf2c5c34fa84cd8c92525f3a719b7ad18852bffddad601035f5f4")),
         ommersHash = ByteString(Hex.decode("1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347")),
         beneficiary = ByteString(Hex.decode("2a65aca4d5fc5b5c859090a6c34d164135398226")),
@@ -345,7 +352,7 @@ object Fixtures {
         mixHash = ByteString(Hex.decode("7f9ac1ddeafff0f926ed9887b8cf7d50c3f919d902e618b957022c46c8b404a6")),
         nonce = ByteString(Hex.decode("60832709c8979daa")),
         slotNumber = 1919999
-      )
+      ), FakeSignature)
       override lazy val body: BlockBody = ???
       override lazy val transactionHashes: Seq[ByteString] = ???
       override lazy val size: Long = ???

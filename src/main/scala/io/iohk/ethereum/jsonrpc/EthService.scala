@@ -208,7 +208,7 @@ class EthService(
   def getBlockByNumber(request: BlockByNumberRequest): ServiceResponse[BlockByNumberResponse] = Future {
     val BlockByNumberRequest(blockParam, fullTxs) = request
     val blockResponseOpt = resolveBlock(blockParam).toOption.map { case ResolvedBlock(block, pending) =>
-      val totalDifficulty = blockchain.getTotalDifficultyByHash(block.header.hash)
+      val totalDifficulty = blockchain.getTotalDifficultyByHash(block.signedHeader.hash)
       BlockResponse(block, totalDifficulty, fullTxs = fullTxs, pendingBlock = pending)
     }
     Right(BlockByNumberResponse(blockResponseOpt))
@@ -229,9 +229,9 @@ class EthService(
       Future { txPending.orElse{
         for {
           TransactionLocation(blockHash, txIndex) <- blockchain.getTransactionLocation(req.txHash)
-          Block(header, body) <- blockchain.getBlockByHash(blockHash)
+          Block(signedHeader, body) <- blockchain.getBlockByHash(blockHash)
           stx <- body.transactionList.lift(txIndex)
-        } yield TransactionResponse(stx, Some(header), Some(txIndex))
+        } yield TransactionResponse(stx, Some(signedHeader), Some(txIndex))
       }}
     }
 
@@ -241,7 +241,7 @@ class EthService(
   def getTransactionReceipt(req: GetTransactionReceiptRequest): ServiceResponse[GetTransactionReceiptResponse] = Future {
     val result: Option[TransactionReceiptResponse] = for {
       TransactionLocation(blockHash, txIndex) <- blockchain.getTransactionLocation(req.txHash)
-      Block(header, body) <- blockchain.getBlockByHash(blockHash)
+      Block(signedHeader, body) <- blockchain.getBlockByHash(blockHash)
       stx <- body.transactionList.lift(txIndex)
       receipts <- blockchain.getReceiptsByHash(blockHash)
       receipt: Receipt <- receipts.lift(txIndex)
@@ -258,8 +258,8 @@ class EthService(
       TransactionReceiptResponse(
         transactionHash = stx.hash,
         transactionIndex = txIndex,
-        blockNumber = header.number,
-        blockHash = header.hash,
+        blockNumber = signedHeader.header.number,
+        blockHash = signedHeader.hash,
         cumulativeGasUsed = receipt.cumulativeGasUsed,
         gasUsed = if (txIndex == 0) receipt.cumulativeGasUsed else receipt.cumulativeGasUsed - receipts(txIndex - 1).cumulativeGasUsed,
         contractAddress = contractAddress,
@@ -268,8 +268,8 @@ class EthService(
             logIndex = index,
             transactionIndex = txIndex,
             transactionHash = stx.hash,
-            blockHash = header.hash,
-            blockNumber = header.number,
+            blockHash = signedHeader.hash,
+            blockNumber = signedHeader.header.number,
             address = txLog.loggerAddress,
             data = txLog.data,
             topics = txLog.logTopics)
@@ -292,7 +292,7 @@ class EthService(
       blockWithTx =>
         val blockTxs = blockWithTx.body.transactionList
         if (transactionIndex >= 0 && transactionIndex < blockTxs.size)
-          Some(TransactionResponse(blockTxs(transactionIndex.toInt), Some(blockWithTx.header), Some(transactionIndex.toInt)))
+          Some(TransactionResponse(blockTxs(transactionIndex.toInt), Some(blockWithTx.signedHeader), Some(transactionIndex.toInt)))
         else None
     }
     Right(GetTransactionByBlockHashAndIndexResponse(maybeTransactionResponse))
@@ -317,7 +317,7 @@ class EthService(
 
     //The block in the response will not have any txs or uncles
     val uncleBlockResponseOpt = uncleHeaderOpt.map { uncleHeader =>
-      BlockResponse(blockHeader = uncleHeader, totalDifficulty = totalDifficulty, pendingBlock = false) }
+      BlockResponse(signedBlockHeader = uncleHeader, totalDifficulty = totalDifficulty, pendingBlock = false) }
     Right(UncleByBlockHashAndIndexResponse(uncleBlockResponseOpt))
   }
 
@@ -336,7 +336,7 @@ class EthService(
           val totalDifficulty = blockchain.getTotalDifficultyByHash(uncleHeader.hash)
 
           //The block in the response will not have any txs or uncles
-          Some(BlockResponse(blockHeader = uncleHeader, totalDifficulty = totalDifficulty, pendingBlock = pending))
+          Some(BlockResponse(signedBlockHeader = uncleHeader, totalDifficulty = totalDifficulty, pendingBlock = pending))
         } else
           None
       }
@@ -431,7 +431,11 @@ class EthService(
   def getCode(req: GetCodeRequest): ServiceResponse[GetCodeResponse] = {
     Future {
       resolveBlock(req.block).map { case ResolvedBlock(block, _) =>
-        val world = blockchain.getWorldStateProxy(block.header.number, blockchainConfig.accountStartNonce, Some(block.header.stateRoot))
+        val world = blockchain.getWorldStateProxy(
+          block.signedHeader.header.number,
+          blockchainConfig.accountStartNonce,
+          Some(block.signedHeader.header.stateRoot)
+        )
         GetCodeResponse(world.getCode(req.address))
       }
     }
@@ -473,7 +477,7 @@ class EthService(
         if (transactionIndex >= 0 && transactionIndex < blockTxs.size)
           GetTransactionByBlockNumberAndIndexResponse(
             Some(TransactionResponse(blockTxs(transactionIndex.toInt),
-              Some(blockWithTx.block.header),
+              Some(blockWithTx.block.signedHeader),
               Some(transactionIndex.toInt))))
         else
           GetTransactionByBlockNumberAndIndexResponse(None)
@@ -564,7 +568,7 @@ class EthService(
 
   private def withAccount[T](address: Address, blockParam: BlockParam)(f: Account => T): Either[JsonRpcError, T] = {
     resolveBlock(blockParam).map { case ResolvedBlock(block, _) =>
-      f(blockchain.getAccount(address, block.header.number).getOrElse(Account.empty(blockchainConfig.accountStartNonce)))
+      f(blockchain.getAccount(address, block.signedHeader.header.number).getOrElse(Account.empty(blockchainConfig.accountStartNonce)))
     }
   }
 
@@ -589,11 +593,11 @@ class EthService(
   private def doCall[A](req: CallRequest)(f: (SignedTransaction, BlockHeader) => A): Either[JsonRpcError, A] = for {
     stx   <- prepareTransaction(req)
     block <- resolveBlock(req.block)
-  } yield f(stx, block.block.header)
+  } yield f(stx, block.block.signedHeader.header)
 
   private def getGasLimit(req: CallRequest): Either[JsonRpcError, BigInt] =
     if (req.tx.gas.isDefined) Right[JsonRpcError, BigInt](req.tx.gas.get)
-    else resolveBlock(BlockParam.Latest).map(r => r.block.header.gasLimit)
+    else resolveBlock(BlockParam.Latest).map(r => r.block.signedHeader.header.gasLimit)
 
   private def prepareTransaction(req: CallRequest):Either[JsonRpcError ,SignedTransaction] = {
     getGasLimit(req).map{ gasLimit =>
@@ -637,8 +641,8 @@ class EthService(
           .map { block =>
             val sentInBlock = block.body.transactionList.filter(_.senderAddress == request.address)
             val receivedInBlock = block.body.transactionList.filter(_.tx.receivingAddress.contains(request.address))
-            (sentInBlock.map(TransactionResponse(_, Some(block.header), pending = Some(false))),
-              receivedInBlock.map(TransactionResponse(_, Some(block.header), pending = Some(false))))
+            (sentInBlock.map(TransactionResponse(_, Some(block.signedHeader), pending = Some(false))),
+              receivedInBlock.map(TransactionResponse(_, Some(block.signedHeader), pending = Some(false))))
           }
           .filter { case (sent, received) => sent.nonEmpty || received.nonEmpty }
 

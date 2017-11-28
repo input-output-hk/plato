@@ -38,11 +38,11 @@ class BlockQueue(blockchain: Blockchain, val maxQueuedBlockNumberAhead: Int, val
     *         the leaf hash and its total difficulty, otherwise None
     */
   def enqueueBlock(block: Block, bestBlockNumber: BigInt = blockchain.getBestBlockNumber()): Option[Leaf] = {
-    import block.header._
-
+    import block.signedHeader.header._
+    val blockHash = block.signedHeader.hash
     cleanUp(bestBlockNumber)
 
-    blocks.get(hash) match {
+    blocks.get(blockHash) match {
 
       case Some(_) =>
         log.debug(s"Block (${block.idTag}) already in queue. ")
@@ -60,7 +60,7 @@ class BlockQueue(blockchain: Blockchain, val maxQueuedBlockNumberAhead: Int, val
           case Some(_) =>
             addBlock(block, parentTd)
             log.debug(s"Enqueued new block (${block.idTag}) with parent on the main chain")
-            updateTotalDifficulties(hash)
+            updateTotalDifficulties(blockHash)
 
           case None =>
             addBlock(block, parentTd)
@@ -95,7 +95,7 @@ class BlockQueue(blockchain: Blockchain, val maxQueuedBlockNumberAhead: Int, val
     def recur(hash: ByteString, childShared: Boolean): List[Block] = {
       blocks.get(hash) match {
         case Some(QueuedBlock(block, _)) =>
-          import block.header.parentHash
+          import block.signedHeader.header.parentHash
 
           val isShared = childShared || parentToChildren.get(hash).exists(_.nonEmpty)
           if (!isShared && dequeue) {
@@ -122,8 +122,8 @@ class BlockQueue(blockchain: Blockchain, val maxQueuedBlockNumberAhead: Int, val
     blocks.get(ancestor).foreach { case QueuedBlock(block, _) =>
       val children = parentToChildren.getOrElse(ancestor, Set.empty)
       children.foreach(removeSubtree)
-      blocks -= block.header.hash
-      parentToChildren -= block.header.hash
+      blocks -= block.signedHeader.hash
+      parentToChildren -= block.signedHeader.hash
     }
 
   /**
@@ -132,8 +132,8 @@ class BlockQueue(blockchain: Blockchain, val maxQueuedBlockNumberAhead: Int, val
     */
   private def cleanUp(bestBlockNumber: BigInt): Unit = {
     val staleHashes = blocks.values.collect {
-      case QueuedBlock(b, _) if isNumberOutOfRange(b.header.number, bestBlockNumber) =>
-        b.header.hash
+      case QueuedBlock(b, _) if isNumberOutOfRange(b.signedHeader.header.number, bestBlockNumber) =>
+        b.signedHeader.hash
     }
 
     blocks --= staleHashes
@@ -151,9 +151,9 @@ class BlockQueue(blockchain: Blockchain, val maxQueuedBlockNumberAhead: Int, val
 
         case Some(children) if children.nonEmpty =>
           val updatedChildren = children.flatMap(blocks.get)
-            .map(qb => qb.copy(totalDifficulty = Some(td + qb.block.header.difficulty)))
-          updatedChildren.foreach(qb => blocks += qb.block.header.hash -> qb)
-          updatedChildren.flatMap(qb => updateTotalDifficulties(qb.block.header.hash)).maxBy(_.totalDifficulty)
+            .map(qb => qb.copy(totalDifficulty = Some(td + qb.block.signedHeader.header.difficulty)))
+          updatedChildren.foreach(qb => blocks += qb.block.signedHeader.hash -> qb)
+          updatedChildren.flatMap(qb => updateTotalDifficulties(qb.block.signedHeader.hash)).maxBy(_.totalDifficulty)
 
         case _ =>
           Leaf(ancestor, td)
@@ -170,9 +170,9 @@ class BlockQueue(blockchain: Blockchain, val maxQueuedBlockNumberAhead: Int, val
     */
   @tailrec
   private def findClosestChainedAncestor(descendant: Block): Option[ByteString] =
-    blocks.get(descendant.header.parentHash) match {
+    blocks.get(descendant.signedHeader.header.parentHash) match {
       case Some(QueuedBlock(block, Some(_))) =>
-        Some(block.header.hash)
+        Some(block.signedHeader.hash)
 
       case Some(QueuedBlock(block, None)) =>
         findClosestChainedAncestor(block)
@@ -182,13 +182,13 @@ class BlockQueue(blockchain: Blockchain, val maxQueuedBlockNumberAhead: Int, val
     }
 
   private def addBlock(block: Block, parentTd: Option[BigInt]): Unit = {
-    import block.header._
-
+    import block.signedHeader.header._
+    val blockHash = block.signedHeader.hash
     val td = parentTd.map(_ + difficulty)
-    blocks += hash -> QueuedBlock(block, td)
+    blocks += blockHash -> QueuedBlock(block, td)
 
     val siblings = parentToChildren.getOrElse(parentHash, Set.empty)
-    parentToChildren += parentHash -> (siblings + hash)
+    parentToChildren += parentHash -> (siblings + blockHash)
   }
 
   private def isNumberOutOfRange(blockNumber: BigInt, bestBlockNumber: BigInt): Boolean =
