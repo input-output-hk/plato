@@ -174,6 +174,9 @@ class JsonRpcController(
     case req @ JsonRpcRequest(_, "personal_unlockAccount", _, _) =>
       handle[UnlockAccountRequest, UnlockAccountResponse](personalService.unlockAccount, req)
 
+    case req @ JsonRpcRequest(_, "personal_unlockMinerAccount", _, _) =>
+      handle[UnlockMinerAccountRequest, UnlockMinerAccountResponse](personalService.unlockMinerAccount, req)
+
     case req @ JsonRpcRequest(_, "personal_lockAccount", _, _) =>
       handle[LockAccountRequest, LockAccountResponse](personalService.lockAccount, req)
 
