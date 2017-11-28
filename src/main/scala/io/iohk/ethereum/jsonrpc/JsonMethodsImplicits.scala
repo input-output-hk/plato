@@ -123,6 +123,7 @@ trait JsonMethodsImplicits {
 
 }
 
+// scalastyle:off number.of.methods
 object JsonMethodsImplicits extends JsonMethodsImplicits {
 
   import JsonRpcErrors._
@@ -267,6 +268,21 @@ object JsonMethodsImplicits extends JsonMethodsImplicits {
     }
 
     def encodeJson(t: UnlockAccountResponse): JValue =
+      JBool(t.result)
+  }
+
+  implicit val personal_unlockMinerAccount = new Codec[UnlockMinerAccountRequest, UnlockMinerAccountResponse] {
+    def decodeJson(params: Option[JArray]): Either[JsonRpcError, UnlockMinerAccountRequest] = {
+      params match {
+        case Some(JArray(JString(addr) :: JString(passphrase) :: _)) => for {
+          addr <- extractAddress(addr)
+        } yield UnlockMinerAccountRequest(addr, passphrase)
+        case _ =>
+          Left(InvalidParams())
+      }
+    }
+
+    def encodeJson(t: UnlockMinerAccountResponse): JValue =
       JBool(t.result)
   }
 
