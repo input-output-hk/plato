@@ -183,7 +183,7 @@ class PersonalService(
   def deleteWallet(request: DeleteWalletRequest): ServiceResponse[DeleteWalletResponse] = Future {
     unlockedWallets.remove(request.address)
     unlockedMinerWallets.remove(request.address)
-    
+
     keyStore.deleteWallet(request.address)
       .map(DeleteWalletResponse.apply)
       .left.map(handleError)
