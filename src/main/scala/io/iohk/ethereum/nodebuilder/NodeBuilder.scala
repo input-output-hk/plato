@@ -402,7 +402,8 @@ trait SyncControllerBuilder {
     OmmersPoolBuilder with
     EtcPeerManagerActorBuilder with
     SyncConfigBuilder with
-    ShutdownHookBuilder =>
+    ShutdownHookBuilder with
+    SlotTimeConverterBuilder =>
 
   lazy val syncController = actorSystem.actorOf(
     SyncController.props(
@@ -416,6 +417,7 @@ trait SyncControllerBuilder {
       ommersPool,
       etcPeerManager,
       syncConfig,
+      slotTimeConverter,
       () => shutdown()), "sync-controller")
 
 }

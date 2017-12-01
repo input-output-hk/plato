@@ -327,6 +327,9 @@ class RegularSyncSpec extends TestKit(ActorSystem("RegularSync_system")) with Wo
     val txPool = TestProbe()
     val broadcaster = mock[BlockBroadcast]
     val ledger = mock[Ledger]
+    val slotTimeConverter = mock[SlotTimeConverter]
+
+    (slotTimeConverter.getSlotNumberFromTime _).expects(*).returning(0).anyNumberOfTimes()
 
     val syncConfig = new SyncConfig {
       override val printStatusInterval: FiniteDuration = 1.hour
@@ -364,6 +367,7 @@ class RegularSyncSpec extends TestKit(ActorSystem("RegularSync_system")) with Wo
       broadcaster,
       ledger,
       syncConfig,
+      slotTimeConverter,
       system.scheduler
     ))
 

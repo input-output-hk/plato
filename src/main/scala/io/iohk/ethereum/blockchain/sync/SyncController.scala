@@ -2,7 +2,7 @@ package io.iohk.ethereum.blockchain.sync
 
 import akka.actor.{Actor, ActorLogging, ActorRef, PoisonPill, Props, Scheduler}
 import io.iohk.ethereum.db.storage.{AppStateStorage, FastSyncStateStorage}
-import io.iohk.ethereum.domain.Blockchain
+import io.iohk.ethereum.domain.{Blockchain, SlotTimeConverter}
 import io.iohk.ethereum.ledger.Ledger
 import io.iohk.ethereum.utils.Config.SyncConfig
 import io.iohk.ethereum.validators.Validators
@@ -18,6 +18,7 @@ class SyncController(
     ommersPool: ActorRef,
     etcPeerManager: ActorRef,
     syncConfig: SyncConfig,
+    slotTimeConverter: SlotTimeConverter,
     shutdownAppFn: () => Unit,
     externalSchedulerOpt: Option[Scheduler] = None)
   extends Actor
@@ -77,7 +78,7 @@ class SyncController(
   def startRegularSync(): Unit = {
     val regularSync = context.actorOf(RegularSync.props(appStateStorage, etcPeerManager,
       peerEventBus, ommersPool, pendingTransactionsManager, new BlockBroadcast(etcPeerManager),
-      ledger, syncConfig, scheduler), "regular-sync")
+      ledger, syncConfig, slotTimeConverter, scheduler), "regular-sync")
     regularSync ! RegularSync.Start
     context become runningRegularSync(regularSync)
   }
@@ -95,9 +96,10 @@ object SyncController {
             ommersPool: ActorRef,
             etcPeerManager: ActorRef,
             syncConfig: SyncConfig,
+            slotTimeConverter: SlotTimeConverter,
             shutdownFn: () => Unit):
   Props = Props(new SyncController(appStateStorage, blockchain, syncStateStorage, ledger, validators,
-    peerEventBus, pendingTransactionsManager, ommersPool, etcPeerManager, syncConfig, shutdownFn))
+    peerEventBus, pendingTransactionsManager, ommersPool, etcPeerManager, syncConfig, slotTimeConverter, shutdownFn))
 
   case object Start
 }

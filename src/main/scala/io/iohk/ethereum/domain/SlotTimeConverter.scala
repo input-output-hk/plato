@@ -21,4 +21,17 @@ case class SlotTimeConverter(ouroborosConfig: OuroborosConfig, slot1StartingTime
     (slotNumber - 1) * ouroborosConfig.slotDuration.toMillis + slot1StartingTime.toMillis
   }
 
+  /**
+    * Returns the slot number at which the passed time belongs
+    * If the time is from before the slot 1 starting time then slot 0 is returned
+    *
+    * @param timestamp whose corresponding slot number will be calculated
+    * @return slot number to which the timestamp belongs
+    */
+  def getSlotNumberFromTime(timestamp: FiniteDuration): BigInt =
+    if(timestamp < slot1StartingTime)
+      0
+    else
+      (timestamp - slot1StartingTime).toMillis / ouroborosConfig.slotDuration.toMillis + 1
+
 }
