@@ -6,7 +6,7 @@ import akka.actor.{ActorSystem, Props}
 import akka.testkit.{TestActorRef, TestProbe}
 import akka.util.ByteString
 import io.iohk.ethereum.blockchain.sync.FastSync.{StateMptNodeHash, SyncState}
-import io.iohk.ethereum.domain.{Account, BlockHeader, SignedBlockHeader}
+import io.iohk.ethereum.domain.{Account, BlockHeader, SignedBlockHeader, SlotTimeConverter}
 import io.iohk.ethereum.ledger.{BloomFilter, Ledger}
 import io.iohk.ethereum.network.EtcPeerManagerActor.{HandshakedPeers, PeerInfo}
 import io.iohk.ethereum.network.PeerEventBusActor.PeerEvent.MessageFromPeer
@@ -365,6 +365,7 @@ class SyncControllerSpec extends FlatSpec with Matchers with BeforeAndAfter with
       new Mocks.MockValidatorsAlwaysSucceed,
       peerMessageBus.ref, pendingTransactionsManager.ref, ommersPool.ref, etcPeerManager.ref,
       syncConfig,
+      slotTimeConverter,
       () => (),
       externalSchedulerOpt = None)))
 
@@ -392,6 +393,9 @@ class SyncControllerSpec extends FlatSpec with Matchers with BeforeAndAfter with
     }
 
     val ledger: Ledger = mock[Ledger]
+    val slotTimeConverter = mock[SlotTimeConverter]
+
+    (slotTimeConverter.getSlotNumberFromTime _).expects(*).returning(0).anyNumberOfTimes()
 
     val peerMessageBus = TestProbe()
     peerMessageBus.ignoreMsg{
@@ -438,6 +442,7 @@ class SyncControllerSpec extends FlatSpec with Matchers with BeforeAndAfter with
       new Mocks.MockValidatorsAlwaysSucceed,
       peerMessageBus.ref, pendingTransactionsManager.ref, ommersPool.ref, etcPeerManager.ref,
       syncConfig,
+      slotTimeConverter,
       () => (),
       externalSchedulerOpt = None)))
 

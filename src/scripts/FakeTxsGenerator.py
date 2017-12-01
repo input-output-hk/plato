@@ -16,7 +16,7 @@ default_logging_level = logging.DEBUG
 default_account_passphrase = '1234'
 default_tx_value = 0
 default_tx_gas_price = 0
-
+default_gas_limit = 21000                   # Set equal to the instrinsic gas
 
 def fatal(error_message, exit_value = -1):
 
@@ -49,7 +49,7 @@ def create_account():
     account_address = web3.personal.newAccount(default_account_passphrase)
     logging.info('Account {} successfully created'.format(account_address))
 
-    is_unlocked = web3.personal.unlockAccount(account_address, default_account_passphrase)
+    is_unlocked = web3.personal.unlockAccount(account_address, default_account_passphrase, "0")
     if is_unlocked:
         logging.info('Account {} successfully unlocked'.format(account_address))
     else:
@@ -64,7 +64,8 @@ def send_transaction(sender_address, recipient_address, value, sleep_time):
         'to': recipient_address,
         'from': sender_address,
         'gasPrice': default_tx_gas_price,
-        'value': value})
+        'value': value,
+        'gas': default_gas_limit})
 
     logging.debug('Sent TX with ID {} from {} to {} with value {}'
         .format(tx_id, sender_address, recipient_address, value))

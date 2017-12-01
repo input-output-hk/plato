@@ -20,6 +20,7 @@ import org.spongycastle.util.encoders.Hex
 
 import scala.annotation.tailrec
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.duration._
 
 //TODO Refactor to get rid of most of mutable state [EC-320]
 class RegularSync(
@@ -31,6 +32,7 @@ class RegularSync(
     val broadcaster: BlockBroadcast,
     val ledger: Ledger,
     val syncConfig: SyncConfig,
+    val slotTimeConverter: SlotTimeConverter,
     implicit val scheduler: Scheduler)
   extends Actor with ActorLogging with PeerListSupport with BlacklistSupport {
 
@@ -72,7 +74,8 @@ class RegularSync(
       resumeRegularSync()
 
     case PrintStatus =>
-      log.info(s"Block: ${appStateStorage.getBestBlockNumber()}. Peers: ${handshakedPeers.size} (${blacklistedPeers.size} blacklisted)")
+      val currentSlot = slotTimeConverter.getSlotNumberFromTime(System.currentTimeMillis().millis)
+      log.info(s"Block: ${appStateStorage.getBestBlockNumber()}, slot: $currentSlot Peers: ${handshakedPeers.size} (${blacklistedPeers.size} blacklisted)")
   }
 
   def handleAdditionalMessages: Receive = handleNewBlockMessages orElse handleMinedBlock orElse handleNewBlockHashesMessages
@@ -414,9 +417,9 @@ object RegularSync {
   // scalastyle:off parameter.number
   def props(appStateStorage: AppStateStorage, etcPeerManager: ActorRef, peerEventBus: ActorRef, ommersPool: ActorRef,
       pendingTransactionsManager: ActorRef, broadcaster: BlockBroadcast, ledger: Ledger,
-      syncConfig: SyncConfig, scheduler: Scheduler): Props =
+      syncConfig: SyncConfig, slotTimeConverter: SlotTimeConverter, scheduler: Scheduler): Props =
     Props(new RegularSync(appStateStorage, etcPeerManager, peerEventBus, ommersPool, pendingTransactionsManager,
-      broadcaster, ledger, syncConfig, scheduler))
+      broadcaster, ledger, syncConfig, slotTimeConverter, scheduler))
 
   private[sync] case object ResumeRegularSync
   private case class ResolveBranch(peer: ActorRef)
