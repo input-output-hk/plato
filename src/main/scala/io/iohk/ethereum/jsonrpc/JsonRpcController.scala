@@ -91,6 +91,8 @@ class JsonRpcController(
       handle[ProtocolVersionRequest, ProtocolVersionResponse](ethService.protocolVersion, req)
     case req @ JsonRpcRequest(_, "eth_syncing", _, _) =>
       handle[SyncingRequest, SyncingResponse](ethService.syncing, req)
+    case req @ JsonRpcRequest(_, "eth_hashrate", _, _) =>
+      handle[GetHashRateRequest, GetHashRateResponse](ethService.getHashRate, req)
     case req @ JsonRpcRequest(_, "eth_gasPrice", _, _) =>
       handle[GetGasPriceRequest, GetGasPriceResponse](ethService.getGetGasPrice, req)
     case req@JsonRpcRequest(_, "eth_getTransactionByBlockNumberAndIndex", _, _) =>

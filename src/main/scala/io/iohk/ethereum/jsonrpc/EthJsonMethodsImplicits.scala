@@ -5,7 +5,7 @@ import io.iohk.ethereum.jsonrpc.EthService._
 import io.iohk.ethereum.jsonrpc.JsonRpcController.{JsonDecoder, JsonEncoder}
 import io.iohk.ethereum.jsonrpc.JsonRpcErrors.InvalidParams
 import io.iohk.ethereum.jsonrpc.PersonalService.{SendTransactionRequest, SendTransactionResponse, SignRequest}
-import org.json4s.Extraction
+import org.json4s.{Extraction, JsonAST}
 import org.json4s.JsonAST.{JArray, JBool, JString, JValue, _}
 import org.json4s.JsonDSL._
 
@@ -31,6 +31,15 @@ object EthJsonMethodsImplicits extends JsonMethodsImplicits {
     }
 
     override def encodeJson(t: GetGasPriceResponse): JValue =  encodeAsHex(t.price)
+  }
+
+  implicit val eth_hashrate = new JsonDecoder[GetHashRateRequest] with JsonEncoder[GetHashRateResponse] {
+    override def decodeJson(params: Option[JArray]): Either[JsonRpcError, GetHashRateRequest] = params match {
+      case None | Some(JArray(Nil)) => Right(GetHashRateRequest())
+      case Some(_) => Left(InvalidParams())
+    }
+
+    override def encodeJson(t: GetHashRateResponse): JsonAST.JValue = encodeAsHex(t.hashRate)
   }
 
   implicit val eth_getBlockTransactionCountByHash = new JsonDecoder[TxCountByBlockHashRequest] with JsonEncoder[TxCountByBlockHashResponse] {
