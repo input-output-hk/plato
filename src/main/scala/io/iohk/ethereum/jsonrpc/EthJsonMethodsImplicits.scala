@@ -42,6 +42,15 @@ object EthJsonMethodsImplicits extends JsonMethodsImplicits {
     override def encodeJson(t: GetHashRateResponse): JsonAST.JValue = encodeAsHex(t.hashRate)
   }
 
+  implicit val eth_mining = new JsonDecoder[GetMiningRequest] with JsonEncoder[GetMiningResponse] {
+    override def decodeJson(params: Option[JArray]): Either[JsonRpcError, GetMiningRequest] = params match {
+      case None | Some(JArray(Nil)) => Right(GetMiningRequest())
+      case Some(_) => Left(InvalidParams())
+    }
+
+    override def encodeJson(t: GetMiningResponse): JValue = JBool(t.isMining)
+  }
+
   implicit val eth_getBlockTransactionCountByHash = new JsonDecoder[TxCountByBlockHashRequest] with JsonEncoder[TxCountByBlockHashResponse] {
     override def decodeJson(params: Option[JArray]): Either[JsonRpcError, TxCountByBlockHashRequest] =
       params match {

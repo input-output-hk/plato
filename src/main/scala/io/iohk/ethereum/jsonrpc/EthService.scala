@@ -75,6 +75,9 @@ object EthService {
   case class GetHashRateRequest()
   case class GetHashRateResponse(hashRate: BigInt)
 
+  case class GetMiningRequest()
+  case class GetMiningResponse(isMining: Boolean)
+
   case class SendRawTransactionRequest(data: ByteString)
   case class SendRawTransactionResponse(transactionHash: ByteString)
 
@@ -413,6 +416,15 @@ class EthService(
     */
   def getHashRate(req: GetHashRateRequest): ServiceResponse[GetHashRateResponse] = {
     Future.successful(Right(GetHashRateResponse(0)))
+  }
+
+  /**
+    * The client doesn't use PoW anymore, so fetching for 'is mining' has no longer sense.
+    * We fixed the value to true in order to maintain compatibility with tools like etc-netstats,
+    * that use this method from the JSON RPC interface.
+    */
+  def getMining(req: GetMiningRequest): ServiceResponse[GetMiningResponse] = {
+    Future.successful(Right(GetMiningResponse(true)))
   }
 
   def sendRawTransaction(req: SendRawTransactionRequest): ServiceResponse[SendRawTransactionResponse] = {
