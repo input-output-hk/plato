@@ -49,7 +49,7 @@ class ProofOfStakeMiner(
                 log.error(s"Unable to get block for mining, error: ${ex.getMessage()}")
             }
           case _ =>
-            log.info("No leader selected")
+            log.debug(s"At slot ${slotNumber} no account from this node was elected as slot leader.")
         }
       case Left(keyStoreError) =>
         log.error("Error: Unable to access to node accounts", keyStoreError.toString)
@@ -57,8 +57,8 @@ class ProofOfStakeMiner(
   }
 
   private def getBlockForMining(parentBlock: Block, slotNumber: BigInt, blockLeader: Address): Future[PendingBlock] = {
-    getOmmersFromPool(parentBlock.signedHeader.header.number + 1).zip(getTransactionsFromPool).flatMap { case (ommers, pendingTxs) =>
-      blockGenerator.generateBlockForMining(parentBlock, pendingTxs.pendingTransactions.map(_.stx), ommers.headers, blockLeader, slotNumber) match {
+    getTransactionsFromPool.flatMap { case pendingTxs =>
+      blockGenerator.generateBlockForMining(parentBlock, pendingTxs.pendingTransactions.map(_.stx), Seq.empty, blockLeader, slotNumber) match {
         case Right(pendingBlock) => Future.successful(pendingBlock)
         case Left(err) => Future.failed(new RuntimeException(s"Error while generating block for mining: $err"))
       }
