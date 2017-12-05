@@ -32,7 +32,7 @@ response=$(curl -s -X POST \
   "$endpoint"/ \
   -H 'cache-control: no-cache' \
   -H 'content-type: application/json' \
-  -d '{ "jsonrpc": "2.0", "method": "personal_unlockMinerAccount", "params": ["'$address'", "'$passphrase'", 0], "id": 1 }')
+  -d '{ "jsonrpc": "2.0", "method": "personal_unlockMinerAccount", "params": ["'$address'", "'$passphrase'"], "id": 1 }')
 
 maybeError=$(jsonval "$response" error)
 if [[ ! -z "$maybeError" ]]; then
