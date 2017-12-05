@@ -837,4 +837,4 @@ case object UnknownBlock  extends BlockStatus
 trait BlockPreparationError
 
 case class TxError(reason: String) extends BlockPreparationError
-case object InvalidBlockHeaderSignature extends BlockPreparationError
+case object LockedMinerAccountError extends BlockPreparationError

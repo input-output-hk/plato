@@ -9,7 +9,7 @@ import io.iohk.ethereum.db.dataSource.EphemDataSource
 import io.iohk.ethereum.db.storage.{ArchiveNodeStorage, NodeStorage}
 import io.iohk.ethereum.domain._
 import io.iohk.ethereum.ledger.Ledger.{BlockPreparationResult, BlockResult}
-import io.iohk.ethereum.ledger.{BlockPreparationError, BloomFilter, InvalidBlockHeaderSignature, Ledger}
+import io.iohk.ethereum.ledger.{BlockPreparationError, BloomFilter, LockedMinerAccountError, Ledger}
 import io.iohk.ethereum.mpt.{ByteArraySerializable, MerklePatriciaTrie}
 import io.iohk.ethereum.network.p2p.messages.PV62.BlockBody
 import io.iohk.ethereum.network.p2p.messages.PV62.SignedBlockHeaderImplicits._
@@ -49,7 +49,7 @@ class BlockGenerator(blockchain: Blockchain, blockchainConfig: BlockchainConfig,
           receiptsRoot = buildMpt(receipts, Receipt.byteArraySerializable),
           logsBloom = bloomFilter,
           gasUsed = gasUsed)
-          blockHeaderSignerFn(header, beneficiary).toRight(InvalidBlockHeaderSignature).map(
+          blockHeaderSignerFn(header, beneficiary).toRight(LockedMinerAccountError).map(
           signedBlockHeader => PendingBlock(Block(signedBlockHeader, prepareBlock.body), receipts)
         )
     }
