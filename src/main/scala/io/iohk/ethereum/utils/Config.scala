@@ -405,6 +405,8 @@ object PruningConfig {
 trait OuroborosConfig {
   val slotDuration: FiniteDuration
   val slotMinerStakeholdersMapping: Map[BigInt, Seq[Address]]
+  val consensusContractAddress: Address
+  val consensusContractFilepath: String
 }
 
 object OuroborosConfig {
@@ -422,6 +424,8 @@ object OuroborosConfig {
 
             (slotNumber, allowedStakeholders)
         }.toMap
+      override val consensusContractAddress = Address(ouroborosConfig.getString("consensus-contract-address"))
+      override val consensusContractFilepath = ouroborosConfig.getString("consensus-contract-filepath")
     }
   }
 }

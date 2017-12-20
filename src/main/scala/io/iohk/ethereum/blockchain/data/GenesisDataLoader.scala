@@ -3,11 +3,11 @@ package io.iohk.ethereum.blockchain.data
 import java.io.{File, FileNotFoundException}
 
 import akka.util.ByteString
+import io.iohk.ethereum.blockchain.data.GenesisDataLoader.ContractData
 import io.iohk.ethereum.blockchain.data.GenesisDataLoader.JsonSerializers.ByteStringJsonSerializer
 import io.iohk.ethereum.crypto.ECDSASignature
 import io.iohk.ethereum.rlp.RLPList
-import io.iohk.ethereum.utils.BlockchainConfig
-import io.iohk.ethereum.utils.Logger
+import io.iohk.ethereum.utils.{BlockchainConfig, Logger, OuroborosConfig}
 import io.iohk.ethereum.{crypto, rlp}
 import io.iohk.ethereum.db.dataSource.EphemDataSource
 import io.iohk.ethereum.db.storage._
@@ -21,13 +21,14 @@ import io.iohk.ethereum.vm._
 import io.iohk.ethereum.vm.utils.Utils
 import org.json4s.{CustomSerializer, DefaultFormats, Formats, JString, JValue}
 import org.spongycastle.util.encoders.Hex
-
 import scala.io.Source
 import scala.util.{Failure, Success, Try}
 
 class GenesisDataLoader(
+    ouroborosConfig: OuroborosConfig,
     blockchain: BlockchainImpl,
-    blockchainConfig: BlockchainConfig)
+    blockchainConfig: BlockchainConfig,
+    virtualMachine: VM)
   extends Logger {
 
   private val bloomLength = 512
@@ -84,70 +85,28 @@ class GenesisDataLoader(
     implicit val formats: Formats = DefaultFormats + ByteStringJsonSerializer
     for {
       genesisData <- Try(parse(genesisJson).extract[GenesisData])
-      _ <- loadGenesisData(genesisData)
+      consensusContractCode <- Try(Utils.loadContractCodeFromFile(new File(ouroborosConfig.consensusContractFilepath)))
+      _ <- loadGenesisData(genesisData, ContractData(ouroborosConfig.consensusContractAddress, consensusContractCode))
     } yield ()
   }
 
-  // scalastyle:off method.length
-  private def loadGenesisData(genesisData: GenesisData): Try[Unit] = {
-    import MerklePatriciaTrie.defaultByteArraySerializable
-
+  private def loadGenesisData(genesisData: GenesisData, consensusContractData: ContractData): Try[Unit] = {
     val ephemDataSource = EphemDataSource()
     val nodeStorage = new NodeStorage(ephemDataSource)
-    val initalRootHash = MerklePatriciaTrie.EmptyRootHash
+    val initialRootHash = MerklePatriciaTrie.EmptyRootHash
+    val stateMptRootHash = ByteString(storeUserAllocAccounts(nodeStorage, genesisData, initialRootHash))
 
-    log.debug("Start saving pre-defined accounts")
-    val stateMptRootHash = genesisData.alloc.zipWithIndex.foldLeft(initalRootHash) {
-      case (rootHash, (((address, AllocAccount(balance)), idx))) => {
-        val ephemNodeStorage = pruning.PruningMode.nodesKeyValueStorage(pruning.ArchivePruning, nodeStorage)(Some(idx - genesisData.alloc.size))
-        val mpt = MerklePatriciaTrie[Array[Byte], Account](rootHash, ephemNodeStorage)
-        val paddedAddress = address.reverse.padTo(addressLength, "0").reverse.mkString
-        mpt.put(crypto.kec256(Hex.decode(paddedAddress)),
-          Account(blockchainConfig.accountStartNonce, UInt256(BigInt(balance)), emptyTrieRootHash, emptyEvmHash)
-        ).getRootHash
-      }
-    }
-
-    val preBlockHeader: BlockHeader = prepareGenesisBlockHeader(genesisData, stateMptRootHash)
-    log.debug(s"Prepared genesis header: $preBlockHeader")
-
+    log.debug("About to save user alloc accounts")
     ephemDataSource.getAll(nodeStorage.namespace)
       .foreach { case (key, value) => blockchain.saveNode(ByteString(key.toArray[Byte]), value.toArray[Byte], 0) }
 
-    val contractAddress = Address("0x000000000000000000000000000000000000000a")
+    log.debug("About to deploy consensus contract")
+    val preBlockHeader: BlockHeader = prepareGenesisBlockHeader(genesisData, stateMptRootHash)
+    // FIXME: Manage error situations
+    val lastRootHash = deployConsensusContract(consensusContractData, preBlockHeader, stateMptRootHash)
 
-    // TODO: Get path and contract by config param
-    log.debug("Start loading pre-defined consensus contract")
-    val ContractDir = new File("target/contracts")
-    val contractInitCode = Utils.loadContractCodeFromFile(new File(s"$ContractDir/Fibonacci.bin"))
-    val contractAbi = Utils.loadContractAbiFromFile(new File(s"$ContractDir/Fibonacci.abi"))
-
-    log.debug("Pre-defined consensus contract found")
-    val fromAddress = Address("0x0000000000000000000000000000000000000000")
-    val dummySignature = ECDSASignature(0, 0, 0.toByte)
-    val tx = Transaction(
-      nonce = BigInt(1),
-      gasPrice = 0,
-      gasLimit = 90000000, // TODO: get value from config param?
-      receivingAddress = None,
-      value = BigInt(0),
-      payload = contractInitCode
-    )
-    val stx = SignedTransaction(tx, dummySignature, fromAddress)
-    val evmConfig = EvmConfig.forBlock(blockNumber = BigInt(0), blockchainConfig)
-    val worldWithContractAccount = blockchain
-      .getWorldStateProxy(BigInt(0), blockchainConfig.accountStartNonce, Some(ByteString(stateMptRootHash)))
-      .saveAccount(contractAddress, Account())
-    val context: PC = ProgramContext(stx, contractAddress, Program(stx.tx.payload), preBlockHeader, worldWithContractAccount, evmConfig)
-    val result = VM.run(context)
-    val worldWithCode = result.world.saveCode(contractAddress, result.returnData)
-    val lastRootHash = InMemoryWorldStateProxy.persistState(worldWithCode).stateRootHash
-
-    // TODO: throw a failure if an error occured
-    log.debug(s"Error while simulate contract tx: ${result.error.toString}")
-
+    log.debug("About to save genesis block")
     val signedHeader = prepareGenesisSignedBlockHeader(preBlockHeader, lastRootHash)
-
     blockchain.getSignedBlockHeaderByNumber(0) match {
       case Some(existingSignedGenesisHeader) if existingSignedGenesisHeader.hash == signedHeader.hash =>
         log.debug("Genesis data already in the database")
@@ -161,13 +120,52 @@ class GenesisDataLoader(
     }
   }
 
+  private def storeUserAllocAccounts(nodeStorage: NodeStorage, genesisData: GenesisData, initialRootHash: Array[Byte]): Array[Byte] = {
+    import MerklePatriciaTrie.defaultByteArraySerializable
+    genesisData.alloc.zipWithIndex.foldLeft(initialRootHash) {
+      case (rootHash, (((address, AllocAccount(balance)), idx))) =>
+        val ephemNodeStorage = pruning.PruningMode.nodesKeyValueStorage(pruning.ArchivePruning, nodeStorage)(Some(idx - genesisData.alloc.size))
+        val mpt = MerklePatriciaTrie[Array[Byte], Account](rootHash, ephemNodeStorage)
+        val paddedAddress = address.reverse.padTo(addressLength, "0").reverse.mkString
+        mpt.put(crypto.kec256(Hex.decode(paddedAddress)),
+        Account(blockchainConfig.accountStartNonce, UInt256(BigInt(balance)), emptyTrieRootHash, emptyEvmHash)
+      ).getRootHash
+    }
+  }
 
-  private def prepareGenesisBlockHeader(genesisData: GenesisData, stateMptRootHash: Array[Byte]) = {
+  private def deployConsensusContract(consensusContractData: ContractData, preBlockHeader: BlockHeader, currentStateRootHash: ByteString): ByteString = {
+    val stx = createSignedContractTransaction(consensusContractData.code)
+    val evmConfig = EvmConfig.forBlock(blockNumber = BigInt(0), blockchainConfig)
+    val worldWithContractAccount = blockchain
+      .getWorldStateProxy(BigInt(0), blockchainConfig.accountStartNonce, Some(currentStateRootHash))
+      .saveAccount(consensusContractData.address, Account())
+    val context: PC = ProgramContext(stx, consensusContractData.address, Program(stx.tx.payload), preBlockHeader, worldWithContractAccount, evmConfig)
+    val result = virtualMachine.run(context)
+    log.debug(s"Error while deploy consensus contract: ${result.error.toString}")
+    val worldWithCode = result.world.saveCode(consensusContractData.address, result.returnData)
+    InMemoryWorldStateProxy.persistState(worldWithCode).stateRootHash
+  }
+
+  private def createSignedContractTransaction(contractCode: ByteString): SignedTransaction = {
+    val fromAddress = Address("0x0000000000000000000000000000000000000000")
+    val dummySignature = ECDSASignature(0, 0, 0.toByte)
+    val tx = Transaction(
+      nonce = BigInt(1),
+      gasPrice = 0,
+      gasLimit = 90000000, // FIXME: Get value from config param?
+      receivingAddress = None,
+      value = BigInt(0),
+      payload = contractCode
+    )
+    SignedTransaction(tx, dummySignature, fromAddress)
+  }
+
+  private def prepareGenesisBlockHeader(genesisData: GenesisData, currentStateRootHash: ByteString) = {
     BlockHeader(
       parentHash = zeros(hashLength),
       ommersHash = ByteString(crypto.kec256(rlp.encode(RLPList()))),
       beneficiary = genesisData.coinbase,
-      stateRoot = ByteString(stateMptRootHash),
+      stateRoot = currentStateRootHash,
       transactionsRoot = emptyTrieRootHash,
       receiptsRoot = emptyTrieRootHash,
       logsBloom = zeros(bloomLength),
@@ -182,12 +180,12 @@ class GenesisDataLoader(
       slotNumber = 0)
   }
 
-  private def prepareGenesisSignedBlockHeader(prepareGenesisBlockHeader: BlockHeader, stateMptRootHash: ByteString) = {
+  private def prepareGenesisSignedBlockHeader(prepareGenesisBlockHeader: BlockHeader, currentStateRootHash: ByteString) = {
     val genesisSignature = ECDSASignature(
       s = zeros(ECDSASignature.SLength),
       r = zeros(ECDSASignature.SLength),
       v = 0.toByte)
-    SignedBlockHeader(prepareGenesisBlockHeader.copy(stateRoot = stateMptRootHash), genesisSignature)
+    SignedBlockHeader(prepareGenesisBlockHeader.copy(stateRoot = currentStateRootHash), genesisSignature)
   }
 
   private def zeros(length: Int) =
@@ -213,11 +211,13 @@ object GenesisDataLoader {
     }
 
     object ByteStringJsonSerializer extends CustomSerializer[ByteString](formats =>
-      (
-        { case jv => deserializeByteString(jv) },
+      ( {
+        case jv => deserializeByteString(jv)
+      },
         PartialFunction.empty
       )
     )
-
   }
+
+  case class ContractData(address: Address, code: ByteString)
 }
