@@ -23,6 +23,7 @@ import org.scalamock.scalatest.MockFactory
 import org.scalatest.{BeforeAndAfter, FlatSpec, Matchers}
 import org.spongycastle.util.encoders.Hex
 import io.iohk.ethereum.Fixtures.FakeSignature
+import io.iohk.ethereum.blockchain.EphemBlockchainTestSetup
 
 import scala.collection.immutable.Set
 import scala.concurrent.Await

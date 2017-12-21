@@ -5,7 +5,7 @@ import java.net.URI
 import akka.actor.{ActorSystem, Props}
 import akka.testkit.TestProbe
 import com.miguno.akka.testing.VirtualTime
-import io.iohk.ethereum.blockchain.sync.EphemBlockchainTestSetup
+import io.iohk.ethereum.blockchain.EphemBlockchainTestSetup
 import io.iohk.ethereum.network.KnownNodesManager.KnownNodesManagerConfig
 
 import scala.concurrent.duration._

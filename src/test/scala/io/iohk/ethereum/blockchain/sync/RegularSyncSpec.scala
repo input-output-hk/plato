@@ -25,6 +25,7 @@ import org.scalamock.scalatest.MockFactory
 import org.scalatest.{BeforeAndAfterAll, Matchers, WordSpecLike}
 import org.spongycastle.crypto.AsymmetricCipherKeyPair
 import io.iohk.ethereum.Fixtures.FakeSignature
+import io.iohk.ethereum.blockchain.EphemBlockchainTestSetup
 
 import scala.concurrent.duration.{FiniteDuration, _}
 
