@@ -539,7 +539,7 @@ class LedgerImpl(
 
   private def validateBlockBeforeExecution(block: Block): Either[ValidationBeforeExecError, BlockExecutionSuccess] = {
     val result = for {
-      _ <- validators.blockHeaderValidator.validate(block.signedHeader, getHeaderFromChainOrQueue _, simulateTransaction _)
+      _ <- validators.blockHeaderValidator.validate(block.signedHeader, getHeaderFromChainOrQueue _)
       _ <- validators.blockValidator.validateHeaderAndBody(block.signedHeader, block.body)
       // TODO: Remove it when ommer functionality dissapear
       /*_ <- validators.ommersValidator.validate(block.signedHeader.header.parentHash, block.signedHeader.header.number, block.body.uncleNodesList,

@@ -465,8 +465,7 @@ trait ProofOfStakeMinerBuilder {
     with SyncControllerBuilder
     with ElectionManagerBuilder
     with KeyStoreBuilder
-    with MiningConfigBuilder
-    with LedgerBuilder =>
+    with MiningConfigBuilder =>
 
   lazy val miner: ActorRef = actorSystem.actorOf(ProofOfStakeMiner.props(
     blockchain,
@@ -476,8 +475,7 @@ trait ProofOfStakeMinerBuilder {
     syncController,
     miningConfig,
     keyStore,
-    electionManager,
-    ledger.simulateTransaction))
+    electionManager))
 }
 
 trait SlotTimeConverterBuilder {

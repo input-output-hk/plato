@@ -5,7 +5,6 @@ import akka.util.Timeout
 import io.iohk.ethereum.blockchain.sync.RegularSync
 import io.iohk.ethereum.domain._
 import io.iohk.ethereum.keystore.KeyStore
-import io.iohk.ethereum.ledger.Ledger.TxResult
 import io.iohk.ethereum.ommers.OmmersPool
 import io.iohk.ethereum.pos.ElectionManager
 import io.iohk.ethereum.transactions.PendingTransactionsManager
@@ -25,8 +24,7 @@ class ProofOfStakeMiner(
              syncController: ActorRef,
              miningConfig: MiningConfig,
              keyStore: KeyStore,
-             electionManager: ElectionManager,
-             simulateTx: (SignedTransaction, BlockHeader) => TxResult)
+             electionManager: ElectionManager)
   extends Actor with ActorLogging {
 
   import ProofOfStakeMiner._
@@ -40,7 +38,7 @@ class ProofOfStakeMiner(
     keyStore.listAccounts() match {
       case Right(accounts) =>
         val mayBeLeader: Option[Address] = accounts.collectFirst {
-          case account if electionManager.verifyIsLeader(account, slotNumber, simulateTx) => account
+          case account if electionManager.verifyIsLeader(account, slotNumber) => account
         }
         mayBeLeader match {
           case Some(leader) =>
@@ -97,8 +95,7 @@ object ProofOfStakeMiner {
             syncController: ActorRef,
             miningConfig: MiningConfig,
             keyStore: KeyStore,
-            electionManager: ElectionManager,
-            simulateTx: (SignedTransaction, BlockHeader) => TxResult): Props =
+            electionManager: ElectionManager): Props =
     Props(new ProofOfStakeMiner(
       blockchain,
       blockGenerator,
@@ -107,8 +104,7 @@ object ProofOfStakeMiner {
       syncController,
       miningConfig,
       keyStore,
-      electionManager,
-      simulateTx)
+      electionManager)
     )
   case class StartMining(slotNumber: BigInt)
 }
