@@ -2,6 +2,11 @@ package io.iohk.ethereum.pos
 
 import io.iohk.ethereum.domain.Address
 import io.iohk.ethereum.utils.OuroborosConfig
+import io.iohk.ethereum.utils.Logger
+import io.iohk.ethereum.governance.CertificateAuthorityManager
+
+import scala.concurrent.Await
+import scala.concurrent.duration._
 
 trait ElectionManager {
 
@@ -25,9 +30,14 @@ trait ElectionManager {
   * The list of stakeholders considered at each slot can be configured to change through the configuration:
   *   ouroborosConfig.slot-minerStakeHolders-mapping
   */
-case class ElectionManagerImpl(ouroborosConfig: OuroborosConfig) extends ElectionManager {
+case class ElectionManagerImpl(certificateAuthorityManager: CertificateAuthorityManager, ouroborosConfig: OuroborosConfig) extends ElectionManager with Logger {
 
   def verifyIsLeader(stakeholderAddress: Address, slotNumber: BigInt): Boolean = {
+    val isCAFuture = certificateAuthorityManager.isCertificateAuthorityFor(stakeholderAddress, slotNumber)
+    Await.result(isCAFuture, 1.seconds)
+    val isCA = isCAFuture.value
+    log.debug("***** iSCA = ", isCA)
+
     val minerStakeholders = MinerStakeholdersConfig.forSlot(slotNumber, ouroborosConfig)
 
     minerStakeholders.length match {
