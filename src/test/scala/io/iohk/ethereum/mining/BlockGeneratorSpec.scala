@@ -21,6 +21,8 @@ import org.spongycastle.crypto.AsymmetricCipherKeyPair
 import org.spongycastle.crypto.params.ECPublicKeyParameters
 import scala.concurrent.duration.FiniteDuration
 import io.iohk.ethereum.Fixtures.FakeSignature
+import scala.concurrent.duration._
+
 
 class BlockGeneratorSpec extends FlatSpec with Matchers with PropertyChecks with Logger {
 
@@ -314,7 +316,15 @@ class BlockGeneratorSpec extends FlatSpec with Matchers with PropertyChecks with
 
     lazy val ledger = new LedgerImpl(VM, blockchain, blockchainConfig, syncConfig, validators)
 
-    val genesisDataLoader = new GenesisDataLoader(blockchain, blockchainConfig)
+    val ouroborosConfig = new OuroborosConfig {
+      override val consensusContractFilepath: String = "src/test/resources/Consensus.bin"
+      // unused
+      override val consensusContractAddress: Address = Address(0)
+      override val slotDuration: FiniteDuration = 0.millis
+      override val slotMinerStakeholdersMapping: Map[BigInt, Seq[Address]] = Map.empty
+    }
+
+    val genesisDataLoader = new GenesisDataLoader(ouroborosConfig, blockchain, blockchainConfig, VM)
     genesisDataLoader.loadGenesisData()
 
     val bestBlock = blockchain.getBestBlock()
