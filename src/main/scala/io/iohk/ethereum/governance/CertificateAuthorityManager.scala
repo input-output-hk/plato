@@ -1,11 +1,19 @@
 package io.iohk.ethereum.governance
 
-import io.iohk.ethereum.domain.Address
+import io.iohk.ethereum.domain.{Address, BlockHeader, SignedTransaction}
+import io.iohk.ethereum.ledger.Ledger.TxResult
 import io.iohk.ethereum.utils.Logger
 
-case class CertificateAuthorityManager() extends Logger {
+trait CertificateAuthorityManager {
 
-  def isCertificateAuthorityFor(address: Address, slotNumber: BigInt): Boolean = {
+  def isCertificateAuthorityFor(address: Address, slotNumber: BigInt): Boolean
+}
+
+case class CertificateAuthorityManagerImpl(
+    simulateTx: (SignedTransaction, BlockHeader) => TxResult)
+  extends CertificateAuthorityManager with Logger {
+
+  override def isCertificateAuthorityFor(address: Address, slotNumber: BigInt): Boolean = {
     /*
     val tx = CallTx(
       Some(ByteString(Hex.decode("c60b5deadccaa4258bc5698af683adac73f1e4a9"))), // TODO: Pass as argument
