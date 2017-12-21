@@ -1,21 +1,11 @@
 package io.iohk.ethereum.governance
 
-//import akka.util.ByteString
 import io.iohk.ethereum.domain.Address
-import io.iohk.ethereum.ledger.Ledger
 import io.iohk.ethereum.utils.Logger
-//import org.spongycastle.util.encoders.Hex
 
-import scala.concurrent.Future
-import scala.concurrent.ExecutionContext.Implicits.global
-//import scala.util.{Failure, Success}
+case class CertificateAuthorityManager() extends Logger {
 
-
-case class CertificateAuthorityManager(
-  ledger: Ledger)
-  extends Logger {
-
-  def isCertificateAuthorityFor(address: Address, slotNumber: BigInt): Future[Boolean] = {
+  def isCertificateAuthorityFor(address: Address, slotNumber: BigInt): Boolean = {
     /*
     val tx = CallTx(
       Some(ByteString(Hex.decode("c60b5deadccaa4258bc5698af683adac73f1e4a9"))), // TODO: Pass as argument
@@ -37,7 +27,7 @@ case class CertificateAuthorityManager(
         log.error("Failed to get future", ex)
         Future{ throw ex }
     }*/
-    Future{ true }
+    true
   }
 
 }

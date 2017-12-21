@@ -89,7 +89,7 @@ trait OuroborosConfigBuilder {
 
 trait CertificateAuthorityManagerBuilder {
   self: LedgerBuilder =>
-  lazy val certificateAuthorityManager = CertificateAuthorityManager(ledger)
+  lazy val certificateAuthorityManager = CertificateAuthorityManager()
 }
 
 trait ElectionManagerBuilder {
@@ -465,7 +465,8 @@ trait ProofOfStakeMinerBuilder {
     with SyncControllerBuilder
     with ElectionManagerBuilder
     with KeyStoreBuilder
-    with MiningConfigBuilder =>
+    with MiningConfigBuilder
+    with LedgerBuilder =>
 
   lazy val miner: ActorRef = actorSystem.actorOf(ProofOfStakeMiner.props(
     blockchain,
@@ -475,7 +476,8 @@ trait ProofOfStakeMinerBuilder {
     syncController,
     miningConfig,
     keyStore,
-    electionManager))
+    electionManager,
+    ledger.simulateTransaction))
 }
 
 trait SlotTimeConverterBuilder {

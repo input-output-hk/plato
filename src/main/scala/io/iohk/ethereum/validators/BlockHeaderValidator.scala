@@ -2,16 +2,18 @@ package io.iohk.ethereum.validators
 
 import akka.util.ByteString
 import io.iohk.ethereum.domain._
+import io.iohk.ethereum.ledger.Ledger.TxResult
 import io.iohk.ethereum.pos.ElectionManager
 import io.iohk.ethereum.timing.Clock
 import io.iohk.ethereum.utils.BlockchainConfig
 
 trait BlockHeaderValidator {
   def validate(signedBlockHeader: SignedBlockHeader, getSignedBlockHeaderByHash: ByteString =>
-    Option[SignedBlockHeader]): Either[BlockHeaderError, BlockHeaderValid]
+    Option[SignedBlockHeader], simulateTx: (SignedTransaction, BlockHeader) => TxResult): Either[BlockHeaderError, BlockHeaderValid]
 
-  def validate(signedBlockHeader: SignedBlockHeader, blockchain: Blockchain): Either[BlockHeaderError, BlockHeaderValid] =
-    validate(signedBlockHeader, blockchain.getSignedBlockHeaderByHash _)
+  def validate(signedBlockHeader: SignedBlockHeader, blockchain: Blockchain,
+               simulateTx: (SignedTransaction, BlockHeader) => TxResult): Either[BlockHeaderError, BlockHeaderValid] =
+    validate(signedBlockHeader, blockchain.getSignedBlockHeaderByHash _, simulateTx)
 }
 
 object BlockHeaderValidatorImpl {
@@ -37,7 +39,8 @@ class BlockHeaderValidatorImpl(blockchainConfig: BlockchainConfig,
     * @param signedBlockHeader BlockHeader to validate.
     * @param parentHeader BlockHeader of the parent of the block to validate.
     */
-  def validate(signedBlockHeader: SignedBlockHeader, parentHeader: BlockHeader): Either[BlockHeaderError, BlockHeaderValid] = {
+  def validate(signedBlockHeader: SignedBlockHeader, parentHeader: BlockHeader,
+               simulateTx: (SignedTransaction, BlockHeader) => TxResult): Either[BlockHeaderError, BlockHeaderValid] = {
     for {
       _ <- validateSignedBlockHeaderSignature(signedBlockHeader)
       _ <- validateExtraData(signedBlockHeader.header)
@@ -46,7 +49,7 @@ class BlockHeaderValidatorImpl(blockchainConfig: BlockchainConfig,
       _ <- validateGasUsed(signedBlockHeader.header)
       _ <- validateGasLimit(signedBlockHeader.header, parentHeader)
       _ <- validateNumber(signedBlockHeader.header, parentHeader)
-      _ <- validateIsLeader(signedBlockHeader.header)
+      _ <- validateIsLeader(signedBlockHeader.header, simulateTx)
       _ <- validateSlotNumber(signedBlockHeader.header, parentHeader)
     } yield BlockHeaderValid
   }
@@ -58,10 +61,11 @@ class BlockHeaderValidatorImpl(blockchainConfig: BlockchainConfig,
     * @param getSignedBlockHeaderByHash function to obtain the parent header.
     */
   def validate(signedBlockHeader: SignedBlockHeader, getSignedBlockHeaderByHash: ByteString =>
-    Option[SignedBlockHeader]): Either[BlockHeaderError, BlockHeaderValid] = {
+    Option[SignedBlockHeader],
+               simulateTx: (SignedTransaction, BlockHeader) => TxResult): Either[BlockHeaderError, BlockHeaderValid] = {
     for {
       blockHeaderParent <- getSignedBlockHeaderByHash(signedBlockHeader.header.parentHash).map(Right(_)).getOrElse(Left(HeaderParentNotFoundError))
-      _ <- validate(signedBlockHeader, blockHeaderParent.header)
+      _ <- validate(signedBlockHeader, blockHeaderParent.header, simulateTx)
     } yield BlockHeaderValid
   }
 
@@ -171,9 +175,10 @@ class BlockHeaderValidatorImpl(blockchainConfig: BlockchainConfig,
     * @param blockHeader BlockHeader to validate
     * @return a [[BlockHeaderValid]] if valid, an [[HeaderBeneficiaryError]] otherwise
     */
-  private def validateIsLeader(blockHeader: BlockHeader): Either[BlockHeaderError, BlockHeaderValid] = {
+  private def validateIsLeader(blockHeader: BlockHeader,
+                               simulateTx: (SignedTransaction, BlockHeader) => TxResult): Either[BlockHeaderError, BlockHeaderValid] = {
     val blockCoinbase = Address(blockHeader.beneficiary)
-    val isLeader = electionManager.verifyIsLeader(blockCoinbase, blockHeader.slotNumber)
+    val isLeader = electionManager.verifyIsLeader(blockCoinbase, blockHeader.slotNumber, simulateTx)
     if(isLeader) Right(BlockHeaderValid)
     else Left(HeaderBeneficiaryError)
   }

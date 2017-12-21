@@ -1,12 +1,10 @@
 package io.iohk.ethereum.pos
 
-import io.iohk.ethereum.domain.Address
+import io.iohk.ethereum.domain.{Address, BlockHeader, SignedTransaction}
 import io.iohk.ethereum.utils.OuroborosConfig
 import io.iohk.ethereum.utils.Logger
 import io.iohk.ethereum.governance.CertificateAuthorityManager
-
-import scala.concurrent.Await
-import scala.concurrent.duration._
+import io.iohk.ethereum.ledger.Ledger.TxResult
 
 trait ElectionManager {
 
@@ -19,7 +17,8 @@ trait ElectionManager {
     * @param slotNumber         that is checked whether the stakeholder is leader of it or not
     * @return whether the stakeholder is the leader of the slotNumber
     */
-  def verifyIsLeader(stakeholderAddress: Address, slotNumber: BigInt): Boolean
+  def verifyIsLeader(stakeholderAddress: Address, slotNumber: BigInt,
+                     simulateTx: (SignedTransaction, BlockHeader) => TxResult): Boolean
 
 }
 
@@ -32,18 +31,12 @@ trait ElectionManager {
   */
 case class ElectionManagerImpl(certificateAuthorityManager: CertificateAuthorityManager, ouroborosConfig: OuroborosConfig) extends ElectionManager with Logger {
 
-  def verifyIsLeader(stakeholderAddress: Address, slotNumber: BigInt): Boolean = {
-    val isCAFuture = certificateAuthorityManager.isCertificateAuthorityFor(stakeholderAddress, slotNumber)
-    Await.result(isCAFuture, 1.seconds)
-    val isCA = isCAFuture.value
-    log.debug("***** iSCA = ", isCA)
+  def verifyIsLeader(stakeholderAddress: Address, slotNumber: BigInt,
+                     simulateTx: (SignedTransaction, BlockHeader) => TxResult): Boolean = {
+    val isCA = certificateAuthorityManager.isCertificateAuthorityFor(stakeholderAddress, slotNumber)
+    log.debug(s"***** iSCA = $isCA")
 
-    val minerStakeholders = MinerStakeholdersConfig.forSlot(slotNumber, ouroborosConfig)
-
-    minerStakeholders.length match {
-      case length if length > 0 => stakeholderAddress == minerStakeholders(((slotNumber - 1) % length).toInt)
-      case _ => false
-    }
+    isCA
   }
 
 }
