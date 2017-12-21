@@ -1,6 +1,7 @@
 package io.iohk.ethereum.mining
 
 import java.time.Instant
+
 import akka.util.ByteString
 import io.iohk.ethereum.Mocks.MockValidatorsAlwaysSucceed
 import io.iohk.ethereum.{Timeouts, crypto}
@@ -19,8 +20,10 @@ import io.iohk.ethereum.domain.SignedTransaction.FirstByteOfAddress
 import io.iohk.ethereum.utils.Config.SyncConfig
 import org.spongycastle.crypto.AsymmetricCipherKeyPair
 import org.spongycastle.crypto.params.ECPublicKeyParameters
+
 import scala.concurrent.duration.FiniteDuration
 import io.iohk.ethereum.Fixtures.FakeSignature
+import io.iohk.ethereum.ledger.Ledger.TxResult
 
 class BlockGeneratorSpec extends FlatSpec with Matchers with PropertyChecks with Logger {
 
@@ -38,7 +41,7 @@ class BlockGeneratorSpec extends FlatSpec with Matchers with PropertyChecks with
       val signerHeader = pb.block.signedHeader.copy(header = blockHeader)
       pb.block.copy(signedHeader = signerHeader)
     })
-    fullBlock.right.foreach(b => validators.blockHeaderValidator.validate(b.signedHeader, blockchain) shouldBe Right(BlockHeaderValid))
+    fullBlock.right.foreach(b => validators.blockHeaderValidator.validate(b.signedHeader, blockchain, fakeSimulateTxFn) shouldBe Right(BlockHeaderValid))
     fullBlock.right.foreach(b => ledger.executeBlock(b) shouldBe a[Right[_, Seq[Receipt]]])
     fullBlock.right.foreach(b => b.signedHeader.header.extraData shouldBe miningConfig.headerExtraData)
   }
@@ -57,7 +60,7 @@ class BlockGeneratorSpec extends FlatSpec with Matchers with PropertyChecks with
         val signerHeader = pb.block.signedHeader.copy(header = blockHeader)
         pb.block.copy(signedHeader = signerHeader)
       })
-    fullBlock.right.foreach(b => validators.blockHeaderValidator.validate(b.signedHeader, blockchain) shouldBe Right(BlockHeaderValid))
+    fullBlock.right.foreach(b => validators.blockHeaderValidator.validate(b.signedHeader, blockchain, fakeSimulateTxFn) shouldBe Right(BlockHeaderValid))
     fullBlock.right.foreach(b => ledger.executeBlock(b) shouldBe a[Right[_, Seq[Receipt]]])
     fullBlock.right.foreach(b => b.signedHeader.header.extraData shouldBe miningConfig.headerExtraData)
   }
@@ -77,7 +80,7 @@ class BlockGeneratorSpec extends FlatSpec with Matchers with PropertyChecks with
       val signerHeader = pb.block.signedHeader.copy(header = blockHeader)
       pb.block.copy(signedHeader = signerHeader)
     })
-    fullBlock.right.foreach(b => validators.blockHeaderValidator.validate(b.signedHeader, blockchain) shouldBe Right(BlockHeaderValid))
+    fullBlock.right.foreach(b => validators.blockHeaderValidator.validate(b.signedHeader, blockchain, fakeSimulateTxFn) shouldBe Right(BlockHeaderValid))
     fullBlock.right.foreach(b => ledger.executeBlock(b) shouldBe a[Right[_, Seq[Receipt]]])
     fullBlock.right.foreach(b => b.body.transactionList shouldBe Seq(signedTransaction))
     fullBlock.right.foreach(b => b.signedHeader.header.extraData shouldBe miningConfig.headerExtraData)
@@ -104,7 +107,7 @@ class BlockGeneratorSpec extends FlatSpec with Matchers with PropertyChecks with
       val signerHeader = pb.block.signedHeader.copy(header = blockHeader)
       pb.block.copy(signedHeader = signerHeader)
     })
-    fullBlock.right.foreach(b => validators.blockHeaderValidator.validate(b.signedHeader, blockchain) shouldBe Right(BlockHeaderValid))
+    fullBlock.right.foreach(b => validators.blockHeaderValidator.validate(b.signedHeader, blockchain, fakeSimulateTxFn) shouldBe Right(BlockHeaderValid))
     fullBlock.right.foreach(b => ledger.executeBlock(b) shouldBe a[Right[_, Seq[Receipt]]])
     fullBlock.right.foreach(b => b.body.transactionList shouldBe Seq(signedTransaction))
     fullBlock.right.foreach(b => b.signedHeader.header.extraData shouldBe miningConfig.headerExtraData)
@@ -149,7 +152,7 @@ class BlockGeneratorSpec extends FlatSpec with Matchers with PropertyChecks with
       val signerHeader = pb.block.signedHeader.copy(header = blockHeader)
       pb.block.copy(signedHeader = signerHeader)
     })
-    fullBlock.right.foreach(b => validators.blockHeaderValidator.validate(b.signedHeader, blockchain) shouldBe Right(BlockHeaderValid))
+    fullBlock.right.foreach(b => validators.blockHeaderValidator.validate(b.signedHeader, blockchain, fakeSimulateTxFn) shouldBe Right(BlockHeaderValid))
     fullBlock.right.foreach(b => ledger.executeBlock(b) shouldBe a[Right[_, Seq[Receipt]]])
     fullBlock.right.foreach(b => b.body.transactionList shouldBe Seq(generalTx))
     fullBlock.right.foreach(b => b.signedHeader.header.extraData shouldBe miningConfig.headerExtraData)
@@ -172,7 +175,7 @@ class BlockGeneratorSpec extends FlatSpec with Matchers with PropertyChecks with
       val signerHeader = pb.block.signedHeader.copy(header = blockHeader)
       pb.block.copy(signedHeader = signerHeader)
     })
-    fullBlock.right.foreach(b => validators.blockHeaderValidator.validate(b.signedHeader, blockchain) shouldBe Right(BlockHeaderValid))
+    fullBlock.right.foreach(b => validators.blockHeaderValidator.validate(b.signedHeader, blockchain, fakeSimulateTxFn) shouldBe Right(BlockHeaderValid))
     fullBlock.right.foreach(b => ledger.executeBlock(b) shouldBe a[Right[_, Seq[Receipt]]])
     fullBlock.right.foreach(b => b.body.transactionList shouldBe Seq(signedTransaction, generalTx))
     fullBlock.right.foreach(b => b.signedHeader.header.extraData shouldBe miningConfig.headerExtraData)
@@ -195,7 +198,7 @@ class BlockGeneratorSpec extends FlatSpec with Matchers with PropertyChecks with
       val signerHeader = pb.block.signedHeader.copy(header = blockHeader)
       pb.block.copy(signedHeader = signerHeader)
     })
-    fullBlock.right.foreach(b => validators.blockHeaderValidator.validate(b.signedHeader, blockchain) shouldBe Right(BlockHeaderValid))
+    fullBlock.right.foreach(b => validators.blockHeaderValidator.validate(b.signedHeader, blockchain, fakeSimulateTxFn) shouldBe Right(BlockHeaderValid))
     fullBlock.right.foreach(b => ledger.executeBlock(b) shouldBe a[Right[_, Seq[Receipt]]])
     fullBlock.right.foreach(b => b.body.transactionList shouldBe Seq(signedTransaction, nextTransaction))
     fullBlock.right.foreach(b => b.signedHeader.header.extraData shouldBe miningConfig.headerExtraData)
@@ -231,7 +234,7 @@ class BlockGeneratorSpec extends FlatSpec with Matchers with PropertyChecks with
       val signerHeader = pb.block.signedHeader.copy(header = blockHeader)
       pb.block.copy(signedHeader = signerHeader)
     })
-    fullBlock.right.foreach(b => validators.blockHeaderValidator.validate(b.signedHeader, blockchain) shouldBe Right(BlockHeaderValid))
+    fullBlock.right.foreach(b => validators.blockHeaderValidator.validate(b.signedHeader, blockchain, fakeSimulateTxFn) shouldBe Right(BlockHeaderValid))
     fullBlock.right.foreach(b => ledger.executeBlock(b) shouldBe a[Right[_, Seq[Receipt]]])
     fullBlock.right.foreach(b => b.body.transactionList shouldBe Seq(signedTransaction, nextTransaction))
     fullBlock.right.foreach(b => b.signedHeader.header.extraData shouldBe miningConfig.headerExtraData)
@@ -257,7 +260,7 @@ class BlockGeneratorSpec extends FlatSpec with Matchers with PropertyChecks with
       val signerHeader = pb.block.signedHeader.copy(header = blockHeader)
       pb.block.copy(signedHeader = signerHeader)
     })
-    fullBlock.right.foreach(b => validators.blockHeaderValidator.validate(b.signedHeader, blockchain) shouldBe Right(BlockHeaderValid))
+    fullBlock.right.foreach(b => validators.blockHeaderValidator.validate(b.signedHeader, blockchain, fakeSimulateTxFn) shouldBe Right(BlockHeaderValid))
     fullBlock.right.foreach(b => ledger.executeBlock(b) shouldBe a[Right[_, Seq[Receipt]]])
     fullBlock.right.foreach(b => b.body.transactionList shouldBe Seq(signedTransaction))
     fullBlock.right.foreach(b => b.signedHeader.header.extraData shouldBe miningConfig.headerExtraData)
@@ -337,6 +340,9 @@ class BlockGeneratorSpec extends FlatSpec with Matchers with PropertyChecks with
       blockTimestampProvider,
       (blockHeader: BlockHeader, Address) => Some(SignedBlockHeader(blockHeader, FakeSignature))
     )
+
+    val fakeTxResult = TxResult(blockchain.getWorldStateProxy(-1, UInt256.Zero, None), 123, Nil, ByteString("return_value"), None)
+    val fakeSimulateTxFn: (SignedTransaction, BlockHeader) => TxResult = (_, _) => fakeTxResult
   }
 }
 

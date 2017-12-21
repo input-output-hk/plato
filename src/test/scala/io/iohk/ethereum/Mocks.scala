@@ -4,7 +4,7 @@ import akka.util.ByteString
 import io.iohk.ethereum.domain._
 import io.iohk.ethereum.keystore.{KeyStore, Wallet}
 import io.iohk.ethereum.ledger.BlockExecutionError.{StateBeforeFailure, TxsExecutionError}
-import io.iohk.ethereum.ledger.Ledger.BlockPreparationResult
+import io.iohk.ethereum.ledger.Ledger.{BlockPreparationResult, TxResult}
 import io.iohk.ethereum.ledger._
 import io.iohk.ethereum.network.EtcPeerManagerActor.PeerInfo
 import io.iohk.ethereum.network.handshaker.{ConnectedState, DisconnectedState, Handshaker, HandshakerState}
@@ -119,7 +119,8 @@ object Mocks {
   }
 
   case class MockElectionManager(isValid: Address => Boolean) extends ElectionManager {
-    override def verifyIsLeader(stakeholder: Address, slotNumber: BigInt): Boolean = isValid(stakeholder)
+    override def verifyIsLeader(stakeholder: Address, slotNumber: BigInt,
+                                simulateTx: (SignedTransaction, BlockHeader) => TxResult): Boolean = isValid(stakeholder)
   }
 
   case class MockKeyStore(stakeholders: Either[KeyStore.KeyStoreError, List[Address]]) extends KeyStore {
