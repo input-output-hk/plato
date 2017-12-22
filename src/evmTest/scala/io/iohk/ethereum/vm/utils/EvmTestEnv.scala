@@ -3,13 +3,13 @@ package io.iohk.ethereum.vm.utils
 import java.io.File
 
 import akka.util.ByteString
-import io.iohk.ethereum.crypto
 import io.iohk.ethereum.crypto._
 import io.iohk.ethereum.domain.{Account, Address, UInt256}
 import io.iohk.ethereum.vm._
 
-import scala.language.dynamics
 import scala.util.Random
+
+import scala.language.dynamics
 
 object EvmTestEnv {
   val ContractsDir = new File("target/contracts")
@@ -32,8 +32,8 @@ trait EvmTestEnv {
 
   def world: MockWorldState = internalWorld
 
-  def contract(name: String): Contract = {
-    new Contract(name, contractsAddresses(name))
+  def contract(name: String): MockContract = {
+    new MockContract(name, contractsAddresses(name))
   }
 
   def createAccount(balance: BigInt = 0): Address = {
@@ -47,7 +47,7 @@ trait EvmTestEnv {
                      value: BigInt = 0,
                      gasLimit: BigInt = BigInt(2).pow(256) - 1,
                      gasPrice: BigInt = 1,
-                     constructorArgs: Seq[Any] = Nil): (ProgramResult[MockWorldState, MockStorage], Contract) = {
+                     constructorArgs: Seq[Any] = Nil): (ProgramResult[MockWorldState, MockStorage], MockContract) = {
     val creator = world.getAccount(creatorAddress).get
 
     val (contractAddress, worldAfterNonceIncrease) = world.createAddressWithOpCode(creatorAddress)
@@ -70,7 +70,7 @@ trait EvmTestEnv {
       .saveAccount(contractAddress, Account(UInt256(0), UInt256(value), Account.EmptyStorageRootHash, kec256(result.returnData)))
       .saveCode(contractAddress, result.returnData)
 
-    (result, new Contract(name, contractAddress))
+    (result, new MockContract(name, contractAddress))
   }
 
   private def parseArg(arg: Any): ByteString = arg match {
@@ -83,55 +83,36 @@ trait EvmTestEnv {
     case other => throw new RuntimeException("Invalid call argument")
   }
 
-  class Contract(val name: String, val address: Address) extends Dynamic {
+  class MockContract(val name: String, val address: Address) extends Dynamic {
 
-    def applyDynamic(methodName: String)(args: Any*): ContractMethodCall = {
-      callMethod(methodName)(args: _*)
+    def contract: Contract[MockWorldState, MockStorage] =
+      Contract[MockWorldState, MockStorage](address, MockVmInput.blockHeader, internalWorld, contractsAbis(name), config)
+
+    def applyDynamic(methodName: String)(args: Any*): MockContractMethodCall = {
+      val methodCall = contract.applyDynamic(methodName)(args: _*)
+      new MockContractMethodCall(this, methodCall)
     }
 
-    def callMethod(methodName: String)(args: Any*): ContractMethodCall = {
-      if (methodName.contains("("))
-        callWithSignature(methodName)(args: _*)
-      else
-        callWithMethodName(methodName)(args: _*)
-    }
-
-    private def callWithMethodName(methodName: String)(args: Any*): ContractMethodCall = {
-      val matchedAbis = contractsAbis(name)
-        .filter { a => a.inputs.size == args.size && a.name == methodName && a.`type` == "function" }
-
-      if (matchedAbis.isEmpty)
-        throw new RuntimeException("No matching ABI found. Please specify the signature")
-      else if (matchedAbis.size > 1)
-        throw new RuntimeException("More than one matching ABI found. Please specify the signature")
-      else {
-        val abi = matchedAbis.head
-        callWithSignature(s"$methodName(${abi.inputs.map(_.`type`).mkString(",")})")(args: _*)
-      }
-    }
-
-    private def callWithSignature(signature: String)(args: Any*): ContractMethodCall = {
-      val signatureHash = ByteString(crypto.kec256(signature.getBytes)).take(4)
-      val callData = args.map(parseArg).foldLeft(signatureHash)(_ ++ _)
-      new ContractMethodCall(this, callData)
+    def callMethod(methodName: String)(args: Any*): MockContractMethodCall = {
+      val methodCall = contract.callMethod(methodName)(args: _*)
+      new MockContractMethodCall(this, methodCall)
     }
 
     def storage: MockStorage = world.storages(address)
   }
 
-  class ContractMethodCall(contract: Contract, callData: ByteString) {
+  class MockContractMethodCall(mockContrack: MockContract,
+                               contractMethodCall: ContractMethodCall[MockWorldState, MockStorage]) {
+
     def call(value: BigInt = 0,
              gasLimit: BigInt = BigInt(2).pow(256) - 1,
              gasPrice: BigInt = 1,
              sender: Address = defaultSender): ProgramResult[MockWorldState, MockStorage] = {
-      val transaction = MockVmInput.transaction(sender, callData, value, gasLimit, gasPrice, Some(contract.address))
-      val blockHeader = MockVmInput.blockHeader
-      val pc = ProgramContext[MockWorldState, MockStorage](transaction, contract.address, Program(world.getCode(contract.address)), blockHeader, world, config)
-
-      val res = VM.run(pc)
+      val res = contractMethodCall.call(value, gasLimit, gasPrice, sender)
       internalWorld = res.world
       res
     }
+
   }
 
 }
