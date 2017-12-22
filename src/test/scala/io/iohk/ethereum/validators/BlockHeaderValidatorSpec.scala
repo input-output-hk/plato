@@ -15,6 +15,7 @@ import io.iohk.ethereum.validators.BlockHeaderValidatorImpl._
 import org.scalamock.scalatest.MockFactory
 import io.iohk.ethereum.nodebuilder.SecureRandomBuilder
 import io.iohk.ethereum.crypto.{generateKeyPair, kec256}
+import io.iohk.ethereum.ledger.Ledger.TxResult
 import org.spongycastle.crypto.AsymmetricCipherKeyPair
 import org.spongycastle.crypto.params.ECPublicKeyParameters
 
@@ -23,18 +24,18 @@ import scala.concurrent.duration._
 class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyChecks with ObjectGenerators with MockFactory with SecureRandomBuilder {
 
   "BlockHeaderValidator" should "validate correctly formed SignedBlockHeaders" in new TestSetup {
-    (electionManagerMock.verifyIsLeader _).expects(*, *).returning(true).anyNumberOfTimes()
+    (electionManagerMock.verifyIsLeader _).expects(*, *, *).returning(true).anyNumberOfTimes()
     (slotCalculatorMock.getSlotStartingMillis _).expects(*).returning(CurrentTime.toMillis - 1).anyNumberOfTimes()
     (clockMock.now _).expects().returning(CurrentTime).anyNumberOfTimes()
 
-    blockHeaderValidator.validate(validSignedBlockHeader, validSignedBlockHeaderParent.header) match {
+    blockHeaderValidator.validate(validSignedBlockHeader, validSignedBlockHeaderParent.header, fakeSimulateTxFn) match {
       case Right(_) => succeed
       case _ => fail
     }
   }
 
   it should "return a failure if created based on invalid extra data" in new TestSetup {
-    (electionManagerMock.verifyIsLeader _).expects(*, *).returning(true).anyNumberOfTimes()
+    (electionManagerMock.verifyIsLeader _).expects(*, *, *).returning(true).anyNumberOfTimes()
     (slotCalculatorMock.getSlotStartingMillis _).expects(*).returning(CurrentTime.toMillis - 1).anyNumberOfTimes()
     (clockMock.now _).expects().returning(CurrentTime).anyNumberOfTimes()
 
@@ -44,19 +45,19 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
     ) { wrongExtraData =>
       val invalidBlockHeader = validSignedBlockHeader.header.copy(extraData = wrongExtraData)
       val invalidSignedBlockHeader = SignedBlockHeader.sign(invalidBlockHeader, validBlockBeneficiaryKeyPair)
-      assert(blockHeaderValidator.validate(invalidSignedBlockHeader, validSignedBlockHeaderParent.header) == Left(HeaderExtraDataError))
+      blockHeaderValidator.validate(invalidSignedBlockHeader, validSignedBlockHeaderParent.header, fakeSimulateTxFn) shouldEqual Left(HeaderExtraDataError)
     }
   }
 
   it should "return a failure if created based on invalid timestamp" in new TestSetup {
-    (electionManagerMock.verifyIsLeader _).expects(*, *).returning(true).anyNumberOfTimes()
+    (electionManagerMock.verifyIsLeader _).expects(*, *, *).returning(true).anyNumberOfTimes()
     (slotCalculatorMock.getSlotStartingMillis _).expects(*).returning(CurrentTime.toMillis - 1).anyNumberOfTimes()
     (clockMock.now _).expects().returning(CurrentTime).anyNumberOfTimes()
 
     forAll(longGen) { timestamp =>
       val blockHeaderWithInvalidTimestamp = validSignedBlockHeader.header.copy(unixTimestamp = timestamp)
       val signedBlockHeaderWithInvalidTimestamp = SignedBlockHeader.sign(blockHeaderWithInvalidTimestamp, validBlockBeneficiaryKeyPair)
-      val validateResult = blockHeaderValidator.validate(signedBlockHeaderWithInvalidTimestamp, validSignedBlockHeaderParent.header)
+      val validateResult = blockHeaderValidator.validate(signedBlockHeaderWithInvalidTimestamp, validSignedBlockHeaderParent.header, fakeSimulateTxFn)
       timestamp match {
         case t if t <= validSignedBlockHeaderParent.header.unixTimestamp => assert(validateResult == Left(HeaderTimestampError))
         case _ => assert(validateResult == Right(BlockHeaderValid))
@@ -65,35 +66,35 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
   }
 
   it should "return a failure if created based on invalid difficulty" in new TestSetup {
-    (electionManagerMock.verifyIsLeader _).expects(*, *).returning(true).anyNumberOfTimes()
+    (electionManagerMock.verifyIsLeader _).expects(*, *, *).returning(true).anyNumberOfTimes()
     (slotCalculatorMock.getSlotStartingMillis _).expects(*).returning(CurrentTime.toMillis - 1).anyNumberOfTimes()
     (clockMock.now _).expects().returning(CurrentTime).anyNumberOfTimes()
 
     forAll(bigIntGen) { difficulty =>
       val blockHeader = validSignedBlockHeader.header.copy(difficulty = difficulty)
       val signedBlockHeader = SignedBlockHeader.sign(blockHeader, validBlockBeneficiaryKeyPair)
-      val validateResult = blockHeaderValidator.validate(signedBlockHeader, validSignedBlockHeaderParent.header)
+      val validateResult = blockHeaderValidator.validate(signedBlockHeader, validSignedBlockHeaderParent.header, fakeSimulateTxFn)
       if (difficulty != validSignedBlockHeader.header.difficulty) assert(validateResult == Left(HeaderDifficultyError))
       else assert(validateResult == Right(BlockHeaderValid))
     }
   }
 
   it should "return a failure if created based on invalid gas used" in new TestSetup {
-    (electionManagerMock.verifyIsLeader _).expects(*, *).returning(true).anyNumberOfTimes()
+    (electionManagerMock.verifyIsLeader _).expects(*, *, *).returning(true).anyNumberOfTimes()
     (slotCalculatorMock.getSlotStartingMillis _).expects(*).returning(CurrentTime.toMillis - 1).anyNumberOfTimes()
     (clockMock.now _).expects().returning(CurrentTime).anyNumberOfTimes()
 
     forAll(bigIntGen) { gasUsed =>
       val blockHeader = validSignedBlockHeader.header.copy(gasUsed = gasUsed)
       val signedBlockHeader = SignedBlockHeader.sign(blockHeader, validBlockBeneficiaryKeyPair)
-      val validateResult = blockHeaderValidator.validate(signedBlockHeader, validSignedBlockHeaderParent.header)
+      val validateResult = blockHeaderValidator.validate(signedBlockHeader, validSignedBlockHeaderParent.header, fakeSimulateTxFn)
       if (gasUsed > validSignedBlockHeader.header.gasLimit) assert(validateResult == Left(HeaderGasUsedError))
       else assert(validateResult == Right(BlockHeaderValid))
     }
   }
 
   it should "return a failure if created based on invalid gas limit" in new TestSetup {
-    (electionManagerMock.verifyIsLeader _).expects(*, *).returning(true).anyNumberOfTimes()
+    (electionManagerMock.verifyIsLeader _).expects(*, *, *).returning(true).anyNumberOfTimes()
     (slotCalculatorMock.getSlotStartingMillis _).expects(*).returning(CurrentTime.toMillis - 1).anyNumberOfTimes()
     (clockMock.now _).expects().returning(CurrentTime).anyNumberOfTimes()
 
@@ -104,7 +105,7 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
     forAll(bigIntGen) { gasLimit =>
       val blockHeader = validSignedBlockHeader.header.copy(gasLimit = gasLimit)
       val signedBlockHeader = SignedBlockHeader.sign(blockHeader, validBlockBeneficiaryKeyPair)
-      val validateResult = blockHeaderValidator.validate(signedBlockHeader, validSignedBlockHeaderParent.header)
+      val validateResult = blockHeaderValidator.validate(signedBlockHeader, validSignedBlockHeaderParent.header, fakeSimulateTxFn)
       if (gasLimit < LowerGasLimit || gasLimit > UpperGasLimit)
         assert(validateResult == Left(HeaderGasLimitError))
       else assert(validateResult == Right(BlockHeaderValid))
@@ -112,25 +113,25 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
   }
 
   it should "return a failure if created with gas limit above threshold and block number >= eip106 block number" in new TestSetup {
-    (electionManagerMock.verifyIsLeader _).expects(*, *).returning(true).anyNumberOfTimes()
+    (electionManagerMock.verifyIsLeader _).expects(*, *, *).returning(true).anyNumberOfTimes()
     (slotCalculatorMock.getSlotStartingMillis _).expects(*).returning(CurrentTime.toMillis - 1).anyNumberOfTimes()
     (clockMock.now _).expects().returning(CurrentTime).anyNumberOfTimes()
 
     val validParent = validSignedBlockHeaderParent.header.copy(gasLimit = Long.MaxValue)
     val invalidBlockHeader = validSignedBlockHeader.header.copy(gasLimit = BigInt(Long.MaxValue) + 1)
     val invalidSignedBlockHeader = SignedBlockHeader.sign(invalidBlockHeader, validBlockBeneficiaryKeyPair)
-    blockHeaderValidator.validate(invalidSignedBlockHeader, validParent) shouldBe Left(HeaderGasLimitError)
+    blockHeaderValidator.validate(invalidSignedBlockHeader, validParent, fakeSimulateTxFn) shouldBe Left(HeaderGasLimitError)
   }
 
   it should "return a failure if created based on invalid number" in new TestSetup {
-    (electionManagerMock.verifyIsLeader _).expects(*, *).returning(true).anyNumberOfTimes()
+    (electionManagerMock.verifyIsLeader _).expects(*, *, *).returning(true).anyNumberOfTimes()
     (slotCalculatorMock.getSlotStartingMillis _).expects(*).returning(CurrentTime.toMillis - 1).anyNumberOfTimes()
     (clockMock.now _).expects().returning(CurrentTime).anyNumberOfTimes()
 
     forAll(longGen) { number =>
       val blockHeader = validSignedBlockHeader.header.copy(number = number)
       val signedBlockHeader = SignedBlockHeader.sign(blockHeader, validBlockBeneficiaryKeyPair)
-      val validateResult = blockHeaderValidator.validate(signedBlockHeader, validSignedBlockHeaderParent.header)
+      val validateResult = blockHeaderValidator.validate(signedBlockHeader, validSignedBlockHeaderParent.header, fakeSimulateTxFn)
       if (number != validSignedBlockHeaderParent.header.number + 1)
         assert(validateResult == Left(HeaderNumberError) || validateResult == Left(HeaderDifficultyError))
       else assert(validateResult == Right(BlockHeaderValid))
@@ -138,54 +139,54 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
   }
 
   it should "validate correctly a block whose parent is in storage" in new TestSetup {
-    (electionManagerMock.verifyIsLeader _).expects(*, *).returning(true).anyNumberOfTimes()
+    (electionManagerMock.verifyIsLeader _).expects(*, *, *).returning(true).anyNumberOfTimes()
     (slotCalculatorMock.getSlotStartingMillis _).expects(*).returning(CurrentTime.toMillis - 1).anyNumberOfTimes()
     (clockMock.now _).expects().returning(CurrentTime).anyNumberOfTimes()
 
     blockchain.save(validSignedBlockHeaderParent)
-    blockHeaderValidator.validate(validSignedBlockHeader, blockchain) match {
+    blockHeaderValidator.validate(validSignedBlockHeader, blockchain, fakeSimulateTxFn) match {
       case Right(_) => succeed
       case _ => fail
     }
   }
 
   it should "return a failure if the parent's header is not in storage" in new TestSetup {
-    (electionManagerMock.verifyIsLeader _).expects(*, *).returning(true).anyNumberOfTimes()
+    (electionManagerMock.verifyIsLeader _).expects(*, *, *).returning(true).anyNumberOfTimes()
     (slotCalculatorMock.getSlotStartingMillis _).expects(*).returning(CurrentTime.toMillis - 1).anyNumberOfTimes()
     (clockMock.now _).expects().returning(CurrentTime).anyNumberOfTimes()
 
-    blockHeaderValidator.validate(validSignedBlockHeader, blockchain) match {
+    blockHeaderValidator.validate(validSignedBlockHeader, blockchain, fakeSimulateTxFn) match {
       case Left(HeaderParentNotFoundError) => succeed
       case _ => fail
     }
   }
 
   it should "return a failure if the slot number is lower than it's parent's" in new TestSetup {
-    (electionManagerMock.verifyIsLeader _).expects(*, *).returning(true).anyNumberOfTimes()
+    (electionManagerMock.verifyIsLeader _).expects(*, *, *).returning(true).anyNumberOfTimes()
     (slotCalculatorMock.getSlotStartingMillis _).expects(*).returning(CurrentTime.toMillis - 1).anyNumberOfTimes()
     (clockMock.now _).expects().returning(CurrentTime).anyNumberOfTimes()
 
     val invalidBlockHeader = validSignedBlockHeader.header.copy(slotNumber = validSignedBlockHeaderParent.header.slotNumber - 1)
     val invalidSignedBlockHeader = SignedBlockHeader.sign(invalidBlockHeader, validBlockBeneficiaryKeyPair)
-    blockHeaderValidator.validate(invalidSignedBlockHeader, validSignedBlockHeaderParent.header) shouldBe Left(HeaderSlotNumberError)
+    blockHeaderValidator.validate(invalidSignedBlockHeader, validSignedBlockHeaderParent.header, fakeSimulateTxFn) shouldBe Left(HeaderSlotNumberError)
   }
 
   it should "return a failure if the block is from a future slot" in new TestSetup {
-    (electionManagerMock.verifyIsLeader _).expects(*, *).returning(true).anyNumberOfTimes()
+    (electionManagerMock.verifyIsLeader _).expects(*, *, *).returning(true).anyNumberOfTimes()
     (slotCalculatorMock.getSlotStartingMillis _).expects(*).returning(CurrentTime.toMillis).anyNumberOfTimes()
     (clockMock.now _).expects().returning(CurrentTime - 1.millis).anyNumberOfTimes()
 
-    blockHeaderValidator.validate(validSignedBlockHeader, validSignedBlockHeaderParent.header) shouldBe Left(HeaderSlotNumberError)
+    blockHeaderValidator.validate(validSignedBlockHeader, validSignedBlockHeaderParent.header, fakeSimulateTxFn) shouldBe Left(HeaderSlotNumberError)
   }
 
   it should "return a failure if the block beneficiary wasn't the slot leader" in new TestSetup {
-    (electionManagerMock.verifyIsLeader _).expects(*, *).returning(false).anyNumberOfTimes()
+    (electionManagerMock.verifyIsLeader _).expects(*, *, *).returning(false).anyNumberOfTimes()
     (slotCalculatorMock.getSlotStartingMillis _).expects(*).returning(CurrentTime.toMillis - 1).anyNumberOfTimes()
     (clockMock.now _).expects().returning(CurrentTime).anyNumberOfTimes()
 
     val invalidBlockHeader = validSignedBlockHeader.header.copy(slotNumber = validSignedBlockHeaderParent.header.slotNumber - 1)
     val invalidSignedBlockHeader = SignedBlockHeader.sign(invalidBlockHeader, validBlockBeneficiaryKeyPair)
-    blockHeaderValidator.validate(invalidSignedBlockHeader, validSignedBlockHeaderParent.header) shouldBe Left(HeaderBeneficiaryError)
+    blockHeaderValidator.validate(invalidSignedBlockHeader, validSignedBlockHeaderParent.header, fakeSimulateTxFn) shouldBe Left(HeaderBeneficiaryError)
   }
 
   it should "return a failure if the block is signed with a signature different to the block beneficiary signature" in new TestSetup {
@@ -193,11 +194,11 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
     val anotherBeneficiaryKeyPair: AsymmetricCipherKeyPair = generateKeyPair(secureRandom)
     val signedBlockHeaderWithInvalidSignature = SignedBlockHeader.sign(validBlockHeader, anotherBeneficiaryKeyPair)
 
-    (electionManagerMock.verifyIsLeader _).expects(*, *).returning(true).anyNumberOfTimes()
+    (electionManagerMock.verifyIsLeader _).expects(*, *, *).returning(true).anyNumberOfTimes()
     (slotCalculatorMock.getSlotStartingMillis _).expects(*).returning(CurrentTime.toMillis - 1).anyNumberOfTimes()
     (clockMock.now _).expects().returning(CurrentTime).anyNumberOfTimes()
 
-    blockHeaderValidator.validate(signedBlockHeaderWithInvalidSignature, validSignedBlockHeaderParent.header) shouldBe Left(SignedHeaderSignatureError)
+    blockHeaderValidator.validate(signedBlockHeaderWithInvalidSignature, validSignedBlockHeaderParent.header, fakeSimulateTxFn) shouldBe Left(SignedHeaderSignatureError)
   }
 
   trait TestSetup extends EphemBlockchainTestSetup {
@@ -216,6 +217,9 @@ class BlockHeaderValidatorSpec extends FlatSpec with Matchers with PropertyCheck
     val difficultyCalculator = new DifficultyCalculator(blockchainConfig)
 
     val CurrentTime = 2.millis
+
+    val fakeTxResult = TxResult(blockchain.getWorldStateProxy(-1, UInt256.Zero, None), 123, Nil, ByteString("return_value"), None)
+    val fakeSimulateTxFn: (SignedTransaction, BlockHeader) => TxResult = (_, _) => fakeTxResult
   }
 
   val pausedDifficultyBombBlockBeneficiaryKeyPair: AsymmetricCipherKeyPair = generateKeyPair(secureRandom)

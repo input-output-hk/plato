@@ -3,7 +3,7 @@ package io.iohk.ethereum.mining
 import akka.actor.{Actor, ActorLogging, ActorRef, Props}
 import akka.util.Timeout
 import io.iohk.ethereum.blockchain.sync.RegularSync
-import io.iohk.ethereum.domain.{Address, Block, Blockchain}
+import io.iohk.ethereum.domain._
 import io.iohk.ethereum.keystore.KeyStore
 import io.iohk.ethereum.ommers.OmmersPool
 import io.iohk.ethereum.pos.ElectionManager
@@ -15,6 +15,7 @@ import scala.concurrent.Future
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.util.{Failure, Success}
 
+//scalastyle:off parameter.number
 class ProofOfStakeMiner(
              blockchain: Blockchain,
              blockGenerator: BlockGenerator,

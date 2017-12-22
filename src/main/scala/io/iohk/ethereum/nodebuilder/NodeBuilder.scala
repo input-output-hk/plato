@@ -11,6 +11,7 @@ import io.iohk.ethereum.db.components.{DataSourcesComponent, SharedLevelDBDataSo
 import io.iohk.ethereum.db.storage.AppStateStorage
 import io.iohk.ethereum.db.storage.pruning.PruningMode
 import io.iohk.ethereum.domain._
+import io.iohk.ethereum.governance.CertificateAuthorityManagerImpl
 import io.iohk.ethereum.jsonrpc.server.JsonRpcServer.JsonRpcServerConfig
 import io.iohk.ethereum.jsonrpc.NetService.NetServiceConfig
 import io.iohk.ethereum.ledger.{Ledger, LedgerImpl}
@@ -86,9 +87,16 @@ trait OuroborosConfigBuilder {
   lazy val ouroborosConfig = OuroborosConfig(Config.config)
 }
 
+trait CertificateAuthorityManagerBuilder {
+  self: LedgerBuilder with BlockchainBuilder =>
+  lazy val certificateAuthorityManager = CertificateAuthorityManagerImpl(ledger.simulateTransaction, blockchain)
+}
+
 trait ElectionManagerBuilder {
-  self: OuroborosConfigBuilder =>
-  lazy val electionManager = ElectionManagerImpl(ouroborosConfig)
+  self: OuroborosConfigBuilder
+    with CertificateAuthorityManagerBuilder =>
+
+  lazy val electionManager = ElectionManagerImpl(certificateAuthorityManager, ouroborosConfig)
 }
 
 trait KnownNodesManagerBuilder {
@@ -557,3 +565,4 @@ trait Node extends NodeKeyBuilder
   with BeaconActorBuilder
   with NTPServiceBuilder
   with ClockBuilder
+  with CertificateAuthorityManagerBuilder

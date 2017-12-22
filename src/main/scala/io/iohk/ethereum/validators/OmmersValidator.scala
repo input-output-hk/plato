@@ -4,7 +4,6 @@ package io.iohk.ethereum.validators
 import akka.util.ByteString
 import io.iohk.ethereum.domain.{Block, Blockchain, SignedBlockHeader}
 import io.iohk.ethereum.utils.BlockchainConfig
-import io.iohk.ethereum.validators.OmmersValidator.OmmersError._
 import io.iohk.ethereum.validators.OmmersValidator.{GetBlockHeaderByHash, GetNBlocksBack, OmmersError, OmmersValid}
 
 trait OmmersValidator {
@@ -80,7 +79,8 @@ class OmmersValidatorImpl(blockchainConfig: BlockchainConfig, blockHeaderValidat
     getBlockHeaderByHash: GetBlockHeaderByHash,
     getNBlocksBack: GetNBlocksBack): Either[OmmersError, OmmersValid] = {
 
-    if (ommers.isEmpty)
+    Right(OmmersValid)
+    /*if (ommers.isEmpty)
       Right(OmmersValid)
     else
       for {
@@ -89,9 +89,10 @@ class OmmersValidatorImpl(blockchainConfig: BlockchainConfig, blockHeaderValidat
         _ <- validateOmmersHeaders(ommers, getBlockHeaderByHash)
         _ <- validateOmmersAncestors(parentHash, blockNumber, ommers, getNBlocksBack)
         _ <- validateOmmersNotUsed(parentHash, blockNumber, ommers, getNBlocksBack)
-      } yield OmmersValid
+      } yield OmmersValid */
   }
 
+  /*
   // FIXME: scaladoc
   /**
     * Validates ommers length
@@ -194,5 +195,5 @@ class OmmersValidatorImpl(blockchainConfig: BlockchainConfig, blockHeaderValidat
     val numberOfBlocks = blockNumber.min(OmmerGenerationLimit).toInt
     val ancestors = getNBlocksBack(parentHash, numberOfBlocks).map(_.body.uncleNodesList)
     Some(ancestors).filter(_.length == numberOfBlocks).map(_.flatten)
-  }
+  }*/
 }

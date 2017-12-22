@@ -23,13 +23,14 @@ abstract class ScenarioSetup(scenario: BlockchainScenario)
   with NTPServiceBuilder
   with SyncConfigBuilder
   with BlockchainConfigBuilder
-  with OuroborosConfigBuilder {
+  with OuroborosConfigBuilder
+  with LedgerBuilder {
 
   val emptyWorld = blockchain.getWorldStateProxy(-1, UInt256.Zero, None)
 
   override lazy val blockchainConfig = buildBlockchainConfig(scenario.network)
 
-  val ledger = new LedgerImpl(VM, blockchain, blockchainConfig, syncConfig, validators)
+  override val ledger = new LedgerImpl(VM, blockchain, blockchainConfig, syncConfig, validators)
 
   def loadGenesis(): Block = {
     val genesisBlock = scenario.genesisRLP match {
