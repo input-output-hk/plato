@@ -146,15 +146,13 @@ class GenesisDataLoader(
     InMemoryWorldStateProxy.persistState(worldWithCode).stateRootHash
   }
 
-  // FIXME: Gas limit should be set from config param?
-  // scalastyle:off magic.number
   private def createSignedContractTransaction(contractCode: ByteString): SignedTransaction = {
     val fromAddress = Address("0x0000000000000000000000000000000000000000")
     val dummySignature = ECDSASignature(0, 0, 0.toByte)
     val tx = Transaction(
       nonce = BigInt(1),
       gasPrice = 0,
-      gasLimit = 90000000,
+      gasLimit = BigInt(2).pow(256) - 1,
       receivingAddress = None,
       value = BigInt(0),
       payload = contractCode

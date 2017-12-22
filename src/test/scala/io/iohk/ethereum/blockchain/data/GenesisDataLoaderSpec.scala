@@ -46,10 +46,15 @@ class GenesisDataLoaderSpec  extends FlatSpec with Matchers {
       override val slotDuration: FiniteDuration = 0.seconds
     }
     val contractCodeHash = ByteString("dummyContractData")
+    val contractStateKey = UInt256.One
+    val contractStateValue = UInt256.One
     val VM = new MockVM(c => ProgramResult(
       returnData = contractCodeHash,
       gasRemaining = 0,
-      world = c.world,
+      world = c.world.saveStorage(
+        ouroborosConfig.consensusContractAddress,
+        c.world.getStorage(ouroborosConfig.consensusContractAddress).store(contractStateKey, contractStateValue)
+      ),
       addressesToDelete = Set.empty,
       logs = Seq.empty,
       internalTxs = Nil,
@@ -63,7 +68,7 @@ class GenesisDataLoaderSpec  extends FlatSpec with Matchers {
     val maybeContractAccount = blockchain.getAccount(ouroborosConfig.consensusContractAddress, 0)
     maybeContractAccount.get should not be None
     blockchain.getEvmCodeByHash(maybeContractAccount.get.codeHash).get shouldEqual contractCodeHash
-    // TODO: We should validate contract storage too
+    blockchain.getAccountStorageAt(maybeContractAccount.get.storageRoot, contractStateKey) shouldEqual contractStateValue.bytes
   }
 
   trait TestSetup extends EphemBlockchainTestSetup {
