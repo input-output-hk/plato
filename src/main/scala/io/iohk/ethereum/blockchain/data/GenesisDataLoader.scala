@@ -12,15 +12,16 @@ import io.iohk.ethereum.{crypto, rlp}
 import io.iohk.ethereum.db.dataSource.EphemDataSource
 import io.iohk.ethereum.db.storage._
 import io.iohk.ethereum.domain.{SignedBlockHeader, _}
-import io.iohk.ethereum.ledger.InMemoryWorldStateProxy
+import io.iohk.ethereum.ledger.{InMemoryWorldStateProxy, InMemoryWorldStateProxyStorage}
 import io.iohk.ethereum.ledger.Ledger.PC
 import io.iohk.ethereum.mpt.MerklePatriciaTrie
 import io.iohk.ethereum.network.p2p.messages.PV62.BlockBody
 import io.iohk.ethereum.rlp.RLPImplicits._
 import io.iohk.ethereum.vm._
-import io.iohk.ethereum.vm.utils.Utils
+import io.iohk.ethereum.vm.utils.{Contract, Utils}
 import org.json4s.{CustomSerializer, DefaultFormats, Formats, JString, JValue}
 import org.spongycastle.util.encoders.Hex
+
 import scala.io.Source
 import scala.util.{Failure, Success, Try}
 
@@ -116,6 +117,13 @@ class GenesisDataLoader(
           " Use different directory for running private blockchains."))
       case None =>
         blockchain.save(Block(signedHeader, BlockBody(Nil, Nil)), Nil, signedHeader.header.difficulty, saveAsBestBlock = true)
+
+        val abis = Utils.loadContractAbiFromFile(new File("target/contracts/Fibonacci.abi")).toOption.get
+        val world = blockchain.getReadOnlyWorldStateProxy(Some(0), blockchainConfig.accountStartNonce, Some(signedHeader.header.stateRoot))
+        val contract = Contract[InMemoryWorldStateProxy, InMemoryWorldStateProxyStorage](consensusContractData.address, signedHeader.header, world, abis, EvmConfig.forBlock(signedHeader.header.number, blockchainConfig))
+
+        log.info(s"Contract call result ${contract.getNewFib(6).call()}")
+
         Success(())
     }
   }
