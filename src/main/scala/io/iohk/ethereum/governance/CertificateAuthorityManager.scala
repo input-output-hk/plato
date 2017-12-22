@@ -1,41 +1,64 @@
 package io.iohk.ethereum.governance
 
-import io.iohk.ethereum.domain.{Address, BlockHeader, SignedTransaction}
+import akka.util.ByteString
+import io.iohk.ethereum.crypto.ECDSASignature
+import io.iohk.ethereum.domain._
+import io.iohk.ethereum.jsonrpc.EthService.{CallTx, ResolvedBlock}
+import io.iohk.ethereum.jsonrpc.{JsonRpcError, JsonRpcErrors}
 import io.iohk.ethereum.ledger.Ledger.TxResult
 import io.iohk.ethereum.utils.Logger
+import org.spongycastle.util.encoders.Hex
+
 
 trait CertificateAuthorityManager {
-
   def isCertificateAuthorityFor(address: Address, slotNumber: BigInt): Boolean
 }
 
 case class CertificateAuthorityManagerImpl(
-    simulateTx: (SignedTransaction, BlockHeader) => TxResult)
-  extends CertificateAuthorityManager with Logger {
+    simulateTx: (SignedTransaction, BlockHeader) => TxResult,
+    blockchain: Blockchain
+) extends CertificateAuthorityManager with Logger {
 
   override def isCertificateAuthorityFor(address: Address, slotNumber: BigInt): Boolean = {
-    /*
+    val functionSelector = "f74f1978" // NOTE: web3.sha3("isCertificateAuthorityFor(address, uint256)")
+    val certificateAuthorityAddress = "0000000000000000000000000000000000000000000000000000000000000000"
+    val slotNumber = "0000000000000000000000000000000000000000000000000000000000000000"
+    val data = functionSelector + certificateAuthorityAddress + slotNumber
+
     val tx = CallTx(
-      Some(ByteString(Hex.decode("c60b5deadccaa4258bc5698af683adac73f1e4a9"))), // TODO: Pass as argument
-      Some(ByteString(Hex.decode("694002D4B7f8ba7E6C2C22A3eAA1AcA1e4D452dB"))), // TODO: Pass as argument
-      Some(1), 2, 3, ByteString("c6888fa10000000000000000000000000000000000000000000000000000000000000006"))
-    val response = ethService.call(CallRequest(tx, BlockParam.Latest))
-    response.transformWith {
-      case Success(maybeResponse) =>
-        maybeResponse match {
-          case Right(CallResponse(result)) =>
-            log.debug("result: ", result)
-            // TODO: Convert result into Boolean
-            Future{ true }
-          case Left(error) =>
-            log.error("Failed to handle JSON", error)
-            Future{ throw new Exception(error.toString) }
-        }
-      case Failure(ex) =>
-        log.error("Failed to get future", ex)
-        Future{ throw ex }
-    }*/
-    true
+      Some(ByteString(Hex.decode("c60b5deadccaa4258bc5698af683adac73f1e4a9"))), // TODO: Miner address
+      Some(ByteString(Hex.decode("694002D4B7f8ba7E6C2C22A3eAA1AcA1e4D452dB"))), // TODO: Contract address
+      Some(0), // TODO: Check if this is a correct value for gasLimit
+      0,
+      0,
+      ByteString(Hex.decode(data)))
+
+    val txResult = for {
+      stx   <- prepareTransaction(tx)
+      block <- resolveBlock()
+    } yield simulateTx(stx, block.block.signedHeader.header)
+
+    val result = txResult.map(_.vmReturnData.toString().toBoolean).right.get
+    log.debug("********* vmReturnData = ", result)
+    result
   }
 
+  private def prepareTransaction(callTx: CallTx): Either[JsonRpcError ,SignedTransaction] = {
+    val fromAddress = callTx.from.map(Address.apply).get
+    val toAddress = callTx.to.map(Address.apply)
+    val gasLimit = callTx.gas.get
+    val tx = Transaction(0, callTx.gasPrice, gasLimit, toAddress, callTx.value, callTx.data)
+    val fakeSignature = ECDSASignature(0, 0, 0.toByte)
+    Right(SignedTransaction(tx, fakeSignature, fromAddress))
+  }
+
+  private def resolveBlock(): Either[JsonRpcError, ResolvedBlock] = {
+    def getBlock(number: BigInt): Either[JsonRpcError, Block] = {
+      blockchain.getBlockByNumber(number)
+        .map(Right.apply)
+        .getOrElse(Left(JsonRpcErrors.InvalidParams(s"Block $number not found")))
+    }
+
+    getBlock(blockchain.getBestBlockNumber()).map(ResolvedBlock(_, pending = false))
+  }
 }
