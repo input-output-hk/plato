@@ -88,8 +88,8 @@ trait OuroborosConfigBuilder {
 }
 
 trait CertificateAuthorityManagerBuilder {
-  self: LedgerBuilder with BlockchainBuilder =>
-  lazy val certificateAuthorityManager = CertificateAuthorityManagerImpl(ledger.simulateTransaction, blockchain)
+  self: LedgerBuilder with BlockchainBuilder with OuroborosConfigBuilder with BlockchainConfigBuilder =>
+  lazy val certificateAuthorityManager = CertificateAuthorityManagerImpl(blockchain, blockchainConfig, ouroborosConfig)
 }
 
 trait ElectionManagerBuilder {
@@ -110,10 +110,10 @@ trait KnownNodesManagerBuilder {
 
 trait PeerDiscoveryManagerBuilder {
   self: ActorSystemBuilder
-  with DiscoveryListenerBuilder
-  with NodeStatusBuilder
-  with DiscoveryConfigBuilder
-  with StorageBuilder =>
+    with DiscoveryListenerBuilder
+    with NodeStatusBuilder
+    with DiscoveryConfigBuilder
+    with StorageBuilder =>
 
   lazy val peerDiscoveryManager =
     actorSystem.actorOf(PeerDiscoveryManager.props(discoveryListener, discoveryConfig,
@@ -122,8 +122,8 @@ trait PeerDiscoveryManagerBuilder {
 
 trait DiscoveryListenerBuilder {
   self: ActorSystemBuilder
-  with DiscoveryConfigBuilder
-  with NodeStatusBuilder =>
+    with DiscoveryConfigBuilder
+    with NodeStatusBuilder =>
 
   lazy val discoveryListener = actorSystem.actorOf(DiscoveryListener.props(discoveryConfig, nodeStatusHolder), "discovery-listener")
 }
@@ -178,7 +178,7 @@ trait HandshakerBuilder {
 
 trait AuthHandshakerBuilder {
   self: NodeKeyBuilder
-  with SecureRandomBuilder =>
+    with SecureRandomBuilder =>
 
   lazy val authHandshaker: AuthHandshaker = AuthHandshaker(nodeKey, secureRandom)
 }
