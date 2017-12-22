@@ -85,7 +85,7 @@ class GenesisDataLoader(
     implicit val formats: Formats = DefaultFormats + ByteStringJsonSerializer
     for {
       genesisData <- Try(parse(genesisJson).extract[GenesisData])
-      consensusContractCode <- Try(Utils.loadContractCodeFromFile(new File(ouroborosConfig.consensusContractFilepath)))
+      consensusContractCode <- Try(Utils.loadContractCodeFromFile(new File(s"${ouroborosConfig.consensusContractFilepath}.bin")))
       _ <- loadGenesisData(genesisData, ContractData(ouroborosConfig.consensusContractAddress, consensusContractCode))
     } yield ()
   }
