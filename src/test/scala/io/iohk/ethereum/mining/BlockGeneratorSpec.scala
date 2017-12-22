@@ -320,7 +320,7 @@ class BlockGeneratorSpec extends FlatSpec with Matchers with PropertyChecks with
     lazy val ledger = new LedgerImpl(VM, blockchain, blockchainConfig, syncConfig, validators)
 
     val ouroborosConfig = new OuroborosConfig {
-      override val consensusContractFilepath: String = "src/test/resources/Consensus.bin"
+      override val consensusContractFilepath: String = "src/test/resources/CertificateAuthorityManager"
       // unused
       override val consensusContractAddress: Address = Address(0)
       override val slotDuration: FiniteDuration = 0.millis
