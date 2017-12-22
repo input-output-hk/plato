@@ -34,7 +34,6 @@ import io.iohk.ethereum.transactions.PendingTransactionsManager
 import io.iohk.ethereum.validators._
 import io.iohk.ethereum.vm.VM
 import io.iohk.ethereum.ommers.OmmersPool
-import io.iohk.ethereum.pos.ElectionManagerImpl
 import io.iohk.ethereum.timing.{BeaconActor, Clock, NTPClock}
 import io.iohk.ethereum.utils.Config.SyncConfig
 
@@ -90,13 +89,6 @@ trait OuroborosConfigBuilder {
 trait CertificateAuthorityManagerBuilder {
   self: LedgerBuilder with BlockchainBuilder with OuroborosConfigBuilder with BlockchainConfigBuilder =>
   lazy val certificateAuthorityManager = CertificateAuthorityManagerImpl(blockchain, blockchainConfig, ouroborosConfig)
-}
-
-trait ElectionManagerBuilder {
-  self: OuroborosConfigBuilder
-    with CertificateAuthorityManagerBuilder =>
-
-  lazy val electionManager = ElectionManagerImpl(certificateAuthorityManager, ouroborosConfig)
 }
 
 trait KnownNodesManagerBuilder {
@@ -374,13 +366,13 @@ trait OmmersPoolBuilder {
 
 trait ValidatorsBuilder {
   self: BlockchainConfigBuilder
-    with ElectionManagerBuilder
+    with CertificateAuthorityManagerBuilder
     with SlotTimeConverterBuilder
     with ClockBuilder =>
 
   lazy val validators = new Validators {
     val blockValidator: BlockValidator = BlockValidator
-    val blockHeaderValidator: BlockHeaderValidator = new BlockHeaderValidatorImpl(blockchainConfig, electionManager, slotTimeConverter, clock)
+    val blockHeaderValidator: BlockHeaderValidator = new BlockHeaderValidatorImpl(blockchainConfig, certificateAuthorityManager, slotTimeConverter, clock)
     val ommersValidator: OmmersValidator = new OmmersValidatorImpl(blockchainConfig, blockHeaderValidator)
     val signedTransactionValidator: SignedTransactionValidator = new SignedTransactionValidatorImpl(blockchainConfig)
   }
@@ -464,7 +456,7 @@ trait ProofOfStakeMinerBuilder {
     with PendingTransactionsManagerBuilder
     with BlockGeneratorBuilder
     with SyncControllerBuilder
-    with ElectionManagerBuilder
+    with CertificateAuthorityManagerBuilder
     with KeyStoreBuilder
     with MiningConfigBuilder =>
 
@@ -476,7 +468,7 @@ trait ProofOfStakeMinerBuilder {
     syncController,
     miningConfig,
     keyStore,
-    electionManager))
+    certificateAuthorityManager))
 }
 
 trait SlotTimeConverterBuilder {
@@ -559,7 +551,6 @@ trait Node extends NodeKeyBuilder
   with KnownNodesManagerBuilder
   with SyncConfigBuilder
   with OuroborosConfigBuilder
-  with ElectionManagerBuilder
   with ProofOfStakeMinerBuilder
   with SlotTimeConverterBuilder
   with BeaconActorBuilder

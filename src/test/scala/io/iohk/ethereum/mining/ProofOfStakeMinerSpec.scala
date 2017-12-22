@@ -16,7 +16,6 @@ import org.scalamock.scalatest.MockFactory
 import org.scalatest.{FlatSpec, Matchers, Tag}
 import org.spongycastle.util.encoders.Hex
 import io.iohk.ethereum.Fixtures.FakeSignature
-import io.iohk.ethereum.ledger.Ledger.TxResult
 
 import scala.concurrent.duration._
 
@@ -47,7 +46,7 @@ class ProofOfStakeMinerSpec extends FlatSpec with Matchers {
     def isValid(stakeholders: Seq[Address])(stakeHolder: Address): Boolean = {
       stakeholders.contains(stakeHolder)
     }
-    val electionManager = Mocks.MockElectionManager(isValid(knownStakeholders))
+    val certificateAuthorityManager = Mocks.MockCertificateAuthorityManager(isValid(knownStakeholders))
 
     val miner = TestActorRef(ProofOfStakeMiner.props(
       blockchain,
@@ -57,14 +56,13 @@ class ProofOfStakeMinerSpec extends FlatSpec with Matchers {
       syncController.ref,
       miningConfig,
       keyStore,
-      electionManager,
-      fakeSimulateTxFn
+      certificateAuthorityManager
     ))
 
     miner ! ProofOfStakeMiner.StartMining(currentSlotNumber)
     val block = waitForMinedBlock()
     block.body.transactionList shouldBe Seq(txToMine)
-    blockHeaderValidator.validate(block.signedHeader, blockchain, fakeSimulateTxFn) shouldBe Right(BlockHeaderValid)
+    blockHeaderValidator.validate(block.signedHeader, blockchain) shouldBe Right(BlockHeaderValid)
   }
 
   "Miner" should "not mine a block if there isn't a stakeholder leader selected" taggedAs(ProofOfStakeMinerSpecTag) in new TestSetup {
@@ -80,7 +78,7 @@ class ProofOfStakeMinerSpec extends FlatSpec with Matchers {
     def isValid(stakeholders: Seq[Address])(stakeHolder: Address): Boolean = {
       stakeholders.contains(stakeHolder)
     }
-    val electionManager = Mocks.MockElectionManager(isValid(List.empty))
+    val certificateAuthorityManager= Mocks.MockCertificateAuthorityManager(isValid(List.empty))
 
     val miner = TestActorRef(ProofOfStakeMiner.props(
       blockchain,
@@ -90,8 +88,7 @@ class ProofOfStakeMinerSpec extends FlatSpec with Matchers {
       syncController.ref,
       miningConfig,
       keyStore,
-      electionManager,
-      fakeSimulateTxFn
+      certificateAuthorityManager
     ))
 
     miner ! ProofOfStakeMiner.StartMining(currentSlotNumber)
@@ -202,8 +199,5 @@ class ProofOfStakeMinerSpec extends FlatSpec with Matchers {
         TestActor.KeepRunning
       }
     })
-
-    val fakeTxResult = TxResult(blockchain.getWorldStateProxy(-1, UInt256.Zero, None), 123, Nil, ByteString("return_value"), None)
-    val fakeSimulateTxFn: (SignedTransaction, BlockHeader) => TxResult = (_, _) => fakeTxResult
   }
 }
