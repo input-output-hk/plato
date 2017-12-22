@@ -2,7 +2,6 @@ package io.iohk.ethereum.ledger
 
 import akka.util.ByteString
 import akka.util.ByteString.{empty => bEmpty}
-import io.iohk.ethereum.blockchain.sync.EphemBlockchainTestSetup
 import io.iohk.ethereum.{Mocks, ObjectGenerators}
 import io.iohk.ethereum.domain._
 import io.iohk.ethereum.ledger.BlockExecutionError.ValidationAfterExecError
@@ -15,6 +14,8 @@ import io.iohk.ethereum.validators.BlockHeaderValidator
 import org.scalamock.scalatest.MockFactory
 import org.scalatest.{FlatSpec, Matchers}
 import io.iohk.ethereum.Fixtures.FakeSignature
+import io.iohk.ethereum.blockchain.EphemBlockchainTestSetup
+
 import scala.language.reflectiveCalls
 import scala.collection.mutable
 

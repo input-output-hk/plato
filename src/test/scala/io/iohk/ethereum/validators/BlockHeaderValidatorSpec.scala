@@ -1,8 +1,8 @@
 package io.iohk.ethereum.validators
 
 import akka.util.ByteString
+import io.iohk.ethereum.blockchain.EphemBlockchainTestSetup
 import io.iohk.ethereum.{Fixtures, ObjectGenerators}
-import io.iohk.ethereum.blockchain.sync.EphemBlockchainTestSetup
 import io.iohk.ethereum.domain.{UInt256, _}
 import io.iohk.ethereum.pos.ElectionManagerImpl
 import io.iohk.ethereum.timing.Clock

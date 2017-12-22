@@ -3,7 +3,6 @@ package io.iohk.ethereum.jsonrpc
 import akka.actor.ActorSystem
 import akka.testkit.TestProbe
 import akka.util.ByteString
-import io.iohk.ethereum.blockchain.sync.EphemBlockchainTestSetup
 import io.iohk.ethereum.crypto.ECDSASignature
 import io.iohk.ethereum.db.storage.AppStateStorage
 import io.iohk.ethereum.domain.{Address, Block, BlockHeader, SignedBlockHeader}
@@ -33,6 +32,8 @@ import io.iohk.ethereum.Fixtures.FakeSignature
 import scala.concurrent.Future
 import scala.concurrent.duration._
 import java.time.Duration
+
+import io.iohk.ethereum.blockchain.EphemBlockchainTestSetup
 // scalastyle:off file.size.limit
 class JsonRpcControllerSpec extends FlatSpec with Matchers with PropertyChecks with ScalaFutures with NormalPatience with Eventually {
 

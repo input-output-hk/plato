@@ -5,12 +5,14 @@ import io.iohk.ethereum.db.components.Storages.PruningModeComponent
 import io.iohk.ethereum.db.components.{SharedLevelDBDataSources, Storages}
 import io.iohk.ethereum.db.dataSource.{LevelDBDataSource, LevelDbConfig}
 import io.iohk.ethereum.db.storage.pruning.ArchivePruning
-import io.iohk.ethereum.domain.BlockchainImpl
+import io.iohk.ethereum.domain.{Address, BlockchainImpl}
 import io.iohk.ethereum.ledger.{Ledger, LedgerImpl}
 import io.iohk.ethereum.nodebuilder._
 import io.iohk.ethereum.snappy.Config.{DualDB, SingleDB}
 import io.iohk.ethereum.snappy.Prerequisites._
+import io.iohk.ethereum.utils.OuroborosConfig
 import io.iohk.ethereum.vm.VM
+import scala.concurrent.duration._
 
 
 object Prerequisites {
@@ -67,12 +69,17 @@ class Prerequisites(config: Config) {
       new LedgerImpl(VM, sourceBlockchain, components.blockchainConfig, components.syncConfig, components.validators)
   }
 
-  targetBlockchain.foreach { blockchain =>
-    val genesisLoader = new GenesisDataLoader(
-      blockchain,
-      components.blockchainConfig
-    )
+  val ouroborosConfig = new OuroborosConfig {
+    override val consensusContractFilepath: String = "src/test/resources/CertificateAuthorityManager"
 
+    // unused
+    override val consensusContractAddress: Address = Address(0)
+    override val slotDuration: FiniteDuration = 0.millis
+    override val slotMinerStakeholdersMapping: Map[BigInt, Seq[Address]] = Map.empty
+  }
+
+  targetBlockchain.foreach { blockchain =>
+    val genesisLoader = new GenesisDataLoader(ouroborosConfig, blockchain, components.blockchainConfig, VM)
     genesisLoader.loadGenesisData()
   }
 }

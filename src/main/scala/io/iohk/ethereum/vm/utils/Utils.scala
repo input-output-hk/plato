@@ -3,10 +3,11 @@ package io.iohk.ethereum.vm.utils
 import java.io.File
 
 import akka.util.ByteString
-import io.circe.parser.decode
+import io.circe.Error
 import io.circe.generic.extras.Configuration
 import io.circe.generic.extras.auto._
-import io.circe.Error
+import io.circe.parser.decode
+
 import scala.io.Source
 
 object Utils {
