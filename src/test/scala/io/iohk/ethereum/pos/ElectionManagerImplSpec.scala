@@ -76,6 +76,8 @@ class ElectionManagerImplSpec extends FlatSpec with Matchers with PropertyChecks
 
         //unused
         override val slotDuration: FiniteDuration = 0.millis
+        override val consensusContractAddress: Address = Address(0)
+        override val consensusContractFilepath: String = ""
       }
 
     val knownStakeholders: Seq[Address] = List(Address(1), Address(2), Address(3))

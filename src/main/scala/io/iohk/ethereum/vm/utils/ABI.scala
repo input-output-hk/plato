@@ -1,6 +1,6 @@
 package io.iohk.ethereum.vm.utils
 
-import ABI._
+import io.iohk.ethereum.vm.utils.ABI._
 
 object ABI {
   case class Param(name: String, `type`: String)

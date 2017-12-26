@@ -436,11 +436,12 @@ trait ShutdownHookBuilder {
 }
 
 trait GenesisDataLoaderBuilder {
-  self: BlockchainBuilder
+  self: OuroborosConfigBuilder
+    with BlockchainBuilder
     with StorageBuilder
     with BlockchainConfigBuilder =>
 
-  lazy val genesisDataLoader = new GenesisDataLoader(blockchain, blockchainConfig)
+  lazy val genesisDataLoader = new GenesisDataLoader(ouroborosConfig, blockchain, blockchainConfig, VM)
 }
 
 trait SecureRandomBuilder {

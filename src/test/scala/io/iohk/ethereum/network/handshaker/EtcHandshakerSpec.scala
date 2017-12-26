@@ -3,7 +3,7 @@ package io.iohk.ethereum.network.handshaker
 import akka.agent.Agent
 import akka.util.ByteString
 import io.iohk.ethereum.Fixtures
-import io.iohk.ethereum.blockchain.sync.EphemBlockchainTestSetup
+import io.iohk.ethereum.blockchain.EphemBlockchainTestSetup
 import io.iohk.ethereum.crypto.generateKeyPair
 import io.iohk.ethereum.db.storage.AppStateStorage
 import io.iohk.ethereum.domain._

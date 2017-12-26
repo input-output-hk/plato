@@ -1,11 +1,11 @@
 package io.iohk.ethereum.mining
 
 import java.time.Instant
+
 import akka.util.ByteString
 import io.iohk.ethereum.Mocks.MockValidatorsAlwaysSucceed
 import io.iohk.ethereum.{Timeouts, crypto}
 import io.iohk.ethereum.blockchain.data.GenesisDataLoader
-import io.iohk.ethereum.blockchain.sync.EphemBlockchainTestSetup
 import io.iohk.ethereum.domain._
 import io.iohk.ethereum.ledger.{BlockPreparationError, LedgerImpl}
 import io.iohk.ethereum.utils._
@@ -19,8 +19,13 @@ import io.iohk.ethereum.domain.SignedTransaction.FirstByteOfAddress
 import io.iohk.ethereum.utils.Config.SyncConfig
 import org.spongycastle.crypto.AsymmetricCipherKeyPair
 import org.spongycastle.crypto.params.ECPublicKeyParameters
+
 import scala.concurrent.duration.FiniteDuration
 import io.iohk.ethereum.Fixtures.FakeSignature
+import io.iohk.ethereum.blockchain.EphemBlockchainTestSetup
+
+import scala.concurrent.duration._
+
 
 class BlockGeneratorSpec extends FlatSpec with Matchers with PropertyChecks with Logger {
 
@@ -314,7 +319,15 @@ class BlockGeneratorSpec extends FlatSpec with Matchers with PropertyChecks with
 
     lazy val ledger = new LedgerImpl(VM, blockchain, blockchainConfig, syncConfig, validators)
 
-    val genesisDataLoader = new GenesisDataLoader(blockchain, blockchainConfig)
+    val ouroborosConfig = new OuroborosConfig {
+      override val consensusContractFilepath: String = "src/test/resources/CertificateAuthorityManager"
+      // unused
+      override val consensusContractAddress: Address = Address(0)
+      override val slotDuration: FiniteDuration = 0.millis
+      override val slotMinerStakeholdersMapping: Map[BigInt, Seq[Address]] = Map.empty
+    }
+
+    val genesisDataLoader = new GenesisDataLoader(ouroborosConfig, blockchain, blockchainConfig, VM)
     genesisDataLoader.loadGenesisData()
 
     val bestBlock = blockchain.getBestBlock()

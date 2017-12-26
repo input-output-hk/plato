@@ -1,6 +1,6 @@
 package io.iohk.ethereum.ets.blockchain
 
-import io.iohk.ethereum.blockchain.sync.EphemBlockchainTestSetup
+import io.iohk.ethereum.blockchain.EphemBlockchainTestSetup
 import io.iohk.ethereum.domain.Block.BlockDec
 import io.iohk.ethereum.domain.{Account, Address, Block, UInt256}
 import io.iohk.ethereum.ets.common.AccountState

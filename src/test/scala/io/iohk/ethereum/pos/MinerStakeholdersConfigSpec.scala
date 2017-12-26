@@ -40,10 +40,11 @@ class MinerStakeholdersConfigSpec extends FlatSpec with Matchers with PropertyCh
     val ouroborosConfig = new OuroborosConfig {
       override val slotMinerStakeholdersMapping: Map[BigInt, Seq[Address]] = minerStakeholdersMapping
 
-      //unused
+      // unused
+      override val consensusContractAddress: Address = Address(0)
+      override val consensusContractFilepath: String = ""
       override val slotDuration: FiniteDuration = 0.millis
     }
-
   }
 
 }

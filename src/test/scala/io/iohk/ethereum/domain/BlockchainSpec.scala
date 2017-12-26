@@ -2,7 +2,7 @@ package io.iohk.ethereum.domain
 
 import akka.util.ByteString
 import io.iohk.ethereum.Fixtures
-import io.iohk.ethereum.blockchain.sync.EphemBlockchainTestSetup
+import io.iohk.ethereum.blockchain.EphemBlockchainTestSetup
 import io.iohk.ethereum.db.storage.ArchiveNodeStorage
 import io.iohk.ethereum.mpt.MerklePatriciaTrie
 import org.scalatest.{FlatSpec, Matchers}
