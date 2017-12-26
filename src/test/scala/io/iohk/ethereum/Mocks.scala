@@ -2,6 +2,7 @@ package io.iohk.ethereum
 
 import akka.util.ByteString
 import io.iohk.ethereum.domain._
+import io.iohk.ethereum.governance.CertificateAuthorityManager
 import io.iohk.ethereum.keystore.{KeyStore, Wallet}
 import io.iohk.ethereum.ledger.BlockExecutionError.{StateBeforeFailure, TxsExecutionError}
 import io.iohk.ethereum.ledger.Ledger.BlockPreparationResult
@@ -10,7 +11,6 @@ import io.iohk.ethereum.network.EtcPeerManagerActor.PeerInfo
 import io.iohk.ethereum.network.handshaker.{ConnectedState, DisconnectedState, Handshaker, HandshakerState}
 import io.iohk.ethereum.network.p2p.messages.CommonMessages.Status
 import io.iohk.ethereum.network.p2p.messages.PV62.BlockBody
-import io.iohk.ethereum.pos.ElectionManager
 import io.iohk.ethereum.validators.BlockHeaderError.HeaderNumberError
 import io.iohk.ethereum.validators.BlockValidator.{BlockTransactionsHashError, BlockValid}
 import io.iohk.ethereum.validators._
@@ -118,8 +118,8 @@ object Mocks {
     override def copy(handshakerState: HandshakerState[PeerInfo]): Handshaker[PeerInfo] = this
   }
 
-  case class MockElectionManager(isValid: Address => Boolean) extends ElectionManager {
-    override def verifyIsLeader(stakeholder: Address, slotNumber: BigInt): Boolean = isValid(stakeholder)
+  case class MockCertificateAuthorityManager(isValid: Address => Boolean) extends CertificateAuthorityManager {
+    override def isCertificateAuthorityFor(stakeholder: Address, slotNumber: BigInt): Boolean = isValid(stakeholder)
   }
 
   case class MockKeyStore(stakeholders: Either[KeyStore.KeyStoreError, List[Address]]) extends KeyStore {

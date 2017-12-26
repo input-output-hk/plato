@@ -1,7 +1,6 @@
 package io.iohk.ethereum.mining
 
 import java.time.Instant
-
 import akka.util.ByteString
 import io.iohk.ethereum.Mocks.MockValidatorsAlwaysSucceed
 import io.iohk.ethereum.{Timeouts, crypto}
@@ -19,11 +18,9 @@ import io.iohk.ethereum.domain.SignedTransaction.FirstByteOfAddress
 import io.iohk.ethereum.utils.Config.SyncConfig
 import org.spongycastle.crypto.AsymmetricCipherKeyPair
 import org.spongycastle.crypto.params.ECPublicKeyParameters
-
 import scala.concurrent.duration.FiniteDuration
 import io.iohk.ethereum.Fixtures.FakeSignature
 import io.iohk.ethereum.blockchain.EphemBlockchainTestSetup
-
 import scala.concurrent.duration._
 
 

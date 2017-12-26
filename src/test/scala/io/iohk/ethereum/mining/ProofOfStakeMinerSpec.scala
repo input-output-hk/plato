@@ -16,6 +16,7 @@ import org.scalamock.scalatest.MockFactory
 import org.scalatest.{FlatSpec, Matchers, Tag}
 import org.spongycastle.util.encoders.Hex
 import io.iohk.ethereum.Fixtures.FakeSignature
+
 import scala.concurrent.duration._
 
 object ProofOfStakeMinerSpec {
@@ -45,7 +46,7 @@ class ProofOfStakeMinerSpec extends FlatSpec with Matchers {
     def isValid(stakeholders: Seq[Address])(stakeHolder: Address): Boolean = {
       stakeholders.contains(stakeHolder)
     }
-    val electionManager = Mocks.MockElectionManager(isValid(knownStakeholders))
+    val certificateAuthorityManager = Mocks.MockCertificateAuthorityManager(isValid(knownStakeholders))
 
     val miner = TestActorRef(ProofOfStakeMiner.props(
       blockchain,
@@ -55,7 +56,7 @@ class ProofOfStakeMinerSpec extends FlatSpec with Matchers {
       syncController.ref,
       miningConfig,
       keyStore,
-      electionManager
+      certificateAuthorityManager
     ))
 
     miner ! ProofOfStakeMiner.StartMining(currentSlotNumber)
@@ -77,7 +78,7 @@ class ProofOfStakeMinerSpec extends FlatSpec with Matchers {
     def isValid(stakeholders: Seq[Address])(stakeHolder: Address): Boolean = {
       stakeholders.contains(stakeHolder)
     }
-    val electionManager = Mocks.MockElectionManager(isValid(List.empty))
+    val certificateAuthorityManager= Mocks.MockCertificateAuthorityManager(isValid(List.empty))
 
     val miner = TestActorRef(ProofOfStakeMiner.props(
       blockchain,
@@ -87,7 +88,7 @@ class ProofOfStakeMinerSpec extends FlatSpec with Matchers {
       syncController.ref,
       miningConfig,
       keyStore,
-      electionManager
+      certificateAuthorityManager
     ))
 
     miner ! ProofOfStakeMiner.StartMining(currentSlotNumber)

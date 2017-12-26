@@ -2,7 +2,7 @@ package io.iohk.ethereum.validators
 
 import akka.util.ByteString
 import io.iohk.ethereum.domain._
-import io.iohk.ethereum.pos.ElectionManager
+import io.iohk.ethereum.governance.CertificateAuthorityManager
 import io.iohk.ethereum.timing.Clock
 import io.iohk.ethereum.utils.BlockchainConfig
 
@@ -22,7 +22,7 @@ object BlockHeaderValidatorImpl {
 }
 
 class BlockHeaderValidatorImpl(blockchainConfig: BlockchainConfig,
-                               electionManager: ElectionManager,
+                               certificateAuthorityManager: CertificateAuthorityManager,
                                slotTimeConverter: SlotTimeConverter,
                                clock: Clock) extends BlockHeaderValidator {
 
@@ -173,7 +173,7 @@ class BlockHeaderValidatorImpl(blockchainConfig: BlockchainConfig,
     */
   private def validateIsLeader(blockHeader: BlockHeader): Either[BlockHeaderError, BlockHeaderValid] = {
     val blockCoinbase = Address(blockHeader.beneficiary)
-    val isLeader = electionManager.verifyIsLeader(blockCoinbase, blockHeader.slotNumber)
+    val isLeader = certificateAuthorityManager.isCertificateAuthorityFor(blockCoinbase, blockHeader.slotNumber)
     if(isLeader) Right(BlockHeaderValid)
     else Left(HeaderBeneficiaryError)
   }

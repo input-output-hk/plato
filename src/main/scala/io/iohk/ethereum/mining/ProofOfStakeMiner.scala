@@ -3,10 +3,10 @@ package io.iohk.ethereum.mining
 import akka.actor.{Actor, ActorLogging, ActorRef, Props}
 import akka.util.Timeout
 import io.iohk.ethereum.blockchain.sync.RegularSync
-import io.iohk.ethereum.domain.{Address, Block, Blockchain}
+import io.iohk.ethereum.domain._
+import io.iohk.ethereum.governance.CertificateAuthorityManager
 import io.iohk.ethereum.keystore.KeyStore
 import io.iohk.ethereum.ommers.OmmersPool
-import io.iohk.ethereum.pos.ElectionManager
 import io.iohk.ethereum.transactions.PendingTransactionsManager
 import io.iohk.ethereum.transactions.PendingTransactionsManager.PendingTransactionsResponse
 import io.iohk.ethereum.utils.MiningConfig
@@ -15,6 +15,7 @@ import scala.concurrent.Future
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.util.{Failure, Success}
 
+//scalastyle:off parameter.number
 class ProofOfStakeMiner(
              blockchain: Blockchain,
              blockGenerator: BlockGenerator,
@@ -23,7 +24,7 @@ class ProofOfStakeMiner(
              syncController: ActorRef,
              miningConfig: MiningConfig,
              keyStore: KeyStore,
-             electionManager: ElectionManager)
+             certificateAuthorityManager: CertificateAuthorityManager)
   extends Actor with ActorLogging {
 
   import ProofOfStakeMiner._
@@ -37,7 +38,7 @@ class ProofOfStakeMiner(
     keyStore.listAccounts() match {
       case Right(accounts) =>
         val mayBeLeader: Option[Address] = accounts.collectFirst {
-          case account if electionManager.verifyIsLeader(account, slotNumber) => account
+          case account if certificateAuthorityManager.isCertificateAuthorityFor(account, slotNumber) => account
         }
         mayBeLeader match {
           case Some(leader) =>
@@ -94,7 +95,7 @@ object ProofOfStakeMiner {
             syncController: ActorRef,
             miningConfig: MiningConfig,
             keyStore: KeyStore,
-            electionManager: ElectionManager): Props =
+            certificateAuthorityManager: CertificateAuthorityManager): Props =
     Props(new ProofOfStakeMiner(
       blockchain,
       blockGenerator,
@@ -103,7 +104,7 @@ object ProofOfStakeMiner {
       syncController,
       miningConfig,
       keyStore,
-      electionManager)
+      certificateAuthorityManager)
     )
   case class StartMining(slotNumber: BigInt)
 }

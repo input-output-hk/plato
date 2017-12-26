@@ -16,20 +16,21 @@ import scala.util.{Failure, Success, Try}
 
 abstract class ScenarioSetup(scenario: BlockchainScenario)
   extends EphemBlockchainTestSetup
-  with ElectionManagerBuilder
+  with CertificateAuthorityManagerBuilder
   with SlotTimeConverterBuilder
   with ValidatorsBuilder
   with ClockBuilder
   with NTPServiceBuilder
   with SyncConfigBuilder
   with BlockchainConfigBuilder
-  with OuroborosConfigBuilder {
+  with OuroborosConfigBuilder
+  with LedgerBuilder {
 
   val emptyWorld = blockchain.getWorldStateProxy(-1, UInt256.Zero, None)
 
   override lazy val blockchainConfig = buildBlockchainConfig(scenario.network)
 
-  val ledger = new LedgerImpl(VM, blockchain, blockchainConfig, syncConfig, validators)
+  override lazy val ledger = new LedgerImpl(VM, blockchain, blockchainConfig, syncConfig, validators)
 
   def loadGenesis(): Block = {
     val genesisBlock = scenario.genesisRLP match {

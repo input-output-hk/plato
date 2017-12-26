@@ -11,6 +11,7 @@ import io.iohk.ethereum.db.components.{DataSourcesComponent, SharedLevelDBDataSo
 import io.iohk.ethereum.db.storage.AppStateStorage
 import io.iohk.ethereum.db.storage.pruning.PruningMode
 import io.iohk.ethereum.domain._
+import io.iohk.ethereum.governance.CertificateAuthorityManagerImpl
 import io.iohk.ethereum.jsonrpc.server.JsonRpcServer.JsonRpcServerConfig
 import io.iohk.ethereum.jsonrpc.NetService.NetServiceConfig
 import io.iohk.ethereum.ledger.{Ledger, LedgerImpl}
@@ -33,7 +34,6 @@ import io.iohk.ethereum.transactions.PendingTransactionsManager
 import io.iohk.ethereum.validators._
 import io.iohk.ethereum.vm.VM
 import io.iohk.ethereum.ommers.OmmersPool
-import io.iohk.ethereum.pos.ElectionManagerImpl
 import io.iohk.ethereum.timing.{BeaconActor, Clock, NTPClock}
 import io.iohk.ethereum.utils.Config.SyncConfig
 
@@ -86,9 +86,9 @@ trait OuroborosConfigBuilder {
   lazy val ouroborosConfig = OuroborosConfig(Config.config)
 }
 
-trait ElectionManagerBuilder {
-  self: OuroborosConfigBuilder =>
-  lazy val electionManager = ElectionManagerImpl(ouroborosConfig)
+trait CertificateAuthorityManagerBuilder {
+  self: BlockchainBuilder with OuroborosConfigBuilder with BlockchainConfigBuilder =>
+  lazy val certificateAuthorityManager = CertificateAuthorityManagerImpl(blockchain, blockchainConfig, ouroborosConfig)
 }
 
 trait KnownNodesManagerBuilder {
@@ -102,10 +102,10 @@ trait KnownNodesManagerBuilder {
 
 trait PeerDiscoveryManagerBuilder {
   self: ActorSystemBuilder
-  with DiscoveryListenerBuilder
-  with NodeStatusBuilder
-  with DiscoveryConfigBuilder
-  with StorageBuilder =>
+    with DiscoveryListenerBuilder
+    with NodeStatusBuilder
+    with DiscoveryConfigBuilder
+    with StorageBuilder =>
 
   lazy val peerDiscoveryManager =
     actorSystem.actorOf(PeerDiscoveryManager.props(discoveryListener, discoveryConfig,
@@ -114,8 +114,8 @@ trait PeerDiscoveryManagerBuilder {
 
 trait DiscoveryListenerBuilder {
   self: ActorSystemBuilder
-  with DiscoveryConfigBuilder
-  with NodeStatusBuilder =>
+    with DiscoveryConfigBuilder
+    with NodeStatusBuilder =>
 
   lazy val discoveryListener = actorSystem.actorOf(DiscoveryListener.props(discoveryConfig, nodeStatusHolder), "discovery-listener")
 }
@@ -170,7 +170,7 @@ trait HandshakerBuilder {
 
 trait AuthHandshakerBuilder {
   self: NodeKeyBuilder
-  with SecureRandomBuilder =>
+    with SecureRandomBuilder =>
 
   lazy val authHandshaker: AuthHandshaker = AuthHandshaker(nodeKey, secureRandom)
 }
@@ -366,13 +366,13 @@ trait OmmersPoolBuilder {
 
 trait ValidatorsBuilder {
   self: BlockchainConfigBuilder
-    with ElectionManagerBuilder
+    with CertificateAuthorityManagerBuilder
     with SlotTimeConverterBuilder
     with ClockBuilder =>
 
   lazy val validators = new Validators {
     val blockValidator: BlockValidator = BlockValidator
-    val blockHeaderValidator: BlockHeaderValidator = new BlockHeaderValidatorImpl(blockchainConfig, electionManager, slotTimeConverter, clock)
+    val blockHeaderValidator: BlockHeaderValidator = new BlockHeaderValidatorImpl(blockchainConfig, certificateAuthorityManager, slotTimeConverter, clock)
     val ommersValidator: OmmersValidator = new OmmersValidatorImpl(blockchainConfig, blockHeaderValidator)
     val signedTransactionValidator: SignedTransactionValidator = new SignedTransactionValidatorImpl(blockchainConfig)
   }
@@ -456,7 +456,7 @@ trait ProofOfStakeMinerBuilder {
     with PendingTransactionsManagerBuilder
     with BlockGeneratorBuilder
     with SyncControllerBuilder
-    with ElectionManagerBuilder
+    with CertificateAuthorityManagerBuilder
     with KeyStoreBuilder
     with MiningConfigBuilder =>
 
@@ -468,7 +468,7 @@ trait ProofOfStakeMinerBuilder {
     syncController,
     miningConfig,
     keyStore,
-    electionManager))
+    certificateAuthorityManager))
 }
 
 trait SlotTimeConverterBuilder {
@@ -551,9 +551,9 @@ trait Node extends NodeKeyBuilder
   with KnownNodesManagerBuilder
   with SyncConfigBuilder
   with OuroborosConfigBuilder
-  with ElectionManagerBuilder
   with ProofOfStakeMinerBuilder
   with SlotTimeConverterBuilder
   with BeaconActorBuilder
   with NTPServiceBuilder
   with ClockBuilder
+  with CertificateAuthorityManagerBuilder

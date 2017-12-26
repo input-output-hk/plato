@@ -26,7 +26,7 @@ object Prerequisites {
 class Prerequisites(config: Config) {
 
   private def levelDb(dbPath: String): LevelDBDataSource =
-    LevelDBDataSource(
+    LevelDBDataSource (
       new LevelDbConfig {
         val verifyChecksums: Boolean = true
         val paranoidChecks: Boolean = true
@@ -52,9 +52,10 @@ class Prerequisites(config: Config) {
   val targetBlockchain = targetStorages.map(ts => BlockchainImpl(ts.storages))
 
   private val components = new ValidatorsBuilder with ClockBuilder with NTPServiceBuilder
-    with BlockchainConfigBuilder with SyncConfigBuilder
-    with ElectionManagerBuilder with SlotTimeConverterBuilder
-    with OuroborosConfigBuilder with BlockchainBuilder with StorageBuilder {
+                              with BlockchainConfigBuilder with SyncConfigBuilder
+                              with CertificateAuthorityManagerBuilder with SlotTimeConverterBuilder
+                              with OuroborosConfigBuilder with BlockchainBuilder with StorageBuilder
+                              with LedgerBuilder {
     override lazy val blockchain = sourceBlockchain
     override lazy val storagesInstance = sourceStorages
   }
