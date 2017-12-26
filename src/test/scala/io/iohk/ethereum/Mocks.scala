@@ -119,7 +119,7 @@ object Mocks {
   }
 
   case class MockCertificateAuthorityManager(isValid: Address => Boolean) extends CertificateAuthorityManager {
-    override def isCertificateAuthorityFor(stakeholder: Address, slotNumber: BigInt): Boolean = isValid(stakeholder)
+    override def isCertificateAuthorityFor(stakeholder: Address, lastBlockHeader: BlockHeader): Boolean = isValid(stakeholder)
   }
 
   case class MockKeyStore(stakeholders: Either[KeyStore.KeyStoreError, List[Address]]) extends KeyStore {
