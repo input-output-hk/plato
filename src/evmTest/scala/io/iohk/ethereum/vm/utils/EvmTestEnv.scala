@@ -1,7 +1,6 @@
 package io.iohk.ethereum.vm.utils
 
 import java.io.File
-import akka.util.ByteString
 import io.iohk.ethereum.crypto._
 import io.iohk.ethereum.domain.{Account, Address, UInt256}
 import io.iohk.ethereum.vm._
@@ -52,7 +51,7 @@ trait EvmTestEnv {
     val contractInitCode = Utils.loadContractCodeFromFile(new File(s"$ContractsDir/$name.bin"))
     val contractAbi = Utils.loadContractAbiFromFile(new File(s"$ContractsDir/$name.abi"))
 
-    val payload = constructorArgs.map(parseArg).foldLeft(contractInitCode)(_ ++ _)
+    val payload = constructorArgs.map(Contract.parseArg).foldLeft(contractInitCode)(_ ++ _)
 
     val tx = MockVmInput.transaction(creatorAddress, payload, value, gasLimit, gasPrice)
     val bh = MockVmInput.blockHeader
@@ -70,16 +69,6 @@ trait EvmTestEnv {
     (result, new MockContract(name, contractAddress))
   }
 
-  private def parseArg(arg: Any): ByteString = arg match {
-    case b: ByteString => UInt256(b).bytes
-    case b: BigInt => UInt256(b).bytes
-    case a: Array[Byte] => UInt256(a).bytes
-    case i: Int => UInt256(i).bytes
-    case b: Byte => UInt256(b).bytes
-    case a: Address => UInt256(a.bytes).bytes
-    case other => throw new RuntimeException("Invalid call argument")
-  }
-
   class MockContract(val name: String, val address: Address) extends Dynamic {
 
     def contract: Contract[MockWorldState, MockStorage] =
@@ -87,19 +76,18 @@ trait EvmTestEnv {
 
     def applyDynamic(methodName: String)(args: Any*): MockContractMethodCall = {
       val methodCall = contract.applyDynamic(methodName)(args: _*)
-      new MockContractMethodCall(this, methodCall)
+      new MockContractMethodCall(methodCall)
     }
 
     def callMethod(methodName: String)(args: Any*): MockContractMethodCall = {
       val methodCall = contract.callMethod(methodName)(args: _*)
-      new MockContractMethodCall(this, methodCall)
+      new MockContractMethodCall(methodCall)
     }
 
     def storage: MockStorage = world.storages(address)
   }
 
-  class MockContractMethodCall(mockContrack: MockContract,
-                               contractMethodCall: ContractMethodCall[MockWorldState, MockStorage]) {
+  class MockContractMethodCall(contractMethodCall: ContractMethodCall[MockWorldState, MockStorage]) {
 
     def call(value: BigInt = 0,
              gasLimit: BigInt = BigInt(2).pow(256) - 1,

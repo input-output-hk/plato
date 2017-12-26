@@ -87,7 +87,7 @@ trait OuroborosConfigBuilder {
 }
 
 trait CertificateAuthorityManagerBuilder {
-  self: LedgerBuilder with BlockchainBuilder with OuroborosConfigBuilder with BlockchainConfigBuilder =>
+  self: BlockchainBuilder with OuroborosConfigBuilder with BlockchainConfigBuilder =>
   lazy val certificateAuthorityManager = CertificateAuthorityManagerImpl(blockchain, blockchainConfig, ouroborosConfig)
 }
 

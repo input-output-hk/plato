@@ -38,11 +38,14 @@ case class Contract[W <: WorldStateProxy[W, S], S <: Storage[S]](address: Addres
 
   private def callWithSignature(signature: String)(args: Any*): ContractMethodCall[W, S] = {
     val signatureHash = ByteString(crypto.kec256(signature.getBytes)).take(4)
-    val callData = args.map(parseArg).foldLeft(signatureHash)(_ ++ _)
+    val callData = args.map(Contract.parseArg).foldLeft(signatureHash)(_ ++ _)
     ContractMethodCall(this, callData, blockHeader, evmConfig)
   }
 
-  private def parseArg(arg: Any): ByteString = arg match {
+}
+
+object Contract {
+  private[utils] def parseArg(arg: Any): ByteString = arg match {
     case b: ByteString => UInt256(b).bytes
     case b: BigInt => UInt256(b).bytes
     case a: Array[Byte] => UInt256(a).bytes
