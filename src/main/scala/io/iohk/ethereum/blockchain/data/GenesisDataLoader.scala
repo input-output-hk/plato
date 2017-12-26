@@ -141,7 +141,7 @@ class GenesisDataLoader(
       .saveAccount(consensusContractData.address, Account())
     val context: PC = ProgramContext(stx, consensusContractData.address, Program(stx.tx.payload), preBlockHeader, worldWithContractAccount, evmConfig)
     val result = virtualMachine.run(context)
-    log.debug(s"Error while deploy consensus contract: ${result.error.toString}")
+    log.error(s"Error while deploy consensus contract: ${result.error.toString}")
     val worldWithCode = result.world.saveCode(consensusContractData.address, result.returnData)
     InMemoryWorldStateProxy.persistState(worldWithCode).stateRootHash
   }
