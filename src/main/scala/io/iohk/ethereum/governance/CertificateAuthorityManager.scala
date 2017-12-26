@@ -10,7 +10,7 @@ import io.iohk.ethereum.vm.utils.{Contract, Utils}
 
 
 trait CertificateAuthorityManager {
-  def isCertificateAuthorityFor(address: Address, lastBlockHeader: BlockHeader): Boolean
+  def isCertificateAuthorityFor(address: Address, parentHeader: BlockHeader): Boolean
 }
 
 case class CertificateAuthorityManagerImpl(
@@ -27,8 +27,8 @@ case class CertificateAuthorityManagerImpl(
       Contract[InMemoryWorldStateProxy, InMemoryWorldStateProxyStorage](ouroborosConfig.consensusContractAddress, bh, world, abis, evmConfig)
     }
 
-  override def isCertificateAuthorityFor(address: Address, lastBlockHeader: BlockHeader): Boolean = {
-    val contract = contractBuilder(lastBlockHeader)
+  override def isCertificateAuthorityFor(address: Address, parentHeader: BlockHeader): Boolean = {
+    val contract = contractBuilder(parentHeader)
     val execResult = contract.isCertificateAuthorityFor(address).call()
     execResult.returnData.toArray.last == 1.toByte
   }
