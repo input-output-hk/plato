@@ -2,7 +2,11 @@ pragma solidity ^0.4.11;
 
 contract CertificateAuthorityManager {
 
-	address[] internal certificateAuthorities =  [0x00b15396fbf95ced0bc4a961239ff6350cca2b3203];
+	address[] internal certificateAuthorities;
+
+    function CertificateAuthorityManager(address initialCertificateAuthority) public {
+        certificateAuthorities = [initialCertificateAuthority];
+    }
 
 	function getCertificateAuthorities() public constant returns(address[]) {
 		return certificateAuthorities;

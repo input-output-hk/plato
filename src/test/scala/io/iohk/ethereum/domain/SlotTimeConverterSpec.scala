@@ -15,6 +15,7 @@ class SlotTimeConverterSpec extends FlatSpec with Matchers with PropertyChecks {
 
       //unused
       override val consensusContractAddress: Address = Address(0)
+      override val initialCA: Address = Address(1)
       override val consensusContractFilepath: String = ""
     }
     val slot1StartingTime = 1.seconds
@@ -41,6 +42,7 @@ class SlotTimeConverterSpec extends FlatSpec with Matchers with PropertyChecks {
 
       //unused
       override val consensusContractAddress: Address = Address(0)
+      override val initialCA: Address = Address(1)
       override val consensusContractFilepath: String = ""
     }
     val slot1StartingTime = 1.seconds

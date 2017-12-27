@@ -320,6 +320,7 @@ class BlockGeneratorSpec extends FlatSpec with Matchers with PropertyChecks with
       override val consensusContractFilepath: String = "src/test/resources/CertificateAuthorityManager"
       // unused
       override val consensusContractAddress: Address = Address(0)
+      override val initialCA: Address = Address(1)
       override val slotDuration: FiniteDuration = 0.millis
     }
 
