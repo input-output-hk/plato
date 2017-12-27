@@ -75,7 +75,6 @@ class Prerequisites(config: Config) {
     // unused
     override val consensusContractAddress: Address = Address(0)
     override val slotDuration: FiniteDuration = 0.millis
-    override val slotMinerStakeholdersMapping: Map[BigInt, Seq[Address]] = Map.empty
   }
 
   targetBlockchain.foreach { blockchain =>

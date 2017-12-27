@@ -17,7 +17,6 @@ class GenesisDataLoaderSpec  extends FlatSpec with Matchers {
 
     val ouroborosConfig = new OuroborosConfig {
       //unused
-      override val slotMinerStakeholdersMapping: Map[BigInt, Seq[Address]] = Map.empty
       override val slotDuration: FiniteDuration = 0.seconds
       override val consensusContractAddress: Address = Address("000000000000000000000000000000000000000a")
       override val consensusContractFilepath: String = "src/test/resources/CertificateAuthorityManager"
@@ -42,7 +41,6 @@ class GenesisDataLoaderSpec  extends FlatSpec with Matchers {
       override val consensusContractFilepath: String = "src/test/resources/CertificateAuthorityManager"
 
       //unused
-      override val slotMinerStakeholdersMapping: Map[BigInt, Seq[Address]] = Map.empty
       override val slotDuration: FiniteDuration = 0.seconds
     }
     val contractCodeHash = ByteString("dummyContractData")

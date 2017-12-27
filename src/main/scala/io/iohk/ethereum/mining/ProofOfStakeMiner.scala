@@ -39,7 +39,7 @@ class ProofOfStakeMiner(
       case Right(accounts) =>
         val parentBlock = blockchain.getBestBlock()
         val mayBeLeader: Option[Address] = accounts.collectFirst {
-          case account if certificateAuthorityManager.isCertificateAuthorityFor(account, parentBlock.signedHeader.header) => account
+          case account if certificateAuthorityManager.isElectedCertificateAuthorityFor(account, parentBlock.signedHeader.header, slotNumber) => account
         }
         mayBeLeader match {
           case Some(leader) =>

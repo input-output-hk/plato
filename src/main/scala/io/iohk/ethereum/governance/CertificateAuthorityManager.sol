@@ -8,14 +8,9 @@ contract CertificateAuthorityManager {
 		return certificateAuthorities;
 	}
 
-	function isCertificateAuthorityFor(address sender) public constant returns(bool) {
-		bool isCA = false;
-		for (uint it = 0; it < certificateAuthorities.length; it++) {
-			if (certificateAuthorities[it] == sender) {
-				isCA = true;
-			}
-    	}
-		return isCA;
+	function isElectedCAForNextBlock(address ca, uint slotNumber) public constant returns(bool) {
+		uint electedCAIndex = slotNumber % certificateAuthorities.length;	
+		return certificateAuthorities[electedCAIndex] == ca;
 	}
 
 	function addCA(address newCA) public returns(address[]) {

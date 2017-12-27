@@ -321,7 +321,6 @@ class BlockGeneratorSpec extends FlatSpec with Matchers with PropertyChecks with
       // unused
       override val consensusContractAddress: Address = Address(0)
       override val slotDuration: FiniteDuration = 0.millis
-      override val slotMinerStakeholdersMapping: Map[BigInt, Seq[Address]] = Map.empty
     }
 
     val genesisDataLoader = new GenesisDataLoader(ouroborosConfig, blockchain, blockchainConfig, VM)
