@@ -17,7 +17,7 @@ contract CertificateAuthorityManager {
 		return certificateAuthorities[electedCAIndex] == ca;
 	}
 
-	function addCA(address newCA) public returns(address[]) {
+	function addCA(address newCA) public {
 		bool hasAuthority = false;
 		bool isNew = true;
 		for (uint it = 0; it < certificateAuthorities.length; it++) {
@@ -31,10 +31,9 @@ contract CertificateAuthorityManager {
 		if (hasAuthority && isNew) {
 			certificateAuthorities.push(newCA);
 		}
-		return certificateAuthorities;
 	}
 	
-	function removeCA(address ca) public returns(address[]) {
+	function removeCA(address ca) public {
 		bool hasAuthority = false;
 		bool isCA = false;
 		uint removeIndex = 0;
@@ -50,11 +49,10 @@ contract CertificateAuthorityManager {
 		if (hasAuthority && isCA) {
 			certificateAuthorities = remove(certificateAuthorities, removeIndex);
 		}
-		return certificateAuthorities;
 	}
 
-	function remove(address[] accounts, uint removeIndex) internal pure returns(address[]) {	
-        if (removeIndex >= accounts.length) return;
+	function remove(address[] accounts, uint removeIndex) internal returns(address[]) {	
+        if (removeIndex >= accounts.length) return accounts;
 		address[] memory arrayNew = new address[](accounts.length - 1);
         for (uint itBefore = 0; itBefore < removeIndex; itBefore++) {
             arrayNew[itBefore] = accounts[itBefore];
