@@ -46,7 +46,7 @@ class BlockHeaderValidatorImpl(blockchainConfig: BlockchainConfig,
       _ <- validateGasUsed(signedBlockHeader.header)
       _ <- validateGasLimit(signedBlockHeader.header, parentHeader)
       _ <- validateNumber(signedBlockHeader.header, parentHeader)
-      _ <- validateIsLeader(signedBlockHeader.header)
+      _ <- validateIsLeader(signedBlockHeader.header, parentHeader)
       _ <- validateSlotNumber(signedBlockHeader.header, parentHeader)
     } yield BlockHeaderValid
   }
@@ -171,9 +171,9 @@ class BlockHeaderValidatorImpl(blockchainConfig: BlockchainConfig,
     * @param blockHeader BlockHeader to validate
     * @return a [[BlockHeaderValid]] if valid, an [[HeaderBeneficiaryError]] otherwise
     */
-  private def validateIsLeader(blockHeader: BlockHeader): Either[BlockHeaderError, BlockHeaderValid] = {
+  private def validateIsLeader(blockHeader: BlockHeader, parentHeader: BlockHeader): Either[BlockHeaderError, BlockHeaderValid] = {
     val blockCoinbase = Address(blockHeader.beneficiary)
-    val isLeader = certificateAuthorityManager.isCertificateAuthorityFor(blockCoinbase, blockHeader.slotNumber)
+    val isLeader = certificateAuthorityManager.isCertificateAuthorityFor(blockCoinbase, parentHeader)
     if(isLeader) Right(BlockHeaderValid)
     else Left(HeaderBeneficiaryError)
   }

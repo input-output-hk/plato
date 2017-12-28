@@ -37,12 +37,12 @@ class ProofOfStakeMiner(
   def processMining(slotNumber: BigInt): Unit = {
     keyStore.listAccounts() match {
       case Right(accounts) =>
+        val parentBlock = blockchain.getBestBlock()
         val mayBeLeader: Option[Address] = accounts.collectFirst {
-          case account if certificateAuthorityManager.isCertificateAuthorityFor(account, slotNumber) => account
+          case account if certificateAuthorityManager.isCertificateAuthorityFor(account, parentBlock.signedHeader.header) => account
         }
         mayBeLeader match {
           case Some(leader) =>
-            val parentBlock = blockchain.getBestBlock()
             getBlockForMining(parentBlock, slotNumber, leader) onComplete {
               case Success(PendingBlock(block, _)) =>
                 syncController ! RegularSync.MinedBlock(block)

@@ -10,7 +10,7 @@ import io.iohk.ethereum.vm.utils.{Contract, Utils}
 
 
 trait CertificateAuthorityManager {
-  def isCertificateAuthorityFor(address: Address, slotNumber: BigInt): Boolean
+  def isCertificateAuthorityFor(address: Address, parentHeader: BlockHeader): Boolean
 }
 
 case class CertificateAuthorityManagerImpl(
@@ -27,15 +27,9 @@ case class CertificateAuthorityManagerImpl(
       Contract[InMemoryWorldStateProxy, InMemoryWorldStateProxyStorage](ouroborosConfig.consensusContractAddress, bh, world, abis, evmConfig)
     }
 
-  override def isCertificateAuthorityFor(address: Address, slotNumber: BigInt): Boolean = {
-    val block = resolveBlock()
-    val contract = contractBuilder(block.signedHeader.header)
-    val execResult = contract.isCertificateAuthorityFor(address, slotNumber).call()
+  override def isCertificateAuthorityFor(address: Address, parentHeader: BlockHeader): Boolean = {
+    val contract = contractBuilder(parentHeader)
+    val execResult = contract.isCertificateAuthorityFor(address).call()
     execResult.returnData.toArray.last == 1.toByte
-  }
-
-  // TODO: Improve the case of an empty block
-  private def resolveBlock(): Block = {
-    blockchain.getBlockByNumber(blockchain.getBestBlockNumber()).get
   }
 }
