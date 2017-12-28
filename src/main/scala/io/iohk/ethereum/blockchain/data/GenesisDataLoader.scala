@@ -18,9 +18,10 @@ import io.iohk.ethereum.mpt.MerklePatriciaTrie
 import io.iohk.ethereum.network.p2p.messages.PV62.BlockBody
 import io.iohk.ethereum.rlp.RLPImplicits._
 import io.iohk.ethereum.vm._
-import io.iohk.ethereum.vm.utils.Utils
+import io.iohk.ethereum.vm.utils.{Contract, Utils}
 import org.json4s.{CustomSerializer, DefaultFormats, Formats, JString, JValue}
 import org.spongycastle.util.encoders.Hex
+
 import scala.io.Source
 import scala.util.{Failure, Success, Try}
 
@@ -86,7 +87,7 @@ class GenesisDataLoader(
     for {
       genesisData <- Try(parse(genesisJson).extract[GenesisData])
       consensusContractCode <- Try(Utils.loadContractCodeFromFile(new File(s"${ouroborosConfig.consensusContractFilepath}.bin")))
-      _ <- loadGenesisData(genesisData, ContractData(ouroborosConfig.consensusContractAddress, consensusContractCode))
+      _ <- loadGenesisData(genesisData, ContractData(ouroborosConfig.consensusContractAddress, consensusContractCode, Seq(ouroborosConfig.initialCA)))
     } yield ()
   }
 
@@ -134,7 +135,8 @@ class GenesisDataLoader(
   }
 
   private def deployConsensusContract(consensusContractData: ContractData, preBlockHeader: BlockHeader, currentStateRootHash: ByteString): ByteString = {
-    val stx = createSignedContractTransaction(consensusContractData.code)
+    val code = consensusContractData.args.map(Contract.parseArg).foldLeft(consensusContractData.code)(_ ++ _)
+    val stx = createSignedContractTransaction(code)
     val evmConfig = EvmConfig.forBlock(blockNumber = BigInt(0), blockchainConfig)
     val worldWithContractAccount = blockchain
       .getWorldStateProxy(BigInt(0), blockchainConfig.accountStartNonce, Some(currentStateRootHash))
@@ -219,5 +221,5 @@ object GenesisDataLoader {
     )
   }
 
-  case class ContractData(address: Address, code: ByteString)
+  case class ContractData(address: Address, code: ByteString, args: Seq[Any] = Nil)
 }

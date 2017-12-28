@@ -404,9 +404,9 @@ object PruningConfig {
 
 trait OuroborosConfig {
   val slotDuration: FiniteDuration
-  val slotMinerStakeholdersMapping: Map[BigInt, Seq[Address]]
   val consensusContractAddress: Address
   val consensusContractFilepath: String
+  val initialCA: Address
 }
 
 object OuroborosConfig {
@@ -414,18 +414,9 @@ object OuroborosConfig {
     val ouroborosConfig = etcClientConfig.getConfig("ouroboros")
     new OuroborosConfig {
       override val slotDuration: FiniteDuration = ouroborosConfig.getDuration("slot-duration").toMillis.millis
-      override val slotMinerStakeholdersMapping: Map[BigInt, Seq[Address]] =
-        ouroborosConfig.getObject("slot-minerStakeHolders-mapping").asScala.map {
-          case (slotNumberString, stakeholders) =>
-            val slotNumber = BigInt(slotNumberString)
-            val allowedStakeholders = stakeholders.unwrapped()
-              .asInstanceOf[java.util.ArrayList[String]].asScala
-              .map(Address.apply).toList
-
-            (slotNumber, allowedStakeholders)
-        }.toMap
       override val consensusContractAddress = Address(ouroborosConfig.getString("consensus-contract-address"))
       override val consensusContractFilepath = ouroborosConfig.getString("consensus-contract-filepath")
+      override val initialCA = Address(ouroborosConfig.getString("initial-certificate-authority"))
     }
   }
 }

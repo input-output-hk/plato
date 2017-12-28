@@ -45,7 +45,7 @@ case class Contract[W <: WorldStateProxy[W, S], S <: Storage[S]](address: Addres
 }
 
 object Contract {
-  private[utils] def parseArg(arg: Any): ByteString = arg match {
+  private[ethereum] def parseArg(arg: Any): ByteString = arg match {
     case b: ByteString => UInt256(b).bytes
     case b: BigInt => UInt256(b).bytes
     case a: Array[Byte] => UInt256(a).bytes

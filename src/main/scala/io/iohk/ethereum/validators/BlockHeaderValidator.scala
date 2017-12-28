@@ -173,7 +173,7 @@ class BlockHeaderValidatorImpl(blockchainConfig: BlockchainConfig,
     */
   private def validateIsLeader(blockHeader: BlockHeader, parentHeader: BlockHeader): Either[BlockHeaderError, BlockHeaderValid] = {
     val blockCoinbase = Address(blockHeader.beneficiary)
-    val isLeader = certificateAuthorityManager.isCertificateAuthorityFor(blockCoinbase, parentHeader)
+    val isLeader = certificateAuthorityManager.isElectedCertificateAuthorityFor(blockCoinbase, parentHeader, blockHeader.slotNumber)
     if(isLeader) Right(BlockHeaderValid)
     else Left(HeaderBeneficiaryError)
   }
