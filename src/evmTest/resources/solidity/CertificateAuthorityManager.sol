@@ -1,7 +1,8 @@
 pragma solidity ^0.4.11;
 
 contract CertificateAuthorityManager {
-	enum VoteType { VoteForAdd, VoteForDelete, NoVote }
+	/* warning: The first value MUST be 'NoVote' because is the default value for the enums variables */
+	enum VoteType { NoVote, VoteForAdd, VoteForDelete}
 
 	// Contract State
 	address[] internal certificateAuthorities;
@@ -19,12 +20,12 @@ contract CertificateAuthorityManager {
 		address toCandidate,
 		string voteType
 	);
-	event NewCetificateAuthority(address ca);
-	event DeletedCetificateAuthority(address ca);
+	event NewCertificateAuthority(address ca);
+	event DeletedCertificateAuthority(address ca);
 
 	// Constructor
     function CertificateAuthorityManager(address initialCertificateAuthority, uint _consensusApprovalPercentage) public {
-		if (_consensusApprovalPercentage < 0 || consensusApprovalPercentage > 100) throw;
+		if (_consensusApprovalPercentage > 100) throw;
 		certificateAuthorities = [initialCertificateAuthority];
 		consensusApprovalPercentage = _consensusApprovalPercentage;
     }
@@ -42,8 +43,12 @@ contract CertificateAuthorityManager {
 		uint electedCAIndex = slotNumber % certificateAuthorities.length;	
 		return certificateAuthorities[electedCAIndex] == ca;
 	}
-
-	function addCA(address caCandidate) public {
+	
+	/* 
+		Note: Be careful, If there are many certificate authorities, 
+		the operations will be too expensive and will became impossible to execute.
+	*/
+	function voteForAddCA(address caCandidate) public {
 		if (isValidAddRequest(caCandidate, msg.sender, certificateAuthorities)) {
 			caVotes[msg.sender][caCandidate] = VoteType.VoteForAdd;
 			NewVote(msg.sender, caCandidate, "VoteForAdd");
@@ -51,14 +56,18 @@ contract CertificateAuthorityManager {
 			if (consensusExist(votes, certificateAuthorities.length)) {
 				cleanVotes(caCandidate, certificateAuthorities, VoteType.VoteForAdd);
 				certificateAuthorities.push(caCandidate); // Add new CA
-				NewCetificateAuthority(caCandidate);
+				NewCertificateAuthority(caCandidate);
 			}
 		} else {
 			InvalidVote(msg.sender, caCandidate, "VoteForAdd");
 		}
 	}
 	
-	function removeCA(address caCandidate) public {
+	/* 
+		Note: Be careful, if you are the only authority in the list and votes for remove yourself,
+		the blockchain will be halted forever.
+	*/
+	function voteForRemoveCA(address caCandidate) public {
 		var (isDeletable, removeIndex) = isValidDeleteRequest(caCandidate, msg.sender, certificateAuthorities);
 		if (isDeletable) {
 			caVotes[msg.sender][caCandidate] = VoteType.VoteForDelete;
@@ -67,7 +76,7 @@ contract CertificateAuthorityManager {
 			if (consensusExist(votes, certificateAuthorities.length)) {
 				cleanVotes(caCandidate, certificateAuthorities, VoteType.VoteForDelete);
 				certificateAuthorities = remove(certificateAuthorities, removeIndex); // Update list
-				DeletedCetificateAuthority(caCandidate);
+				DeletedCertificateAuthority(caCandidate);
 			}
 		} else {
 			InvalidVote(msg.sender, caCandidate, "VoteForDelete");
@@ -134,7 +143,7 @@ contract CertificateAuthorityManager {
 		return votes;
 	}
 
-	// Note: Be carful, this method Must update the caVotes from the contract state.
+	// Note: Be careful, this method Must update the caVotes from the contract state.
 	function cleanVotes(address caCandidate, address[] authorities, VoteType forVoteType) internal {
 		for (uint it = 0; it < authorities.length; it++) {
 			if (caVotes[authorities[it]][caCandidate] == forVoteType) {
