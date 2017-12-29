@@ -29,7 +29,7 @@ case class CertificateAuthorityManagerImpl(
 
   override def isElectedCertificateAuthorityFor(address: Address, parentHeader: BlockHeader, slotNumber: BigInt): Boolean = {
     val contract = contractBuilder(parentHeader)
-    val execResult = contract.isElectedCAForNextBlock(address, slotNumber).call()
+    val execResult = contract.isElectedCertificateAuthorityForNextBlock(address, slotNumber).call()
     val isElectedCA = execResult.returnData.toArray.last == 1.toByte
     if (isElectedCA) log.debug(s"Address ${address.toString} is elected as CA for slotNumber $slotNumber")
     isElectedCA

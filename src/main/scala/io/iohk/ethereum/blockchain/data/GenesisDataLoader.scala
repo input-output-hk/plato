@@ -87,7 +87,10 @@ class GenesisDataLoader(
     for {
       genesisData <- Try(parse(genesisJson).extract[GenesisData])
       consensusContractCode <- Try(Utils.loadContractCodeFromFile(new File(s"${ouroborosConfig.consensusContractFilepath}.bin")))
-      _ <- loadGenesisData(genesisData, ContractData(ouroborosConfig.consensusContractAddress, consensusContractCode, Seq(ouroborosConfig.initialCA)))
+      _ <- loadGenesisData(
+        genesisData,
+        ContractData(ouroborosConfig.consensusContractAddress, consensusContractCode, Seq(ouroborosConfig.initialCA, ouroborosConfig.consensusApprovalPercentage))
+      )
     } yield ()
   }
 

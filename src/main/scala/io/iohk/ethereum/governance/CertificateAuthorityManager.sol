@@ -6,6 +6,7 @@ contract CertificateAuthorityManager {
 	// Contract State
 	address[] internal certificateAuthorities;
 	mapping(address => mapping(address => VoteType)) internal caVotes;
+	uint internal consensusApprovalPercentage;
 
 	// Events
 	event NewVote (
@@ -13,12 +14,19 @@ contract CertificateAuthorityManager {
         address toCandidate,
 		string voteType
 	);
+	event InvalidVote (
+		address from,
+		address toCandidate,
+		string voteType
+	);
 	event NewCetificateAuthority(address ca);
 	event DeletedCetificateAuthority(address ca);
 
 	// Constructor
-    function CertificateAuthorityManager(address initialCertificateAuthority) public {
-        certificateAuthorities = [initialCertificateAuthority];
+    function CertificateAuthorityManager(address initialCertificateAuthority, uint _consensusApprovalPercentage) public {
+		if (_consensusApprovalPercentage < 0 || consensusApprovalPercentage > 100) throw;
+		certificateAuthorities = [initialCertificateAuthority];
+		consensusApprovalPercentage = _consensusApprovalPercentage;
     }
 
 	// Methods
@@ -26,7 +34,11 @@ contract CertificateAuthorityManager {
 		return certificateAuthorities;
 	}
 
-	function isElectedCAForNextBlock(address ca, uint slotNumber) public constant returns(bool) {
+	function getConsensusApprovalPercentage() public constant returns(uint) {
+		return consensusApprovalPercentage;
+	}
+
+	function isElectedCertificateAuthorityForNextBlock(address ca, uint slotNumber) public constant returns(bool) {
 		uint electedCAIndex = slotNumber % certificateAuthorities.length;	
 		return certificateAuthorities[electedCAIndex] == ca;
 	}
@@ -35,14 +47,14 @@ contract CertificateAuthorityManager {
 		if (isValidAddRequest(caCandidate, msg.sender, certificateAuthorities)) {
 			caVotes[msg.sender][caCandidate] = VoteType.VoteForAdd;
 			NewVote(msg.sender, caCandidate, "VoteForAdd");
-			// Count votes
 			uint votes = countVotes(caCandidate, certificateAuthorities, VoteType.VoteForAdd);
-			// Check if there is courum
-			if (votes * 3 >= certificateAuthorities.length * 2) { // obs: request 2/3 of the total
+			if (consensusExist(votes, certificateAuthorities.length)) {
 				cleanVotes(caCandidate, certificateAuthorities, VoteType.VoteForAdd);
 				certificateAuthorities.push(caCandidate); // Add new CA
 				NewCetificateAuthority(caCandidate);
 			}
+		} else {
+			InvalidVote(msg.sender, caCandidate, "VoteForAdd");
 		}
 	}
 	
@@ -52,12 +64,13 @@ contract CertificateAuthorityManager {
 			caVotes[msg.sender][caCandidate] = VoteType.VoteForDelete;
 			NewVote(msg.sender, caCandidate, "VoteForDelete");
 			uint votes = countVotes(caCandidate, certificateAuthorities, VoteType.VoteForDelete);
-			// Check if there is courum
-			if (votes * 3 >= certificateAuthorities.length * 2) { // obs: request 2/3 of the total
+			if (consensusExist(votes, certificateAuthorities.length)) {
 				cleanVotes(caCandidate, certificateAuthorities, VoteType.VoteForDelete);
 				certificateAuthorities = remove(certificateAuthorities, removeIndex); // Update list
 				DeletedCetificateAuthority(caCandidate);
 			}
+		} else {
+			InvalidVote(msg.sender, caCandidate, "VoteForDelete");
 		}
 	}
 
@@ -73,7 +86,7 @@ contract CertificateAuthorityManager {
 				isNew = false;
 			}
     	}
-		return hasAuthority && isNew;
+		return (hasAuthority && isNew);
 	}
 
 	function isValidDeleteRequest(address caCandidate, address sender, address[] authorities) internal returns(bool, uint) {
@@ -90,6 +103,11 @@ contract CertificateAuthorityManager {
 			}
     	}
 		return (hasAuthority && isCA, removeIndex);
+	}
+
+	function consensusExist(uint votes, uint voters) internal returns(bool) {
+		/* note: Using this equivalent formula we avoid the uses of float variables */
+		return (votes * 100 >= voters * consensusApprovalPercentage);
 	}
 
 	function remove(address[] accounts, uint removeIndex) internal returns(address[]) {	

@@ -75,6 +75,7 @@ class Prerequisites(config: Config) {
     // unused
     override val consensusContractAddress: Address = Address(0)
     override val initialCA: Address = Address(1)
+    override val consensusApprovalPercentage = 0
     override val slotDuration: FiniteDuration = 0.millis
   }
 

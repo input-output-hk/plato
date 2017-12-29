@@ -407,6 +407,7 @@ trait OuroborosConfig {
   val consensusContractAddress: Address
   val consensusContractFilepath: String
   val initialCA: Address
+  val consensusApprovalPercentage: Int
 }
 
 object OuroborosConfig {
@@ -417,6 +418,7 @@ object OuroborosConfig {
       override val consensusContractAddress = Address(ouroborosConfig.getString("consensus-contract-address"))
       override val consensusContractFilepath = ouroborosConfig.getString("consensus-contract-filepath")
       override val initialCA = Address(ouroborosConfig.getString("initial-certificate-authority"))
+      override val consensusApprovalPercentage = ouroborosConfig.getInt("consensus-approval-percentage")
     }
   }
 }
