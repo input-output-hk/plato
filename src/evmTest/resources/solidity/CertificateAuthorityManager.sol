@@ -39,7 +39,12 @@ contract CertificateAuthorityManager {
 		return consensusApprovalPercentage;
 	}
 
-	function isElectedCertificateAuthorityForNextBlock(address ca, uint slotNumber) public constant returns(bool) {
+	/*
+	    Note: Everytime a certificate authority is added or removed,
+		the current implementation of the round robin chooses the next authority based on
+		who had been be elected if all authorities had been part of the group since the beginning.
+	*/
+	function isElectedCertificateAuthorityForSlot(address ca, uint slotNumber) public constant returns(bool) {
 		uint electedCAIndex = slotNumber % certificateAuthorities.length;	
 		return certificateAuthorities[electedCAIndex] == ca;
 	}
