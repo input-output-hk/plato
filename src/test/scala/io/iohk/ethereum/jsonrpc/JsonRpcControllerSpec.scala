@@ -4,7 +4,8 @@ import akka.actor.ActorSystem
 import akka.testkit.TestProbe
 import akka.util.ByteString
 import io.iohk.ethereum.blockchain.sync.EphemBlockchainTestSetup
-import io.iohk.ethereum.crypto.ECDSASignature
+import io.iohk.ethereum.{Fixtures, NormalPatience, Timeouts}
+import io.iohk.ethereum.crypto.{ECDSASignature, kec256}
 import io.iohk.ethereum.db.storage.AppStateStorage
 import io.iohk.ethereum.domain.{Address, Block, BlockHeader, SignedBlockHeader}
 import io.iohk.ethereum.jsonrpc.EthService._
@@ -15,8 +16,11 @@ import io.iohk.ethereum.jsonrpc.NetService.{ListeningResponse, PeerCountResponse
 import io.iohk.ethereum.jsonrpc.PersonalService._
 import io.iohk.ethereum.keystore.KeyStore
 import io.iohk.ethereum.ledger.{BloomFilter, Ledger}
-import io.iohk.ethereum.mining.BlockGenerator
+import io.iohk.ethereum.mining.{BlockGenerator, PendingBlock}
 import io.iohk.ethereum.network.p2p.messages.PV62.BlockBody
+import io.iohk.ethereum.ommers.OmmersPool
+import io.iohk.ethereum.ommers.OmmersPool.Ommers
+import io.iohk.ethereum.transactions.PendingTransactionsManager
 import io.iohk.ethereum.utils._
 import io.iohk.ethereum.validators.Validators
 import io.iohk.ethereum.{Fixtures, NormalPatience, Timeouts}
@@ -1291,15 +1295,15 @@ class JsonRpcControllerSpec extends FlatSpec with Matchers with PropertyChecks w
     )
 
     val response = jsonRpcController.handleRequest(request).futureValue
-    val expectedSentTx = Extraction.decompose(TransactionResponse(sentTx, Some(block.signedHeader)))
-    val expectedReceivedTx = Extraction.decompose(TransactionResponse(receivedTx, Some(block.signedHeader)))
+    val expectedTxs = Seq(
+      Extraction.decompose(TransactionResponse(sentTx, Some(block.header), isOutgoing = Some(true))),
+      Extraction.decompose(TransactionResponse(receivedTx, Some(block.header), isOutgoing = Some(false))))
 
     response.jsonrpc shouldBe "2.0"
     response.id shouldBe JInt(1)
     response.error shouldBe None
     response.result shouldBe Some(JObject(
-      "sent" -> JArray(List(expectedSentTx)),
-      "received" -> JArray(List(expectedReceivedTx))))
+      "transactions" -> JArray(expectedTxs.toList)))
   }
 
   trait TestSetup extends MockFactory with EphemBlockchainTestSetup {
@@ -1321,8 +1325,10 @@ class JsonRpcControllerSpec extends FlatSpec with Matchers with PropertyChecks w
     val miningConfig = new MiningConfig {
       override val blockCacheSize: Int = 30
       override val ommersPoolSize: Int = 30
+      override val activeTimeout: FiniteDuration = Timeouts.normalTimeout
       override val ommerPoolQueryTimeout: FiniteDuration = Timeouts.normalTimeout
       override val headerExtraData: ByteString = ByteString.empty
+      override val miningEnabled: Boolean = false
     }
 
     val filterConfig = new FilterConfig {

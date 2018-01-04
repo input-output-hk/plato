@@ -318,6 +318,44 @@ class SyncControllerSpec extends FlatSpec with Matchers with BeforeAndAfter with
       Unsubscribe(MessageClassifier(Set(SignedBlockHeaders.code), PeerSelector.WithId(peer1.id))))
   }
 
+  it should "re-enqueue block bodies when empty response is received" in new TestSetup {
+    // there are 2 blocks queued
+    val syncState = SyncState(targetBlock = Fixtures.Blocks.Block3125369.header, blockBodiesQueue = Seq(ByteString("1"), ByteString("asd")))
+    storagesInstance.storages.fastSyncStateStorage.putSyncState(syncState)
+
+    // start fast sync
+    val fastSync = TestActorRef(Props(new FastSync(
+      storagesInstance.storages.fastSyncStateStorage,
+      storagesInstance.storages.appStateStorage,
+      blockchain,
+      new Mocks.MockValidatorsAlwaysSucceed,
+      peerMessageBus.ref, etcPeerManager.ref,
+      syncConfig,
+      scheduler = system.scheduler)))
+
+    val peer1TestProbe: TestProbe = TestProbe()(system)
+    val peer1 = Peer(new InetSocketAddress("127.0.0.1", 0), peer1TestProbe.ref, false)
+    val peer1Status = Status(1, 1, 1, ByteString("peer1_bestHash"), ByteString("unused"))
+    val handshakedPeers = HandshakedPeers(Map(
+      peer1 -> PeerInfo(peer1Status, forkAccepted = true, totalDifficulty = peer1Status.totalDifficulty, maxBlockNumber = 0)))
+
+    fastSync ! FastSync.Start
+
+    etcPeerManager.send(fastSync, handshakedPeers)
+
+    etcPeerManager.expectMsg(
+      EtcPeerManagerActor.SendMessage(GetBlockBodies(Seq(ByteString("1"), ByteString("asd"))), peer1.id))
+    peerMessageBus.expectMsg(Subscribe(MessageClassifier(Set(BlockBodies.code), PeerSelector.WithId(peer1.id))))
+    peerMessageBus.reply(MessageFromPeer(BlockBodies(Nil), peer1.id))
+    peerMessageBus.expectMsg(Unsubscribe())
+
+    Thread.sleep(500)
+    fastSync ! FastSync.PersistSyncState
+    Thread.sleep(500)
+
+    storagesInstance.storages.fastSyncStateStorage.getSyncState().get.blockBodiesQueue shouldBe Seq(ByteString("1"), ByteString("asd"))
+  }
+
   it should "start fast sync after restart, if fast sync was partially ran and then regular sync started" in new TestSetup() with MockFactory {
     val peerTestProbe: TestProbe = TestProbe()(system)
     val peer = Peer(new InetSocketAddress("127.0.0.1", 0), peerTestProbe.ref, false)
@@ -329,33 +367,7 @@ class SyncControllerSpec extends FlatSpec with Matchers with BeforeAndAfter with
 
     //Attempt to start regular sync
 
-    override lazy val syncConfig = new SyncConfig {
-      override val doFastSync: Boolean = false
-
-      override val printStatusInterval: FiniteDuration = 1.hour
-      override val persistStateSnapshotInterval: FiniteDuration = 20.seconds
-      override val targetBlockOffset: Int = 500
-      override val branchResolutionBatchSize: Int = 20
-      override val blacklistDuration: FiniteDuration = 5.seconds
-      override val syncRetryInterval: FiniteDuration = 1.second
-      override val checkForNewBlockInterval: FiniteDuration = 1.second
-      override val startRetryInterval: FiniteDuration = 500.milliseconds
-      override val branchResolutionMaxRequests: Int = 100
-      override val blockChainOnlyPeersPoolSize: Int = 100
-      override val maxConcurrentRequests: Int = 10
-      override val blockHeadersPerRequest: Int = 10
-      override val blockBodiesPerRequest: Int = 10
-      override val nodesPerRequest: Int = 10
-      override val receiptsPerRequest: Int = 10
-      override val minPeersToChooseTargetBlock: Int = 2
-      override val peerResponseTimeout: FiniteDuration = 1.second
-      override val peersScanInterval: FiniteDuration = 500.milliseconds
-      override val fastSyncThrottle: FiniteDuration = 100.milliseconds
-      val maxQueuedBlockNumberAhead: Int = 10
-      val maxQueuedBlockNumberBehind: Int = 10
-      val maxNewBlockHashAge: Int = 20
-      val maxNewHashes: Int = 64
-    }
+    override lazy val syncConfig = defaultSyncConfig.copy(doFastSync = false)
 
     val syncControllerWithRegularSync = TestActorRef(Props(new SyncController(
       storagesInstance.storages.appStateStorage,
@@ -406,34 +418,36 @@ class SyncControllerSpec extends FlatSpec with Matchers with BeforeAndAfter with
     val pendingTransactionsManager = TestProbe()
     val ommersPool = TestProbe()
 
-    def obtainSyncConfig(checkingForNewBlockInterval: FiniteDuration): SyncConfig = new SyncConfig {
-      override val printStatusInterval: FiniteDuration = 1.hour
-      override val persistStateSnapshotInterval: FiniteDuration = 20.seconds
-      override val targetBlockOffset: Int = 500
-      override val branchResolutionBatchSize: Int = 20
-      override val blacklistDuration: FiniteDuration = 5.seconds
-      override val syncRetryInterval: FiniteDuration = 1.second
-      override val checkForNewBlockInterval: FiniteDuration = checkingForNewBlockInterval
-      override val startRetryInterval: FiniteDuration = 500.milliseconds
-      override val branchResolutionMaxRequests: Int = 100
-      override val blockChainOnlyPeersPoolSize: Int = 100
-      override val maxConcurrentRequests: Int = 10
-      override val blockHeadersPerRequest: Int = 10
-      override val blockBodiesPerRequest: Int = 10
-      override val doFastSync: Boolean = true
-      override val nodesPerRequest: Int = 10
-      override val receiptsPerRequest: Int = 10
-      override val minPeersToChooseTargetBlock: Int = 2
-      override val peerResponseTimeout: FiniteDuration = 1.second
-      override val peersScanInterval: FiniteDuration = 500.milliseconds
-      override val fastSyncThrottle: FiniteDuration = 100.milliseconds
-      val maxQueuedBlockNumberAhead: Int = 10
-      val maxQueuedBlockNumberBehind: Int = 10
-      val maxNewBlockHashAge: Int = 20
-      val maxNewHashes: Int = 64
-    }
+    lazy val defaultSyncConfig = SyncConfig(
+      doFastSync = true,
 
-    lazy val syncConfig = obtainSyncConfig(1.seconds)
+      printStatusInterval = 1.hour,
+      persistStateSnapshotInterval = 20.seconds,
+      targetBlockOffset = 500,
+      branchResolutionRequestSize = 20,
+      blacklistDuration = 5.seconds,
+      syncRetryInterval = 1.second,
+      checkForNewBlockInterval = 1.second,
+      startRetryInterval = 500.milliseconds,
+      blockChainOnlyPeersPoolSize = 100,
+      maxConcurrentRequests = 10,
+      blockHeadersPerRequest = 10,
+      blockBodiesPerRequest = 10,
+      nodesPerRequest = 10,
+      receiptsPerRequest = 10,
+      minPeersToChooseTargetBlock = 2,
+      peerResponseTimeout = 1.second,
+      peersScanInterval = 500.milliseconds,
+      fastSyncThrottle = 100.milliseconds,
+      maxQueuedBlockNumberAhead = 10,
+      maxQueuedBlockNumberBehind = 10,
+      maxNewBlockHashAge = 20,
+      maxNewHashes = 64,
+      redownloadMissingStateNodes = false
+    )
+
+    lazy val syncConfig = defaultSyncConfig
+
     lazy val syncController = TestActorRef(Props(new SyncController(
       storagesInstance.storages.appStateStorage,
       blockchain,

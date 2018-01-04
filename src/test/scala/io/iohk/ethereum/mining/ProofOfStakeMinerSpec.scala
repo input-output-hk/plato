@@ -7,14 +7,17 @@ import io.iohk.ethereum.Mocks
 import io.iohk.ethereum.Mocks.MockValidatorsAlwaysSucceed
 import io.iohk.ethereum.blockchain.sync.RegularSync
 import io.iohk.ethereum.domain._
+import io.iohk.ethereum.jsonrpc.EthService
+import io.iohk.ethereum.jsonrpc.EthService.SubmitHashRateResponse
 import io.iohk.ethereum.network.p2p.messages.PV62.BlockBody
 import io.iohk.ethereum.ommers.OmmersPool
 import io.iohk.ethereum.transactions.PendingTransactionsManager
 import io.iohk.ethereum.utils.{BlockchainConfig, Config, MiningConfig}
-import io.iohk.ethereum.validators.BlockHeaderValid
+import io.iohk.ethereum.validators.{BlockHeaderValid, BlockHeaderValidatorImpl}
 import org.scalamock.scalatest.MockFactory
 import org.scalatest.{FlatSpec, Matchers, Tag}
 import org.spongycastle.util.encoders.Hex
+import scala.concurrent.Future
 import io.iohk.ethereum.Fixtures.FakeSignature
 import scala.concurrent.duration._
 
@@ -125,11 +128,16 @@ class ProofOfStakeMinerSpec extends FlatSpec with Matchers {
 
     val blockchain = mock[BlockchainImpl]
     val blockGenerator: BlockGenerator = mock[BlockGenerator]
+
     val blockchainConfig = BlockchainConfig(Config.config)
+    val miningConfig = MiningConfig(Config.config)
     val difficultyCalc = new DifficultyCalculator(blockchainConfig)
+
     val blockForMiningTimestamp = System.currentTimeMillis()
+
     private def calculateGasLimit(parentGas: BigInt): BigInt = {
       val GasLimitBoundDivisor: Int = 1024
+
       val gasLimitDifference = parentGas / GasLimitBoundDivisor
       parentGas + gasLimitDifference - 1
     }
@@ -180,6 +188,10 @@ class ProofOfStakeMinerSpec extends FlatSpec with Matchers {
     val ommersPool = TestProbe()
     val pendingTransactionsManager = TestProbe()
     val syncController = TestProbe()
+
+    val ethService = mock[EthService]
+
+    val miner = TestActorRef(Miner.props(blockchain, blockGenerator, ommersPool.ref, pendingTransactionsManager.ref, syncController.ref, miningConfig, ethService))
 
     def waitForMinedBlock(): Block = {
       syncController.expectMsgPF[Block](10.minutes) {

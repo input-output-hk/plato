@@ -100,8 +100,7 @@ val verifyDeps = Seq(
   "io.circe" % "circe-jawn" sha1 "23890a0fa474c84ca5b39312425c0b9879467cd5",
   "org.spire-math" % "jawn-parser" sha1 "452b1bdf2982219e1b7c9d27ec316241144b0910",
   "io.circe" % "circe-generic-extras" sha1 "f9b74914b6fd7193b221bb0eed8d1a82f7fa2aef",
-  "commons-io" % "commons-io" sha1 "2852e6e05fbb95076fc091f6d1780f1f8fe35e0f",
-  "commons-net" % "commons-net" sha1 "5e984db9554728564d58e90da5d90eff8ae8cf2d"
+  "commons-io" % "commons-io" sha1 "2852e6e05fbb95076fc091f6d1780f1f8fe35e0f"
 )
 
 val Integration = config("it") extend Test

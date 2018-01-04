@@ -12,6 +12,8 @@ import io.iohk.ethereum.utils.Config.SyncConfig
 import io.iohk.ethereum.utils.{BlockchainConfig, Config}
 import io.iohk.ethereum.validators.BlockHeaderError.{HeaderDifficultyError, HeaderParentNotFoundError}
 import io.iohk.ethereum.validators.BlockHeaderValidator
+//import io.iohk.ethereum.validators.BlockHeaderError.HeaderDifficultyError
+//import io.iohk.ethereum.validators._
 import org.scalamock.scalatest.MockFactory
 import org.scalatest.{FlatSpec, Matchers}
 import io.iohk.ethereum.Fixtures.FakeSignature
@@ -206,6 +208,85 @@ class BlockImportSpec extends FlatSpec with Matchers with MockFactory {
       ledger.resolveBranch(headers) shouldEqual NoChainSwitch
     }
 
+  it should "correctly handle a branch that goes up to the genesis block" in
+    new TestSetup with MockBlockchain {
+      val headers = genesisHeader :: getChainHeaders(1, 10, genesisHeader.hash)
+
+      setGenesisHeader(genesisHeader)
+      setBestBlockNumber(10)
+      val oldBlocks = headers.tail.map(h => getBlock(h.number, h.difficulty - 1))
+      oldBlocks.foreach(b => setBlockByNumber(b.header.number, Some(b)))
+      setBlockByNumber(0, Some(Block(genesisHeader, BlockBody(Nil, Nil))))
+
+      ledger.resolveBranch(headers) shouldEqual NewBetterBranch(oldBlocks)
+    }
+
+  it should "report an unknown branch if the included genesis header is different than ours" in
+    new TestSetup with MockBlockchain {
+      val differentGenesis = genesisHeader.copy(extraData = ByteString("I'm different ;("))
+      val headers = differentGenesis :: getChainHeaders(1, 10, differentGenesis.hash)
+
+      setGenesisHeader(genesisHeader)
+      setBestBlockNumber(10)
+
+      ledger.resolveBranch(headers) shouldEqual UnknownBranch
+    }
+
+  it should "not include common prefix as result when finding a new better branch" in
+    new TestSetup with MockBlockchain {
+      val headers = getChainHeaders(1, 10)
+      setBestBlockNumber(8)
+      setHeaderByHash(headers.head.parentHash, Some(getBlock(0).header))
+
+      val oldBlocks = headers.slice(2, 8).map(h => getBlock(h.number, h.difficulty - 1))
+      oldBlocks.foreach(b => setBlockByNumber(b.header.number, Some(b)))
+      setBlockByNumber(1, Some(Block(headers(0), BlockBody(Nil, Nil))))
+      setBlockByNumber(2, Some(Block(headers(1), BlockBody(Nil, Nil))))
+      setBlockByNumber(9, None)
+
+      ledger.resolveBranch(headers) shouldEqual NewBetterBranch(oldBlocks)
+      assert(oldBlocks.map(_.header.number) == List[BigInt](3, 4, 5, 6, 7, 8))
+    }
+
+
+  it should "correctly import block with ommers and ancestor in block queue " in new OmmersTestSetup  {
+    val ancestorForValidation = getBlock(0, difficulty = 1)
+    val ancestorForValidation1 = getBlock(1, difficulty = 2, parent = ancestorForValidation.header.hash)
+    val ancestorForValidation2 = getBlock(2, difficulty = 3, parent = ancestorForValidation1.header.hash)
+
+    val block1 = getBlock(bestNum - 2, difficulty = 100, parent = ancestorForValidation2.header.hash)
+    val ommerBlock = getBlock(bestNum - 1, difficulty = 101, parent = block1.header.hash)
+    val oldBlock2 = getBlock(bestNum - 1, difficulty = 102, parent = block1.header.hash)
+    val oldBlock3 = getBlock(bestNum, difficulty = 103, parent = oldBlock2.header.hash)
+    val newBlock2 = getBlock(bestNum - 1, difficulty = 102, parent = block1.header.hash)
+
+    val newBlock3WithOmmer = getBlock(bestNum, difficulty = 105, parent = newBlock2.header.hash, ommers = Seq(ommerBlock.header))
+
+
+    val td1 = block1.header.difficulty + 999
+    val oldTd2 = td1 + oldBlock2.header.difficulty
+    val oldTd3 = oldTd2 + oldBlock3.header.difficulty
+
+    val newTd2 = td1 + newBlock2.header.difficulty
+    val newTd3 = newTd2 + newBlock3WithOmmer.header.difficulty
+
+    blockchain.save(ancestorForValidation, Nil, 1, false)
+    blockchain.save(ancestorForValidation1, Nil, 3, false)
+    blockchain.save(ancestorForValidation2, Nil, 6, false)
+
+    blockchain.save(block1, Nil, td1, true)
+    blockchain.save(oldBlock2, receipts, oldTd2, true)
+    blockchain.save(oldBlock3, Nil, oldTd3, true)
+
+    ledger.setExecutionResult(newBlock2, Right(Nil))
+    ledger.setExecutionResult(newBlock3WithOmmer, Right(receipts))
+
+    ledger.importBlock(newBlock2) shouldEqual BlockEnqueued
+    ledger.importBlock(newBlock3WithOmmer) shouldEqual
+      ChainReorganised(List(oldBlock2, oldBlock3), List(newBlock2, newBlock3WithOmmer), List(newTd2, newTd3))
+
+    blockchain.getBestBlock() shouldEqual newBlock3WithOmmer
+  }
 
   trait TestSetup {
     val blockchainConfig = BlockchainConfig(Config.config)
@@ -243,6 +324,8 @@ class BlockImportSpec extends FlatSpec with Matchers with MockFactory {
       nonce = bEmpty,
       slotNumber = 1
     ), FakeSignature)
+
+    val genesisHeader = defaultHeader.copy(number = 0, extraData = ByteString("genesis"))
 
     def getBlock(
       number: BigInt = 1,
@@ -314,5 +397,32 @@ class BlockImportSpec extends FlatSpec with Matchers with MockFactory {
 
     def setBlockByNumber(number: BigInt, block: Option[Block]) =
       (blockchain.getBlockByNumber _).expects(number).returning(block)
+
+    def setGenesisHeader(header: BlockHeader) = {
+      (blockchain.getBlockHeaderByNumber _).expects(BigInt(0)).returning(Some(header))
+      setHeaderByHash(header.parentHash, None)
+    }
+  }
+
+  trait OmmersTestSetup extends EphemBlockchain with TestSetup {
+    object OmmerValidation extends Mocks.MockValidatorsAlwaysSucceed {
+      override val ommersValidator: OmmersValidator =
+        (parentHash: ByteString,
+         blockNumber: BigInt,
+         ommers: Seq[BlockHeader],
+         getBlockHeaderByHash: GetBlockHeaderByHash,
+         getNBlocksBack: GetNBlocksBack) =>
+          new OmmersValidatorImpl(blockchainConfig, blockHeaderValidator).validate(parentHash, blockNumber, ommers, getBlockHeaderByHash, getNBlocksBack)
+    }
+
+    override lazy val ledger = new LedgerImpl(new Mocks.MockVM(), blockchain, blockQueue, blockchainConfig, OmmerValidation) {
+      private val results = mutable.Map[ByteString, Either[BlockExecutionError, Seq[Receipt]]]()
+
+      override def executeBlock(block: Block, alreadyValidated: Boolean = false): Either[BlockExecutionError, Seq[Receipt]] =
+        results(block.header.hash)
+
+      def setExecutionResult(block: Block, result: Either[BlockExecutionError, Seq[Receipt]]): Unit =
+        results(block.header.hash) = result
+    }
   }
 }

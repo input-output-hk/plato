@@ -15,7 +15,7 @@ import akka.testkit.{TestActorRef, TestProbe}
 import akka.util.ByteString
 import io.iohk.ethereum.crypto.generateKeyPair
 import io.iohk.ethereum.blockchain.sync.EphemBlockchainTestSetup
-import io.iohk.ethereum.{Timeouts, crypto}
+import io.iohk.ethereum.{Fixtures, Mocks, Timeouts, crypto}
 import io.iohk.ethereum.db.storage.AppStateStorage
 import io.iohk.ethereum.domain._
 import io.iohk.ethereum.network.{ForkResolver, PeerActor, PeerEventBusActor}
@@ -23,6 +23,7 @@ import io.iohk.ethereum.network.PeerManagerActor.{FastSyncHostConfiguration, Pee
 import io.iohk.ethereum.network.handshaker.{EtcHandshaker, EtcHandshakerConfiguration}
 import io.iohk.ethereum.network.p2p.messages.CommonMessages.Status.StatusEnc
 import io.iohk.ethereum.network.p2p.messages.CommonMessages.Status
+import io.iohk.ethereum.network.p2p.messages.PV62.GetBlockHeaders.GetBlockHeadersEnc
 import io.iohk.ethereum.network.p2p.messages.PV62._
 import io.iohk.ethereum.network.p2p.messages.Versions
 import io.iohk.ethereum.network.p2p.messages.WireProtocol.Hello.HelloEnc
@@ -127,6 +128,10 @@ class PeerActorSpec extends FlatSpec with Matchers {
     rlpxConnection.expectMsgPF() { case RLPxConnectionHandler.SendMessage(_: StatusEnc) => () }
     rlpxConnection.send(peer, RLPxConnectionHandler.MessageReceived(remoteStatus))
 
+    //Fork block exchange
+    rlpxConnection.expectMsgPF() { case RLPxConnectionHandler.SendMessage(_: GetBlockHeadersEnc) => () }
+    rlpxConnection.send(peer, RLPxConnectionHandler.MessageReceived(BlockHeaders(Seq(etcForkBlockHeader))))
+
     //Check that peer is connected
     rlpxConnection.send(peer, RLPxConnectionHandler.MessageReceived(Ping()))
     rlpxConnection.expectMsg(RLPxConnectionHandler.SendMessage(Pong()))
@@ -159,12 +164,76 @@ class PeerActorSpec extends FlatSpec with Matchers {
     rlpxConnection.expectMsgPF() { case RLPxConnectionHandler.SendMessage(_: StatusEnc) => () }
     rlpxConnection.send(peer, RLPxConnectionHandler.MessageReceived(remoteStatus))
 
+    //Fork block exchange
+    rlpxConnection.expectMsgPF() { case RLPxConnectionHandler.SendMessage(_: GetBlockHeadersEnc) => () }
+    rlpxConnection.send(peer, RLPxConnectionHandler.MessageReceived(BlockHeaders(Seq(etcForkBlockHeader))))
+
     //Check that peer is connected
     rlpxConnection.send(peer, RLPxConnectionHandler.MessageReceived(Ping()))
     rlpxConnection.expectMsg(RLPxConnectionHandler.SendMessage(Pong()))
 
     knownNodesManager.expectMsg(KnownNodesManager.AddKnownNode(completeUri))
     knownNodesManager.expectNoMsg()
+  }
+
+  it should "disconnect from non-ETC peer" in new TestSetup {
+    peer ! PeerActor.ConnectTo(new URI("encode://localhost:9000"))
+
+    rlpxConnection.expectMsgClass(classOf[RLPxConnectionHandler.ConnectTo])
+    rlpxConnection.reply(RLPxConnectionHandler.ConnectionEstablished(remoteNodeId))
+
+    val remoteHello = Hello(4, "test-client", Seq(Capability("eth", Versions.PV63.toByte)), 9000, ByteString("unused"))
+    rlpxConnection.expectMsgPF() { case RLPxConnectionHandler.SendMessage(_: HelloEnc) => () }
+    rlpxConnection.send(peer, RLPxConnectionHandler.MessageReceived(remoteHello))
+
+    val header = BlockHeader(
+      ByteString("unused"), ByteString("unused"), ByteString("unused"), ByteString("unused"),
+      ByteString("unused"), ByteString("unused"), ByteString("unused"),
+      daoForkBlockTotalDifficulty + 100000, 3000000 ,0, 0, 0,
+      ByteString("unused"),ByteString("unused"),ByteString("unused"))
+    storagesInstance.storages.appStateStorage.putBestBlockNumber(3000000) // after the fork
+    blockchain.save(header)
+    storagesInstance.storages.blockNumberMappingStorage.put(3000000, header.hash)
+
+    val remoteStatus = Status(
+      protocolVersion = Versions.PV63,
+      networkId = 0,
+      totalDifficulty = daoForkBlockTotalDifficulty + 100000, // remote is after the fork
+      bestHash = ByteString("blockhash"),
+      genesisHash = genesisHash)
+
+    rlpxConnection.expectMsgPF() { case RLPxConnectionHandler.SendMessage(_: StatusEnc) => () }
+    rlpxConnection.send(peer, RLPxConnectionHandler.MessageReceived(remoteStatus))
+
+    rlpxConnection.expectMsgPF() { case RLPxConnectionHandler.SendMessage(_: GetBlockHeadersEnc) => () }
+    rlpxConnection.send(peer, RLPxConnectionHandler.MessageReceived(BlockHeaders(Seq(nonEtcForkBlockHeader))))
+    rlpxConnection.expectMsg(RLPxConnectionHandler.SendMessage(Disconnect(Disconnect.Reasons.UselessPeer)))
+  }
+
+  it should "disconnect from non-ETC peer (when node is before fork)" in new TestSetup {
+    peer ! PeerActor.ConnectTo(new URI("encode://localhost:9000"))
+
+    rlpxConnection.expectMsgClass(classOf[RLPxConnectionHandler.ConnectTo])
+    rlpxConnection.reply(RLPxConnectionHandler.ConnectionEstablished(remoteNodeId))
+
+    val remoteHello = Hello(4, "test-client", Seq(Capability("eth", Versions.PV63.toByte)), 9000, ByteString("unused"))
+    rlpxConnection.expectMsgPF() { case RLPxConnectionHandler.SendMessage(_: HelloEnc) => () }
+    rlpxConnection.send(peer, RLPxConnectionHandler.MessageReceived(remoteHello))
+
+    val remoteStatus = Status(
+      protocolVersion = Versions.PV63,
+      networkId = 0,
+      totalDifficulty = daoForkBlockTotalDifficulty + 100000, // remote is after the fork
+      bestHash = ByteString("blockhash"),
+      genesisHash = genesisHash)
+
+    rlpxConnection.expectMsgPF() { case RLPxConnectionHandler.SendMessage(_: StatusEnc) => () }
+    rlpxConnection.send(peer, RLPxConnectionHandler.MessageReceived(remoteStatus))
+
+    rlpxConnection.expectMsgPF() { case RLPxConnectionHandler.SendMessage(_: GetBlockHeadersEnc) => () }
+    rlpxConnection.send(peer, RLPxConnectionHandler.MessageReceived(BlockHeaders(Seq(nonEtcForkBlockHeader))))
+
+    rlpxConnection.expectMsg(RLPxConnectionHandler.SendMessage(Disconnect(Disconnect.Reasons.UselessPeer)))
   }
 
   it should "disconnect on Hello timeout" in new TestSetup {
@@ -178,6 +247,37 @@ class PeerActorSpec extends FlatSpec with Matchers {
     time.advance(5.seconds)
     rlpxConnection.expectMsg(Timeouts.normalTimeout, RLPxConnectionHandler.SendMessage(Disconnect(Disconnect.Reasons.TimeoutOnReceivingAMessage)))
 
+  }
+
+  it should "respond to fork block request during the handshake" in new TestSetup {
+    //Save dao fork block
+    blockchain.save(Fixtures.Blocks.DaoForkBlock.header)
+
+    //Handshake till EtcForkBlockExchangeState
+    peer ! PeerActor.ConnectTo(new URI("encode://localhost:9000"))
+
+    rlpxConnection.expectMsgClass(classOf[RLPxConnectionHandler.ConnectTo])
+    rlpxConnection.reply(RLPxConnectionHandler.ConnectionEstablished(remoteNodeId))
+
+    val remoteHello = Hello(4, "test-client", Seq(Capability("eth", Versions.PV63.toByte)), 9000, ByteString("unused"))
+    rlpxConnection.expectMsgPF() { case RLPxConnectionHandler.SendMessage(_: HelloEnc) => () }
+    rlpxConnection.send(peer, RLPxConnectionHandler.MessageReceived(remoteHello))
+
+    val remoteStatus = Status(
+      protocolVersion = Versions.PV63,
+      networkId = 0,
+      totalDifficulty = daoForkBlockTotalDifficulty + 100000, // remote is after the fork
+      bestHash = ByteString("blockhash"),
+      genesisHash = genesisHash)
+
+    rlpxConnection.expectMsgPF() { case RLPxConnectionHandler.SendMessage(_: StatusEnc) => () }
+    rlpxConnection.send(peer, RLPxConnectionHandler.MessageReceived(remoteStatus))
+
+    rlpxConnection.expectMsgPF() { case RLPxConnectionHandler.SendMessage(_: GetBlockHeadersEnc) => () }
+
+    //Request dao fork block from the peer
+    rlpxConnection.send(peer, RLPxConnectionHandler.MessageReceived(GetBlockHeaders(Left(daoForkBlockNumber), 1, 0, false)))
+    rlpxConnection.expectMsg(RLPxConnectionHandler.SendMessage(BlockHeaders(Seq(Fixtures.Blocks.DaoForkBlock.header))))
   }
 
   it should "stash disconnect message until handshaked" in new TestSetup {
@@ -204,7 +304,39 @@ class PeerActorSpec extends FlatSpec with Matchers {
     rlpxConnection.expectMsgPF() { case RLPxConnectionHandler.SendMessage(_: StatusEnc) => () }
     rlpxConnection.send(peer, RLPxConnectionHandler.MessageReceived(remoteStatus))
 
+    rlpxConnection.expectMsgPF() { case RLPxConnectionHandler.SendMessage(_: GetBlockHeadersEnc) => () }
+    rlpxConnection.send(peer, RLPxConnectionHandler.MessageReceived(BlockHeaders(Seq(etcForkBlockHeader))))
+
     rlpxConnection.expectMsg(RLPxConnectionHandler.SendMessage(Disconnect(Disconnect.Reasons.TooManyPeers)))
+  }
+
+  it should "stay connected to pre fork peer" in new TestSetup {
+
+    val remoteStatus = Status(
+      protocolVersion = Versions.PV63,
+      networkId = 0,
+      totalDifficulty = daoForkBlockTotalDifficulty - 2000000, // remote is before the fork
+      bestHash = ByteString("blockhash"),
+      genesisHash = Fixtures.Blocks.Genesis.header.hash)
+
+    val peerActor = TestActorRef(Props(new PeerActor(
+      new InetSocketAddress("127.0.0.1", 0),
+      _ => rlpxConnection.ref,
+      peerConf,
+      peerMessageBus,
+      knownNodesManager.ref,
+      false,
+      None,
+      Mocks.MockHandshakerAlwaysSucceeds(remoteStatus, 0, false)
+    )))
+
+    peerActor ! PeerActor.ConnectTo(new URI("encode://localhost:9000"))
+
+    rlpxConnection.expectMsgClass(classOf[RLPxConnectionHandler.ConnectTo])
+    rlpxConnection.reply(RLPxConnectionHandler.ConnectionEstablished(remoteNodeId))
+
+    rlpxConnection.send(peerActor, RLPxConnectionHandler.MessageReceived(Ping()))
+    rlpxConnection.expectMsgPF() { case RLPxConnectionHandler.SendMessage(_: PongEnc) => ()}
   }
 
   trait BlockUtils {
@@ -279,7 +411,13 @@ class PeerActorSpec extends FlatSpec with Matchers {
       slotNumber = 0), FakeSignature)
     blockchain.save(testGenesisHeader)
 
-    val daoForkBlockNumber = 1920000
+ 	val testGenesisBlockBody: BlockBody = BlockBody(Nil, Nil)
+
+    val testGenesisBlock = Block(testGenesisHeader, testGenesisBlockBody)
+
+    blockchain.save(testGenesisBlock, Nil, testGenesisBlock.header.difficulty, saveAsBestBlock = true)
+    
+	val daoForkBlockNumber = 1920000
 
     val peerConf = new PeerConfiguration {
       override val fastSyncHostConfiguration: FastSyncHostConfiguration = new FastSyncHostConfiguration {

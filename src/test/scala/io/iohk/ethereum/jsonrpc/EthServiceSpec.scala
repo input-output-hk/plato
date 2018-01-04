@@ -12,10 +12,12 @@ import io.iohk.ethereum.domain.{Address, Block, BlockHeader, BlockchainImpl, UIn
 import io.iohk.ethereum.db.storage.{AppStateStorage, ArchiveNodeStorage}
 import io.iohk.ethereum.jsonrpc.EthService._
 import io.iohk.ethereum.network.p2p.messages.PV62.BlockBody
+import io.iohk.ethereum.ommers.OmmersPool
 import io.iohk.ethereum.transactions.PendingTransactionsManager
 import io.iohk.ethereum.utils._
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.{FlatSpec, Matchers}
+
 import scala.concurrent.duration.{Duration, FiniteDuration}
 import scala.concurrent.Await
 import io.iohk.ethereum.jsonrpc.EthService.ProtocolVersionRequest
@@ -364,6 +366,44 @@ class EthServiceSpec extends FlatSpec with Matchers with ScalaFutures with MockF
     response shouldEqual SyncingResponse(None)
   }
 
+  it should "return requested work" in new TestSetup {
+    (blockGenerator.generateBlockForMining _).expects(parentBlock, Nil, *, *).returning(Right(PendingBlock(block, Nil)))
+    blockchain.save(parentBlock, Nil, parentBlock.header.difficulty, true)
+
+    val response: ServiceResponse[GetWorkResponse] = ethService.getWork(GetWorkRequest())
+    pendingTransactionsManager.expectMsg(PendingTransactionsManager.GetPendingTransactions)
+    pendingTransactionsManager.reply(PendingTransactionsManager.PendingTransactionsResponse(Nil))
+
+    ommersPool.expectMsg(OmmersPool.GetOmmers(1))
+    ommersPool.reply(OmmersPool.Ommers(Nil))
+
+    response.futureValue shouldEqual Right(GetWorkResponse(powHash, seedHash, target))
+  }
+
+  it should "accept submitted correct PoW" in new TestSetup {
+    val headerHash = ByteString(Hex.decode("01" * 32))
+
+    (blockGenerator.getPrepared _).expects(headerHash).returning(Some(PendingBlock(block, Nil)))
+    (appStateStorage.getBestBlockNumber _).expects().returning(0)
+
+    val req = SubmitWorkRequest(ByteString("nonce"), headerHash, ByteString(Hex.decode("01" * 32)))
+
+    val response = ethService.submitWork(req)
+    response.futureValue shouldEqual Right(SubmitWorkResponse(true))
+  }
+
+  it should "reject submitted correct PoW when header is no longer in cache" in new TestSetup {
+    val headerHash = ByteString(Hex.decode("01" * 32))
+
+    (blockGenerator.getPrepared _).expects(headerHash).returning(None)
+    (appStateStorage.getBestBlockNumber _).expects().returning(0)
+
+    val req = SubmitWorkRequest(ByteString("nonce"), headerHash, ByteString(Hex.decode("01" * 32)))
+
+    val response = ethService.submitWork(req)
+    response.futureValue shouldEqual Right(SubmitWorkResponse(false))
+  }
+
   it should "execute call and return a value" in new TestSetup {
     blockchain.save(blockToRequest)
     (appStateStorage.getBestBlockNumber _).expects().returning(blockToRequest.signedHeader.header.number)
@@ -642,11 +682,23 @@ class EthServiceSpec extends FlatSpec with Matchers with ScalaFutures with MockF
         ))))))
   }
 
-  it should "return account recent transactions" in new TestSetup {
-    val blockWithTx = Block(Fixtures.Blocks.Block3125369.signedHeader, Fixtures.Blocks.Block3125369.body)
-    blockchain.save(blockWithTx)
-
+  it should "return account recent transactions in newest -> oldest order" in new TestSetup {
     val address = Address("0xee4439beb5c71513b080bbf9393441697a29f478")
+
+    val keyPair = crypto.generateKeyPair(new SecureRandom)
+
+    val tx1 = SignedTransaction.sign(Transaction(0, 123, 456, Some(address), 1, ByteString()), keyPair, None)
+    val tx2 = SignedTransaction.sign(Transaction(0, 123, 456, Some(address), 2, ByteString()), keyPair, None)
+    val tx3 = SignedTransaction.sign(Transaction(0, 123, 456, Some(address), 3, ByteString()), keyPair, None)
+
+    val blockWithTx1 = Block(Fixtures.Blocks.Block3125369.header, Fixtures.Blocks.Block3125369.body.copy(
+      transactionList = Seq(tx1)))
+
+    val blockWithTxs2and3 = Block(Fixtures.Blocks.Block3125369.header.copy(number = 3125370), Fixtures.Blocks.Block3125369.body.copy(
+      transactionList = Seq(tx2, tx3)))
+
+    blockchain.save(blockWithTx1)
+    blockchain.save(blockWithTxs2and3)
 
     val request = GetAccountTransactionsRequest(address, 3125360, 3125370)
 
@@ -702,8 +754,10 @@ class EthServiceSpec extends FlatSpec with Matchers with ScalaFutures with MockF
     val miningConfig = new MiningConfig {
       override val blockCacheSize: Int = 30
       override val ommersPoolSize: Int = 30
+      override val activeTimeout: FiniteDuration = Timeouts.shortTimeout
       override val ommerPoolQueryTimeout: FiniteDuration = Timeouts.normalTimeout
       override val headerExtraData: ByteString = ByteString.empty
+      override val miningEnabled: Boolean = false
     }
 
     val filterConfig = new FilterConfig {
@@ -724,6 +778,7 @@ class EthServiceSpec extends FlatSpec with Matchers with ScalaFutures with MockF
     val uncle = Fixtures.Blocks.DaoForkBlock.signedHeader
     val uncleTd = uncle.header.difficulty
     val blockToRequestWithUncles = blockToRequest.copy(body = BlockBody(Nil, Seq(uncle)))
+
 
     val difficulty = 131072
     val parentBlock = Block(

@@ -8,14 +8,16 @@ import akka.util.ByteString
 import akka.util.ByteString.{empty => bEmpty}
 import io.iohk.ethereum.ObjectGenerators
 import io.iohk.ethereum.blockchain.sync.PeerRequestHandler.ResponseReceived
-import io.iohk.ethereum.blockchain.sync.RegularSync.MinedBlock
+import io.iohk.ethereum.blockchain.sync.RegularSync.{MinedBlock, MissingStateNodeRetry}
 import io.iohk.ethereum.crypto._
 import io.iohk.ethereum.domain._
 import io.iohk.ethereum.ledger._
+import io.iohk.ethereum.mpt.MerklePatriciaTrie.MissingNodeException
 import io.iohk.ethereum.network.EtcPeerManagerActor.{HandshakedPeers, PeerInfo}
 import io.iohk.ethereum.network.PeerEventBusActor.PeerEvent.MessageFromPeer
 import io.iohk.ethereum.network.p2p.messages.CommonMessages.{NewBlock, Status}
 import io.iohk.ethereum.network.p2p.messages.PV62._
+import io.iohk.ethereum.network.p2p.messages.PV63.NodeData
 import io.iohk.ethereum.network.{EtcPeerManagerActor, Peer}
 import io.iohk.ethereum.nodebuilder.SecureRandomBuilder
 import io.iohk.ethereum.ommers.OmmersPool.{AddOmmers, RemoveOmmers}
@@ -25,8 +27,7 @@ import org.scalamock.scalatest.MockFactory
 import org.scalatest.{BeforeAndAfterAll, Matchers, WordSpecLike}
 import org.spongycastle.crypto.AsymmetricCipherKeyPair
 import io.iohk.ethereum.Fixtures.FakeSignature
-
-import scala.concurrent.duration.{FiniteDuration, _}
+import scala.concurrent.duration._
 
 class RegularSyncSpec extends TestKit(ActorSystem("RegularSync_system")) with WordSpecLike
   with Matchers with MockFactory with BeforeAndAfterAll {
@@ -260,7 +261,7 @@ class RegularSyncSpec extends TestKit(ActorSystem("RegularSync_system")) with Wo
 
         (ledger.resolveBranch _).expects(newBlocks.map(_.signedHeader)).returning(NewBetterBranch(oldBlocks))
 
-        sendSignedBlockHeaders(newBlocks)
+        sendBlockHeadersFromBlocks(newBlocks)
 
         etcPeerManager.expectMsg(EtcPeerManagerActor.GetHandshakedPeers)
         etcPeerManager.expectMsg(EtcPeerManagerActor.SendMessage(GetBlockBodies(newBlocks.map(_.signedHeader.hash)), peer1.id))
@@ -273,31 +274,67 @@ class RegularSyncSpec extends TestKit(ActorSystem("RegularSync_system")) with Wo
 
         (ledger.resolveBranch _).expects(newBlocks.map(_.signedHeader)).returning(NoChainSwitch)
 
-        sendSignedBlockHeaders(newBlocks)
+        sendBlockHeadersFromBlocks(newBlocks)
 
-        ommersPool.expectMsg(AddOmmers(newBlocks.head.signedHeader))
+        ommersPool.expectMsg(AddOmmers(newBlocks.head.header))
       }
 
       // TODO: the following 3 tests are very poor, but fixing that requires re-designing much of the sync actors, with testing in mind
       "handle unknown branch about to be resolved" in new TestSetup {
-        val newBlocks = (1 to 2).map(_ => getBlock())
+        val newBlocks = (1 to 10).map(_ => getBlock())
 
-        (ledger.resolveBranch _).expects(newBlocks.map(_.signedHeader)).returning(UnknownBranch)
+        (ledger.resolveBranch _).expects(newBlocks.map(_.header)).returning(UnknownBranch)
 
-        sendSignedBlockHeaders(newBlocks)
+        sendBlockHeadersFromBlocks(newBlocks)
 
         Thread.sleep(1000)
 
+        regularSync.underlyingActor.isBlacklisted(peer1.id) shouldBe false
         regularSync.underlyingActor.resolvingBranches shouldBe true
       }
 
-      "handle unknown branch about that can't be resolved" in new TestSetup {
-        val newBlocks = (1 to 6).map(_ => getBlock())
+      "handle unknown branch that can't be resolved" in new TestSetup {
+        val additionalHeaders = (1 to 2).map(_ => getBlock().header)
+        val newHeaders = getBlock().header.copy(parentHash = additionalHeaders.head.hash) +: (1 to 9).map(_ => getBlock().header)
+        inSequence {
+          (ledger.resolveBranch _).expects(newHeaders).returning(UnknownBranch)
+          (ledger.resolveBranch _).expects(additionalHeaders.reverse ++ newHeaders).returning(UnknownBranch)
+        }
 
-        (ledger.resolveBranch _).expects(newBlocks.map(_.signedHeader)).returning(UnknownBranch)
+        sendSignedBlockHeaders(newHeaders)
+        Thread.sleep(1000)
 
-        sendSignedBlockHeaders(newBlocks)
+        sendSignedBlockHeaders(additionalHeaders)
+        Thread.sleep(1000)
 
+        regularSync.underlyingActor.isBlacklisted(peer1.id) shouldBe true
+        regularSync.underlyingActor.resolvingBranches shouldBe false
+      }
+
+      "return to normal syncing mode after successful branch resolution" in new TestSetup {
+        val additionalHeaders = (1 to 2).map(_ => getBlock().header)
+        val newHeaders = getBlock().signedHeader.header.copy(parentHash = additionalHeaders.head.hash) +: (1 to 9).map(_ => getBlock().header)
+        inSequence {
+          (ledger.resolveBranch _).expects(newHeaders).returning(UnknownBranch)
+          (ledger.resolveBranch _).expects(additionalHeaders.reverse ++ newHeaders).returning(NoChainSwitch)
+        }
+
+        sendSignedBlockHeaders(newHeaders)
+        Thread.sleep(1000)
+
+        sendSignedBlockHeaders(additionalHeaders)
+        Thread.sleep(1000)
+
+        regularSync.underlyingActor.isBlacklisted(peer1.id) shouldBe false
+        regularSync.underlyingActor.resolvingBranches shouldBe false
+      }
+
+      "return to normal syncing mode after branch resolution request failed" in new ShortResponseTimeout with TestSetup {
+        val newHeaders = (1 to 10).map(_ => getBlock().header)
+
+        (ledger.resolveBranch _).expects(newHeaders).returning(UnknownBranch)
+
+        sendSignedBlockHeaders(newHeaders)
         Thread.sleep(1000)
 
         regularSync.underlyingActor.isBlacklisted(peer1.id) shouldBe true
@@ -309,16 +346,44 @@ class RegularSyncSpec extends TestKit(ActorSystem("RegularSync_system")) with Wo
 
         (ledger.resolveBranch _).expects(newBlocks.map(_.signedHeader)).returning(InvalidBranch)
 
-        sendSignedBlockHeaders(newBlocks)
+        sendBlockHeadersFromBlocks(newBlocks)
 
         Thread.sleep(1000)
 
         regularSync.underlyingActor.isBlacklisted(peer1.id) shouldBe true
       }
     }
+
+    "receiving BlockBodies msg" should {
+
+      "handle missing state nodes" in new TestSetup {
+        val newBlock = getBlock()
+        val missingNodeValue = ByteString("42")
+        val missingNodeHash = kec256(missingNodeValue)
+
+        inSequence {
+          (ledger.resolveBranch _).expects(Seq(newBlock.header)).returning(NewBetterBranch(Nil))
+          (ledger.importBlock _).expects(newBlock).throwing(new MissingNodeException(missingNodeHash))
+          (ledger.importBlock _).expects(newBlock).returning(BlockImportedToTop(List(newBlock), List(0)))
+        }
+
+        sendBlockHeadersFromBlocks(Seq(newBlock))
+        sendBlockBodiesFromBlocks(Seq(newBlock))
+
+        Thread.sleep(1000)
+
+        regularSync.underlyingActor.missingStateNodeRetry shouldEqual
+          Some(MissingStateNodeRetry(missingNodeHash, peer1, Seq(newBlock)))
+
+        sendNodeData(Seq(missingNodeValue))
+        Thread.sleep(1000)
+
+        regularSync.underlyingActor.missingStateNodeRetry shouldEqual None
+      }
+    }
   }
 
-  trait TestSetup extends EphemBlockchainTestSetup with SecureRandomBuilder {
+  trait TestSetup extends DefaultSyncConfig with EphemBlockchainTestSetup with SecureRandomBuilder {
     storagesInstance.storages.appStateStorage.putBestBlockNumber(0)
 
     val etcPeerManager = TestProbe()
@@ -366,6 +431,7 @@ class RegularSyncSpec extends TestKit(ActorSystem("RegularSync_system")) with Wo
       txPool.ref,
       broadcaster,
       ledger,
+      blockchain,
       syncConfig,
       slotTimeConverter,
       system.scheduler
@@ -444,8 +510,60 @@ class RegularSyncSpec extends TestKit(ActorSystem("RegularSync_system")) with Wo
       regularSync ! MinedBlock(block)
     }
 
+    def sendBlockHeadersFromBlocks(blocks: Seq[Block]): Unit = {
+      sendSignedBlockHeaders(blocks.map(_.signedHeader.header))
+    }
+
+    def sendBlockBodiesFromBlocks(blocks: Seq[Block]): Unit = {
+      sendBlockBodies(blocks.map(_.body))
+    }
+
     def sendSignedBlockHeaders(blocks: Seq[Block]): Unit = {
       regularSync ! ResponseReceived(peer1, SignedBlockHeaders(blocks.map(_.signedHeader)), 0)
     }
+
+    def sendBlockBodies(bodies: Seq[BlockBody]): Unit = {
+      regularSync ! ResponseReceived(peer1, BlockBodies(bodies), 0)
+    }
+
+    def sendNodeData(nodeValues: Seq[ByteString]): Unit = {
+      regularSync ! ResponseReceived(peer1, NodeData(nodeValues), 0)
+    }
+  }
+
+  trait DefaultSyncConfig {
+    val defaultSyncConfig = SyncConfig(
+      printStatusInterval = 1.hour,
+      persistStateSnapshotInterval = 20.seconds,
+      targetBlockOffset = 500,
+      branchResolutionRequestSize = 2,
+      blacklistDuration = 5.seconds,
+      syncRetryInterval = 1.second,
+      checkForNewBlockInterval = 1.milli,
+      startRetryInterval = 500.milliseconds,
+      blockChainOnlyPeersPoolSize = 100,
+      maxConcurrentRequests = 10,
+      blockHeadersPerRequest = 2,
+      blockBodiesPerRequest = 10,
+      doFastSync = false,
+      nodesPerRequest = 10,
+      receiptsPerRequest = 10,
+      minPeersToChooseTargetBlock = 2,
+      peerResponseTimeout = 1.second,
+      peersScanInterval = 500.milliseconds,
+      fastSyncThrottle = 100.milliseconds,
+      maxQueuedBlockNumberAhead = 10,
+      maxQueuedBlockNumberBehind = 10,
+      maxNewBlockHashAge = 20,
+      maxNewHashes = 64,
+      redownloadMissingStateNodes = true
+    )
+
+    val syncConfig = defaultSyncConfig
+  }
+
+  trait ShortResponseTimeout extends DefaultSyncConfig {
+    override val syncConfig = defaultSyncConfig.copy(peerResponseTimeout = 1.milli)
   }
 }
+
