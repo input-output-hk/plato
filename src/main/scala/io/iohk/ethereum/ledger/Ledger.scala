@@ -277,23 +277,28 @@ class LedgerImpl(
     if (!doHeadersFormChain(headers) || headers.last.header.number < blockchain.getBestBlockNumber())
       InvalidBranch
     else {
-      val parentByHash = blockchain.getSignedBlockHeaderByHash(headers.head.header.parentHash)
+      val parentIsKnown = blockchain.getSignedBlockHeaderByHash(headers.head.header.parentHash).isDefined
 
-      parentByHash match {
-        case None =>
-          UnknownBranch
+      // dealing with a situation when genesis block is included in the received headers, which may happen
+      // in the early block of private networks
+      val reachedGenesis = headers.head.header.number == 0 && blockchain.getSignedBlockHeaderByNumber(0).get.hash == headers.head.hash
 
-        case Some(parent) =>
-          // find blocks with same numbers in the current chain
-          val oldBranch = getBlocksForHeaders(headers)
-          val currentBranchDifficulty = oldBranch.map(_.signedHeader.header.difficulty).sum
-          val newBranchDifficulty = headers.map(_.header.difficulty).sum
+      if (parentIsKnown || reachedGenesis) {
+        // find blocks with same numbers in the current chain, removing any common prefix
+        val (oldBranch, _) = getBlocksForHeaders(headers).zip(headers)
+          .dropWhile{ case (oldBlock, newHeader) => oldBlock.signedHeader == newHeader }.unzip
+        val newHeaders = headers.dropWhile(sh => oldBranch.headOption.exists(_.signedHeader.header.number > sh.header.number))
 
-          if (currentBranchDifficulty < newBranchDifficulty)
-            NewBetterBranch(oldBranch)
-          else
-            NoChainSwitch
+        val currentBranchDifficulty = oldBranch.map(_.signedHeader.header.difficulty).sum
+        val newBranchDifficulty = newHeaders.map(_.header.difficulty).sum
+
+        if (currentBranchDifficulty < newBranchDifficulty)
+          NewBetterBranch(oldBranch)
+        else
+          NoChainSwitch
       }
+      else
+        UnknownBranch
     }
   }
 
