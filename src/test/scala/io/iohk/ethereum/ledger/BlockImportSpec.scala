@@ -221,8 +221,8 @@ class BlockImportSpec extends FlatSpec with Matchers with MockFactory {
 
   it should "report an unknown branch if the included genesis header is different than ours" in
     new TestSetup with MockBlockchain {
-      val differentGenesisUnsignedHeader = defaultHeader.header.copy(extraData = ByteString("I'm different ;("))
-      val differentGenesis = defaultHeader.copy(header = differentGenesisUnsignedHeader)
+      val differentGenesisUnsignedHeader = genesisHeader.header.copy(extraData = ByteString("I'm different ;("))
+      val differentGenesis = genesisHeader.copy(header = differentGenesisUnsignedHeader)
       val headers = differentGenesis :: getChainHeaders(1, 10, differentGenesis.hash)
 
       setGenesisHeader(genesisHeader)

@@ -66,35 +66,40 @@ class LedgerImpl(
     *         - [[BlockImportFailed]] - block failed to execute (when importing to top or reorganising the chain)
     */
   def importBlock(block: Block): BlockImportResult = {
-    val validationResult = validateBlockBeforeExecution(block)
-    validationResult match {
-      case Left(ValidationBeforeExecError(HeaderParentNotFoundError)) =>
-        log.debug(s"Block(${block.idTag}) has no known parent")
-        UnknownParent
+    if (block.signedHeader.header.number == 0 && blockchain.getSignedBlockHeaderByNumber(0).get.hash == block.signedHeader.hash) {
+      log.info(s"Ignoring duplicate genesis block: (${block.idTag})")
+      DuplicateBlock
+    } else {
+      val validationResult = validateBlockBeforeExecution(block)
+      validationResult match {
+        case Left(ValidationBeforeExecError(HeaderParentNotFoundError)) =>
+          log.debug(s"Block(${block.idTag}) has no known parent")
+          UnknownParent
 
-      case Left(ValidationBeforeExecError(reason)) =>
-        log.debug(s"Block(${block.idTag}) failed pre-import validation")
-        BlockImportFailed(reason.toString)
+        case Left(ValidationBeforeExecError(reason)) =>
+          log.debug(s"Block(${block.idTag}) failed pre-import validation")
+          BlockImportFailed(reason.toString)
 
-      case Right(_) =>
-        val isDuplicate = blockchain.getBlockByHash(block.signedHeader.hash).isDefined || blockQueue.isQueued(block.signedHeader.hash)
+        case Right(_) =>
+          val isDuplicate = blockchain.getBlockByHash(block.signedHeader.hash).isDefined || blockQueue.isQueued(block.signedHeader.hash)
 
-        if (isDuplicate) {
-          log.debug(s"Ignoring duplicate block: (${block.idTag})")
-          DuplicateBlock
-        }
+          if (isDuplicate) {
+            log.debug(s"Ignoring duplicate block: (${block.idTag})")
+            DuplicateBlock
+          }
 
-        else {
-          val bestBlock = blockchain.getBestBlock()
-          val currentTd = blockchain.getTotalDifficultyByHash(bestBlock.signedHeader.hash).get
+          else {
+            val bestBlock = blockchain.getBestBlock()
+            val currentTd = blockchain.getTotalDifficultyByHash(bestBlock.signedHeader.hash).get
 
-          val isTopOfChain = block.signedHeader.header.parentHash == bestBlock.signedHeader.hash
+            val isTopOfChain = block.signedHeader.header.parentHash == bestBlock.signedHeader.hash
 
-          if (isTopOfChain)
-            importBlockToTop(block, bestBlock.signedHeader.header.number, currentTd)
-          else
-            enqueueBlockOrReorganiseChain(block, bestBlock, currentTd)
-        }
+            if (isTopOfChain)
+              importBlockToTop(block, bestBlock.signedHeader.header.number, currentTd)
+            else
+              enqueueBlockOrReorganiseChain(block, bestBlock, currentTd)
+          }
+      }
     }
   }
 
