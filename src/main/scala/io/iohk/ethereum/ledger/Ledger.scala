@@ -66,35 +66,40 @@ class LedgerImpl(
     *         - [[BlockImportFailed]] - block failed to execute (when importing to top or reorganising the chain)
     */
   def importBlock(block: Block): BlockImportResult = {
-    val validationResult = validateBlockBeforeExecution(block)
-    validationResult match {
-      case Left(ValidationBeforeExecError(HeaderParentNotFoundError)) =>
-        log.debug(s"Block(${block.idTag}) has no known parent")
-        UnknownParent
+    if (block.signedHeader.header.number == 0 && blockchain.getSignedBlockHeaderByNumber(0).get.hash == block.signedHeader.hash) {
+      log.debug(s"Ignoring duplicate genesis block: (${block.idTag})")
+      DuplicateBlock
+    } else {
+      val validationResult = validateBlockBeforeExecution(block)
+      validationResult match {
+        case Left(ValidationBeforeExecError(HeaderParentNotFoundError)) =>
+          log.debug(s"Block(${block.idTag}) has no known parent")
+          UnknownParent
 
-      case Left(ValidationBeforeExecError(reason)) =>
-        log.debug(s"Block(${block.idTag}) failed pre-import validation")
-        BlockImportFailed(reason.toString)
+        case Left(ValidationBeforeExecError(reason)) =>
+          log.debug(s"Block(${block.idTag}) failed pre-import validation")
+          BlockImportFailed(reason.toString)
 
-      case Right(_) =>
-        val isDuplicate = blockchain.getBlockByHash(block.signedHeader.hash).isDefined || blockQueue.isQueued(block.signedHeader.hash)
+        case Right(_) =>
+          val isDuplicate = blockchain.getBlockByHash(block.signedHeader.hash).isDefined || blockQueue.isQueued(block.signedHeader.hash)
 
-        if (isDuplicate) {
-          log.debug(s"Ignoring duplicate block: (${block.idTag})")
-          DuplicateBlock
-        }
+          if (isDuplicate) {
+            log.debug(s"Ignoring duplicate block: (${block.idTag})")
+            DuplicateBlock
+          }
 
-        else {
-          val bestBlock = blockchain.getBestBlock()
-          val currentTd = blockchain.getTotalDifficultyByHash(bestBlock.signedHeader.hash).get
+          else {
+            val bestBlock = blockchain.getBestBlock()
+            val currentTd = blockchain.getTotalDifficultyByHash(bestBlock.signedHeader.hash).get
 
-          val isTopOfChain = block.signedHeader.header.parentHash == bestBlock.signedHeader.hash
+            val isTopOfChain = block.signedHeader.header.parentHash == bestBlock.signedHeader.hash
 
-          if (isTopOfChain)
-            importBlockToTop(block, bestBlock.signedHeader.header.number, currentTd)
-          else
-            enqueueBlockOrReorganiseChain(block, bestBlock, currentTd)
-        }
+            if (isTopOfChain)
+              importBlockToTop(block, bestBlock.signedHeader.header.number, currentTd)
+            else
+              enqueueBlockOrReorganiseChain(block, bestBlock, currentTd)
+          }
+      }
     }
   }
 
@@ -277,23 +282,28 @@ class LedgerImpl(
     if (!doHeadersFormChain(headers) || headers.last.header.number < blockchain.getBestBlockNumber())
       InvalidBranch
     else {
-      val parentByHash = blockchain.getSignedBlockHeaderByHash(headers.head.header.parentHash)
+      val parentIsKnown = blockchain.getSignedBlockHeaderByHash(headers.head.header.parentHash).isDefined
 
-      parentByHash match {
-        case None =>
-          UnknownBranch
+      // dealing with a situation when genesis block is included in the received headers, which may happen
+      // in the early block of private networks
+      val reachedGenesis = headers.head.header.number == 0 && blockchain.getSignedBlockHeaderByNumber(0).get.hash == headers.head.hash
 
-        case Some(parent) =>
-          // find blocks with same numbers in the current chain
-          val oldBranch = getBlocksForHeaders(headers)
-          val currentBranchDifficulty = oldBranch.map(_.signedHeader.header.difficulty).sum
-          val newBranchDifficulty = headers.map(_.header.difficulty).sum
+      if (parentIsKnown || reachedGenesis) {
+        // find blocks with same numbers in the current chain, removing any common prefix
+        val (oldBranch, _) = getBlocksForHeaders(headers).zip(headers)
+          .dropWhile{ case (oldBlock, newHeader) => oldBlock.signedHeader == newHeader }.unzip
+        val newHeaders = headers.dropWhile(sh => oldBranch.headOption.exists(_.signedHeader.header.number > sh.header.number))
 
-          if (currentBranchDifficulty < newBranchDifficulty)
-            NewBetterBranch(oldBranch)
-          else
-            NoChainSwitch
+        val currentBranchDifficulty = oldBranch.map(_.signedHeader.header.difficulty).sum
+        val newBranchDifficulty = newHeaders.map(_.header.difficulty).sum
+
+        if (currentBranchDifficulty < newBranchDifficulty)
+          NewBetterBranch(oldBranch)
+        else
+          NoChainSwitch
       }
+      else
+        UnknownBranch
     }
   }
 
