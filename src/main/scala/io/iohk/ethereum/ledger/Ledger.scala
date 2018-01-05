@@ -67,7 +67,7 @@ class LedgerImpl(
     */
   def importBlock(block: Block): BlockImportResult = {
     if (block.signedHeader.header.number == 0 && blockchain.getSignedBlockHeaderByNumber(0).get.hash == block.signedHeader.hash) {
-      log.info(s"Ignoring duplicate genesis block: (${block.idTag})")
+      log.debug(s"Ignoring duplicate genesis block: (${block.idTag})")
       DuplicateBlock
     } else {
       val validationResult = validateBlockBeforeExecution(block)
